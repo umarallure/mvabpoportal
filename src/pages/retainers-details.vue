@@ -246,10 +246,14 @@ onMounted(load)
 
 const basicInfoFields = computed(() => {
   if (!row.value) return []
+  const lead = leadRow.value as any
   const fields = [
     { key: 'insured_name', label: 'Customer Name', value: (row.value as any).insured_name },
     { key: 'client_phone_number', label: 'Phone Number', value: (row.value as any).client_phone_number },
     { key: 'customer_address', label: 'Customer Address', value: customerAddress.value },
+    { key: 'social_security', label: 'SSN Number', value: lead?.social_security },
+    { key: 'zip_code', label: 'Zip', value: lead?.zip_code },
+    { key: 'email', label: 'Email', value: lead?.email },
     { key: 'status', label: 'Status', value: (row.value as any).status },
     { key: 'lead_vendor', label: 'Lead Vendor', value: (row.value as any).lead_vendor },
     { key: 'agent', label: 'Attorney', value: (row.value as any).agent },

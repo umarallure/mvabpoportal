@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import type { ManageUserRow } from '../../lib/manage-users'
 
 const props = defineProps<{
@@ -20,7 +19,7 @@ const handleUpdateOpen = (value: boolean) => {
 
 <template>
   <UModal :open="props.open" title="Delete user" :dismissible="false" @update:open="handleUpdateOpen">
-    <template #body="{ close: modalClose }">
+    <template #body>
       <div class="space-y-4">
         <p class="text-sm text-white/80">
           This will delete the user from Supabase Auth and remove their profile.

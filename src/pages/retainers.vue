@@ -67,7 +67,7 @@ const columns: TableColumn<DailyDealFlow>[] = [
   {
     id: 'actions',
     header: 'Actions',
-    meta: { align: 'center', class: 'w-[110px]' }
+    meta: { class: { th: 'w-[110px] text-center', td: 'w-[110px] text-center' } }
   }
 ]
 

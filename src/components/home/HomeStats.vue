@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { randomInt } from '../../utils'
 import type { Period, Range, Stat } from '../../types'
 
 const props = defineProps<{
