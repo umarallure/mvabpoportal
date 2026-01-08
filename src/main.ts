@@ -40,7 +40,20 @@ router.beforeEach(async (to) => {
   const requiresAdmin = Boolean(to.meta.requiresAdmin)
   const isAdmin = auth.state.value.profile?.role === 'admin'
   const isSuperAdmin = Boolean(auth.state.value.profile?.is_super_admin)
+  const isLawyer = auth.state.value.profile?.role === 'lawyer'
   const hasCenter = isSuperAdmin || Boolean(auth.state.value.profile?.center_id)
+
+  if (isLoggedIn && isLawyer) {
+    try {
+      await auth.signOut()
+    } catch {
+      // ignore sign-out errors; still block access
+    }
+
+    if (to.path !== '/login') {
+      return { path: '/login', query: { reason: 'lawyer' } }
+    }
+  }
 
   if (isPublic) return true
 
