@@ -41,7 +41,7 @@ router.beforeEach(async (to) => {
   const isAdmin = auth.state.value.profile?.role === 'admin'
   const isSuperAdmin = Boolean(auth.state.value.profile?.is_super_admin)
   const isLawyer = auth.state.value.profile?.role === 'lawyer'
-  const hasCenter = isSuperAdmin || Boolean(auth.state.value.profile?.center_id)
+  const hasCenter = isSuperAdmin || isAdmin || Boolean(auth.state.value.profile?.center_id)
 
   if (isLoggedIn && isLawyer) {
     try {

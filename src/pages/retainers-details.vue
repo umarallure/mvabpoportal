@@ -114,11 +114,13 @@ const load = async () => {
   try {
     await auth.init()
 
+    const isAdmin = auth.state.value.profile?.role === 'admin'
     const isSuperAdmin = Boolean(auth.state.value.profile?.is_super_admin)
+    const canSeeAll = isSuperAdmin || isAdmin
     const centerId = auth.state.value.profile?.center_id ?? null
     let leadVendor = auth.state.value.profile?.lead_vendor ?? null
 
-    if (!isSuperAdmin && !leadVendor && centerId) {
+    if (!canSeeAll && !leadVendor && centerId) {
       const { data: center, error: centerError } = await supabase
         .from('centers')
         .select('lead_vendor')
@@ -129,7 +131,7 @@ const load = async () => {
       leadVendor = (center?.lead_vendor as string | null) ?? null
     }
 
-    if (!isSuperAdmin && !leadVendor) {
+    if (!canSeeAll && !leadVendor) {
       error.value = 'Lead not found'
       row.value = null
       return
@@ -140,7 +142,7 @@ const load = async () => {
       .select('*')
       .eq('id', id.value)
 
-    if (!isSuperAdmin) {
+    if (!canSeeAll) {
       q = q.eq('lead_vendor', leadVendor)
     }
 

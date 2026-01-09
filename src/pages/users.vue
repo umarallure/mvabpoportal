@@ -250,8 +250,8 @@ onMounted(async () => {
           <template #header>
             <div class="flex items-center justify-between gap-3">
               <div>
-                <h3 class="text-base font-semibold text-white">Users</h3>
-                <p class="text-sm text-white/70">Invite teammates and manage their roles.</p>
+                <h3 class="text-base font-semibold text-black dark:text-white">Users</h3>
+                <p class="text-sm text-black/70 dark:text-white/70">Invite teammates and manage their roles.</p>
               </div>
               <UButton
                 label="Add user"
@@ -277,12 +277,12 @@ onMounted(async () => {
           >
             <template #email-cell="{ row }">
               <div class="flex flex-col">
-                <span class="text-sm font-medium text-white/90">{{ row.original.email }}</span>
+                <span class="text-sm font-medium text-black/90 dark:text-white/90">{{ row.original.email }}</span>
               </div>
             </template>
 
             <template #display_name-cell="{ row }">
-              <span class="text-sm text-white/80">{{ row.original.display_name || '—' }}</span>
+              <span class="text-sm text-black/80 dark:text-white/80">{{ row.original.display_name || '—' }}</span>
             </template>
 
             <template #role-cell="{ row }">
@@ -292,7 +292,7 @@ onMounted(async () => {
                 class="capitalize"
                 :label="row.original.role"
               />
-              <span v-else class="text-sm text-white/60">—</span>
+              <span v-else class="text-sm text-black/60 dark:text-white/60">—</span>
             </template>
 
             <template #actions-cell="{ row }">
@@ -317,7 +317,7 @@ onMounted(async () => {
             </template>
           </UTable>
 
-          <div v-if="!isBusy && filteredUsers.length === 0" class="p-6 text-center text-sm text-white/70">
+          <div v-if="!isBusy && filteredUsers.length === 0" class="p-6 text-center text-sm text-black/70 dark:text-white/70">
             No users found.
           </div>
         </UPageCard>

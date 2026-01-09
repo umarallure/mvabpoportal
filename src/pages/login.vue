@@ -54,10 +54,11 @@ const handleSubmit = async () => {
       return
     }
 
+    const isAdmin = auth.state.value.profile?.role === 'admin'
     const isSuperAdmin = Boolean(auth.state.value.profile?.is_super_admin)
     const hasCenter = Boolean(auth.state.value.profile?.center_id)
 
-    if (!isSuperAdmin && !hasCenter) {
+    if (!isSuperAdmin && !isAdmin && !hasCenter) {
       await auth.signOut()
       errorMessage.value = 'Your account is not provisioned yet. Please contact an administrator.'
       toast.add({
