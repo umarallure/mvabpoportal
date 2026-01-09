@@ -22,7 +22,7 @@ const auth = useAuth()
 const router = useRouter()
 const toast = useToast()
 
-const isAdmin = computed(() => auth.state.value.profile?.role === 'admin')
+const isSuperAdmin = computed(() => auth.state.value.profile?.role === 'super_admin')
 
 const users = ref<AppUserRow[]>([])
 const loading = ref(false)
@@ -188,7 +188,7 @@ const confirmDelete = async () => {
 
 onMounted(async () => {
   await auth.init()
-  if (!isAdmin.value) {
+  if (!isSuperAdmin.value) {
     await router.replace('/dashboard')
     return
   }

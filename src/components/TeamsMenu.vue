@@ -4,13 +4,14 @@ import type { DropdownMenuItem } from '@nuxt/ui'
 import { useColorMode } from '@vueuse/core'
 import { BRANDING } from '../lib/branding'
 
-defineProps<{
+const props = defineProps<{
   collapsed?: boolean
 }>()
 
 const colorMode = useColorMode()
 
 const logoSrc = computed(() => {
+  if (props.collapsed) return '/assets/logo-collapse.png'
   return colorMode.value === 'dark' ? '/assets/logo-white.png' : '/assets/logo-black.png'
 })
 
@@ -51,12 +52,12 @@ const items = computed<DropdownMenuItem[][]>(() => {
       block
       :square="collapsed"
       class="data-[state=open]:bg-elevated"
-      :class="[collapsed ? 'py-2' : 'py-3']"
+      :class="[collapsed ? 'p-3' : 'py-3']"
     >
       <img
         :src="logoSrc"
         :alt="selectedTeam.avatar.alt"
-        :class="collapsed ? 'h-7 w-auto' : 'h-8 w-auto max-w-44'"
+        :class="collapsed ? 'mx-auto h-10 w-10 object-contain' : 'h-8 w-auto max-w-44'"
       >
     </UButton>
   </UDropdownMenu>

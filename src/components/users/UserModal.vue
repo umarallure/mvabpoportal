@@ -26,6 +26,7 @@ const role = ref<ManageUserRole | typeof NO_ROLE>(NO_ROLE)
 
 const roleOptions = [
   { value: NO_ROLE, label: 'No role' },
+  { value: 'super_admin', label: 'Super admin' },
   { value: 'admin', label: 'Admin' },
   { value: 'lawyer', label: 'Lawyer' },
   { value: 'agent', label: 'Agent' }

@@ -62,6 +62,7 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const row = ref<DailyDealFlow | null>(null)
 const leadRow = ref<Record<string, unknown> | null>(null)
+const assignedAttorneyName = ref<string>('—')
 const callResults = ref<CallResult[]>([])
 const activeTab = ref('basic')
 
@@ -110,12 +111,13 @@ const load = async () => {
   loading.value = true
   error.value = null
   leadRow.value = null
+  assignedAttorneyName.value = '—'
 
   try {
     await auth.init()
 
     const isAdmin = auth.state.value.profile?.role === 'admin'
-    const isSuperAdmin = Boolean(auth.state.value.profile?.is_super_admin)
+    const isSuperAdmin = auth.state.value.profile?.role === 'super_admin'
     const canSeeAll = isSuperAdmin || isAdmin
     const centerId = auth.state.value.profile?.center_id ?? null
     let leadVendor = auth.state.value.profile?.lead_vendor ?? null
@@ -158,6 +160,26 @@ const load = async () => {
     row.value = data as DailyDealFlow
     console.log('✅ Lead data loaded:', row.value)
     console.log('📋 All fields:', Object.keys(row.value))
+
+    // Resolve assigned attorney display name from the ID.
+    try {
+      const assignedAttorneyId = (row.value as any)?.assigned_attorney_id as string | null | undefined
+      if (assignedAttorneyId) {
+        const { data: attorney, error: attorneyError } = await supabase
+          .from('attorney_profiles')
+          .select('full_name')
+          .eq('user_id', assignedAttorneyId)
+          .maybeSingle()
+
+        if (attorneyError) {
+          console.warn('[attorney_profiles] lookup failed', attorneyError.message)
+        } else {
+          assignedAttorneyName.value = (attorney?.full_name as string | null) ?? '—'
+        }
+      }
+    } catch (attorneyLookupError) {
+      console.warn('[attorney_profiles] lookup failed', attorneyLookupError)
+    }
 
     // Load matching lead record (used for address fields)
     try {
@@ -258,7 +280,7 @@ const basicInfoFields = computed(() => {
     { key: 'email', label: 'Email', value: lead?.email },
     { key: 'status', label: 'Status', value: (row.value as any).status },
     { key: 'lead_vendor', label: 'Lead Vendor', value: (row.value as any).lead_vendor },
-    { key: 'agent', label: 'Attorney', value: (row.value as any).agent },
+    { key: 'assigned_attorney', label: 'Assigned Attorney', value: assignedAttorneyName.value },
     { key: 'date', label: 'Submission Date', value: (row.value as any).date }
   ]
   console.log('👤 Basic Info Fields:', fields)

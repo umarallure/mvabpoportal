@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { TableColumn } from '@nuxt/ui'
 
@@ -11,10 +11,11 @@ type DailyDealFlow = {
   submission_id: string
   insured_name: string | null
   client_phone_number: string | null
+  lead_vendor?: string | null
   date: string | null
   status: string | null
   assigned_attorney_id: string | null
-  attorney_email?: string | null
+  assigned_attorney_name?: string | null
   created_at: string | null
 }
 
@@ -25,22 +26,99 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const query = ref('')
 
+const PAGE_SIZE = 25
+const page = ref(1)
+
+const ALL = '__all__' as const
+
+const selectedLeadVendor = ref<string>(ALL)
+const selectedStatus = ref<string>(ALL)
+const selectedAttorneyId = ref<string>(ALL)
+
+const leadVendors = ref<string[]>([])
+
 const rows = ref<DailyDealFlow[]>([])
 
-const filteredRows = computed(() => {
-  const q = query.value.trim().toLowerCase()
-  if (!q) return rows.value
+const leadVendorOptions = computed(() => {
+  const items = leadVendors.value
+    .filter(Boolean)
+    .map((v) => ({ value: v, label: v }))
+  return [{ value: ALL, label: 'All lead vendors' }, ...items]
+})
 
-  return rows.value.filter((r) => {
+const statusOptions = computed(() => {
+  const statuses = [...new Set(rows.value
+    .map((r) => r.status)
+    .filter((s): s is string => Boolean(s && String(s).trim().length))
+    .map((s) => String(s).trim())
+  )].sort((a, b) => a.localeCompare(b))
+
+  return [{ value: ALL, label: 'All statuses' }, ...statuses.map((s) => ({ value: s, label: s }))]
+})
+
+const attorneyOptions = computed(() => {
+  const pairs = rows.value
+    .map((r) => ({ id: r.assigned_attorney_id, name: r.assigned_attorney_name }))
+    .filter((p): p is { id: string; name: string | null | undefined } => Boolean(p.id))
+
+  const map = new Map<string, string>()
+  for (const p of pairs) {
+    const label = (p.name ?? '').trim()
+    if (!map.has(p.id)) map.set(p.id, label || 'Unknown')
+  }
+
+  const items = [...map.entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label))
+
+  return [{ value: ALL, label: 'All attorneys' }, ...items]
+})
+
+const filteredRows = computed(() => {
+  const vendorFilter = selectedLeadVendor.value
+  const statusFilter = selectedStatus.value
+  const attorneyFilter = selectedAttorneyId.value
+
+  const q = query.value.trim().toLowerCase()
+  const base = rows.value.filter((r) => {
+    if (vendorFilter !== ALL && (r.lead_vendor ?? null) !== vendorFilter) return false
+    if (statusFilter !== ALL && (r.status ?? null) !== statusFilter) return false
+    if (attorneyFilter !== ALL && (r.assigned_attorney_id ?? null) !== attorneyFilter) return false
+    return true
+  })
+
+  if (!q) return base
+
+  return base.filter((r) => {
     const haystack = [
       r.insured_name ?? '',
       r.client_phone_number ?? '',
       r.status ?? '',
-      r.attorney_email ?? ''
+      r.lead_vendor ?? '',
+      r.assigned_attorney_name ?? ''
     ].join(' ').toLowerCase()
 
     return haystack.includes(q)
   })
+})
+
+watch([query, selectedLeadVendor, selectedStatus, selectedAttorneyId], () => {
+  page.value = 1
+})
+
+const pageCount = computed(() => {
+  const total = filteredRows.value.length
+  return Math.max(1, Math.ceil(total / PAGE_SIZE))
+})
+
+watch(pageCount, (next) => {
+  if (page.value > next) page.value = next
+  if (page.value < 1) page.value = 1
+})
+
+const pagedRows = computed(() => {
+  const start = (page.value - 1) * PAGE_SIZE
+  return filteredRows.value.slice(start, start + PAGE_SIZE)
 })
 
 const columns: TableColumn<DailyDealFlow>[] = [
@@ -57,12 +135,16 @@ const columns: TableColumn<DailyDealFlow>[] = [
     header: 'Phone Number'
   },
   {
+    accessorKey: 'lead_vendor',
+    header: 'Lead Vendor'
+  },
+  {
     accessorKey: 'status',
     header: 'Status'
   },
   {
     accessorKey: 'assigned_attorney',
-    header: 'Assigned Lawyer'
+    header: 'Assigned Attorney'
   },
   {
     id: 'actions',
@@ -78,8 +160,28 @@ const load = async () => {
   try {
     await auth.init()
 
+    // Lead vendor filter options come from centers table
+    try {
+      const { data: centers, error: centersError } = await supabase
+        .from('centers')
+        .select('lead_vendor')
+
+      if (centersError) throw centersError
+
+      const vendors = [...new Set((centers ?? [])
+        .map((c: any) => c?.lead_vendor)
+        .filter((v: any) => typeof v === 'string' && v.trim().length)
+        .map((v: string) => v.trim())
+      )].sort((a, b) => a.localeCompare(b))
+
+      leadVendors.value = vendors
+    } catch {
+      // ignore; fall back to vendors present in loaded rows
+      leadVendors.value = []
+    }
+
     const isAdmin = auth.state.value.profile?.role === 'admin'
-    const isSuperAdmin = Boolean(auth.state.value.profile?.is_super_admin)
+    const isSuperAdmin = auth.state.value.profile?.role === 'super_admin'
     const canSeeAll = isSuperAdmin || isAdmin
     const centerId = auth.state.value.profile?.center_id ?? null
     let leadVendor = auth.state.value.profile?.lead_vendor ?? null
@@ -102,7 +204,7 @@ const load = async () => {
 
     let q = supabase
       .from('daily_deal_flow')
-      .select('id,submission_id,insured_name,client_phone_number,date,status,assigned_attorney_id,created_at')
+      .select('id,submission_id,insured_name,client_phone_number,lead_vendor,date,status,assigned_attorney_id,created_at')
       .order('created_at', { ascending: false })
       .limit(250)
 
@@ -117,24 +219,41 @@ const load = async () => {
     const dealFlows = (data ?? []) as DailyDealFlow[]
 
     // Fetch attorney details for rows that have assigned_attorney_id
-    const attorneyIds = [...new Set(dealFlows.filter(d => d.assigned_attorney_id).map(d => d.assigned_attorney_id))]
-    
-    if (attorneyIds.length > 0) {
-      const { data: attorneys } = await supabase
-        .from('profiles')
-        .select('id,email')
-        .in('id', attorneyIds)
+    const attorneyIds = [...new Set(dealFlows
+      .map(d => d.assigned_attorney_id)
+      .filter((id): id is string => Boolean(id))
+    )]
 
-      const attorneyMap = new Map((attorneys ?? []).map((a: any) => [a.id, a.email]))
-      
-      dealFlows.forEach(flow => {
-        if (flow.assigned_attorney_id) {
-          flow.attorney_email = attorneyMap.get(flow.assigned_attorney_id) ?? null
-        }
+    if (attorneyIds.length > 0) {
+      // `assigned_attorney_id` matches `attorney_profiles.user_id`
+      const { data: attorneys, error: attorneysError } = await supabase
+        .from('attorney_profiles')
+        .select('user_id,full_name')
+        .in('user_id', attorneyIds)
+
+      if (attorneysError) throw attorneysError
+
+      const attorneyNameByUserId = new Map(
+        (attorneys ?? []).map((a: any) => [String(a.user_id), String(a.full_name ?? '').trim()])
+      )
+
+      dealFlows.forEach((flow) => {
+        if (!flow.assigned_attorney_id) return
+        const name = attorneyNameByUserId.get(flow.assigned_attorney_id) ?? ''
+        flow.assigned_attorney_name = name.length ? name : null
       })
     }
 
     rows.value = dealFlows
+
+    // If centers fetch is blocked by RLS, derive lead vendors from loaded rows
+    if (!leadVendors.value.length) {
+      leadVendors.value = [...new Set((dealFlows ?? [])
+        .map((r) => r.lead_vendor)
+        .filter((v): v is string => Boolean(v && v.trim().length))
+        .map((v) => v.trim())
+      )].sort((a, b) => a.localeCompare(b))
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Failed to load retainers'
     error.value = msg
@@ -173,42 +292,73 @@ const openRow = (row: DailyDealFlow) => {
     </template>
 
     <template #body>
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <UInput
-          v-model="query"
-          class="max-w-md"
-          icon="i-lucide-search"
-          placeholder="Search by name, phone, status, lawyer..."
-        />
+      <div class="flex h-full min-h-0 flex-col">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex flex-1 flex-wrap items-center gap-3">
+            <UInput
+              v-model="query"
+              class="max-w-md"
+              icon="i-lucide-search"
+              placeholder="Search by name, phone, status, attorney..."
+            />
 
-        <UBadge
+            <USelect
+              v-model="selectedLeadVendor"
+              class="w-56"
+              :items="leadVendorOptions"
+              value-key="value"
+              label-key="label"
+            />
+
+            <USelect
+              v-model="selectedStatus"
+              class="w-48"
+              :items="statusOptions"
+              value-key="value"
+              label-key="label"
+            />
+
+            <USelect
+              v-model="selectedAttorneyId"
+              class="w-56"
+              :items="attorneyOptions"
+              value-key="value"
+              label-key="label"
+            />
+          </div>
+
+          <UBadge
+            variant="subtle"
+            :label="`${filteredRows.length} leads`"
+          />
+        </div>
+
+        <UAlert
+          v-if="error"
+          class="mt-4"
+          color="error"
           variant="subtle"
-          :label="`${filteredRows.length} leads`"
+          title="Unable to load retainers"
+          :description="error"
         />
-      </div>
 
-      <UAlert
-        v-if="error"
-        class="mt-4"
-        color="error"
-        variant="subtle"
-        title="Unable to load retainers"
-        :description="error"
-      />
-
-      <UCard class="mt-4" :ui="{ body: 'p-0' }">
-        <UTable
-          :loading="loading"
-          :data="filteredRows"
-          :columns="columns"
-          :ui="{
-            base: 'w-full table-fixed',
-            thead: '[&>tr]:bg-elevated/50',
-            tbody: '[&>tr]:hover:bg-muted/50 [&>tr]:cursor-pointer',
-            th: 'px-4 py-3 text-left',
-            td: 'px-4 py-3'
-          }"
+        <UCard
+          class="mt-4 flex min-h-0 flex-1 flex-col"
+          :ui="{ body: 'p-0 min-h-0 flex-1 flex flex-col' }"
         >
+          <div class="min-h-0 flex-1 overflow-auto">
+            <UTable
+              :loading="loading"
+              :data="pagedRows"
+              :columns="columns"
+              :ui="{
+                base: 'w-full table-fixed',
+                thead: '[&>tr]:bg-elevated/50',
+                tbody: '[&>tr]:hover:bg-muted/50 [&>tr]:cursor-pointer',
+                th: 'px-4 py-3 text-left',
+                td: 'px-4 py-3'
+              }"
+            >
           <template #date-cell="{ row }">
             <button type="button" class="block w-full text-left" @click="openRow(row.original)">
               {{ row.original.date ?? '—' }}
@@ -227,6 +377,12 @@ const openRow = (row: DailyDealFlow) => {
             </button>
           </template>
 
+          <template #lead_vendor-cell="{ row }">
+            <button type="button" class="block w-full text-left" @click="openRow(row.original)">
+              {{ row.original.lead_vendor ?? '—' }}
+            </button>
+          </template>
+
           <template #status-cell="{ row }">
             <button type="button" class="block w-full text-left" @click="openRow(row.original)">
               <UBadge
@@ -240,7 +396,7 @@ const openRow = (row: DailyDealFlow) => {
 
           <template #assigned_attorney-cell="{ row }">
             <button type="button" class="block w-full text-left" @click="openRow(row.original)">
-              {{ row.original.attorney_email ?? '—' }}
+              {{ row.original.assigned_attorney_name ?? '—' }}
             </button>
           </template>
 
@@ -255,8 +411,34 @@ const openRow = (row: DailyDealFlow) => {
               />
             </div>
           </template>
-        </UTable>
-      </UCard>
+            </UTable>
+          </div>
+
+          <div class="flex items-center justify-between border-t border-default px-4 py-3">
+            <UButton
+              color="neutral"
+              variant="outline"
+              :disabled="page <= 1"
+              @click="page = Math.max(1, page - 1)"
+            >
+              Previous
+            </UButton>
+
+            <div class="text-sm text-muted">
+              Page {{ page }} of {{ pageCount }}
+            </div>
+
+            <UButton
+              color="neutral"
+              variant="outline"
+              :disabled="page >= pageCount"
+              @click="page = Math.min(pageCount, page + 1)"
+            >
+              Next
+            </UButton>
+          </div>
+        </UCard>
+      </div>
     </template>
   </UDashboardPanel>
 </template>

@@ -55,7 +55,7 @@ const handleSubmit = async () => {
     }
 
     const isAdmin = auth.state.value.profile?.role === 'admin'
-    const isSuperAdmin = Boolean(auth.state.value.profile?.is_super_admin)
+    const isSuperAdmin = auth.state.value.profile?.role === 'super_admin'
     const hasCenter = Boolean(auth.state.value.profile?.center_id)
 
     if (!isSuperAdmin && !isAdmin && !hasCenter) {

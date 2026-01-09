@@ -39,7 +39,7 @@ const links = computed(() => [[{
   onSelect: () => {
     open.value = false
   }
-}, ...(auth.state.value.profile?.role === 'admin' ? [{
+}, ...(auth.state.value.profile?.role === 'super_admin' ? [{
   label: 'Users',
   icon: 'i-lucide-users',
   to: '/users',
@@ -157,3 +157,10 @@ if (cookie.value !== 'accepted') {
     </UApp>
   </Suspense>
 </template>
+
+<style>
+#dashboard-sidebar-default[data-collapsed='true'] [data-slot='header'] {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+</style>

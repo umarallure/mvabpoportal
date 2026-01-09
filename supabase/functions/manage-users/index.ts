@@ -2,7 +2,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0'
 
-type Role = 'admin' | 'lawyer' | 'agent'
+type Role = 'super_admin' | 'admin' | 'lawyer' | 'agent'
 
 type AppUserRow = {
   user_id: string
@@ -41,9 +41,9 @@ const getBearerToken = (req: Request) => {
 }
 
 const validateRole = (role: unknown): role is Role =>
-  role === 'admin' || role === 'lawyer' || role === 'agent'
+  role === 'super_admin' || role === 'admin' || role === 'lawyer' || role === 'agent'
 
-const requireAdmin = async (req: Request) => {
+const requireSuperAdmin = async (req: Request) => {
   const supabaseUrl = getEnv('SUPABASE_URL')
   const anonKey = getEnv('SUPABASE_ANON_KEY')
   const serviceKey = getEnv('SUPABASE_SERVICE_ROLE_KEY')
@@ -64,7 +64,7 @@ const requireAdmin = async (req: Request) => {
 
   const adminClient = createClient(supabaseUrl, serviceKey)
 
-  console.log('[manage-users] checking admin role for', userData.user.id)
+  console.log('[manage-users] checking super admin role for', userData.user.id)
   const { data: roleRow, error: roleErr } = await adminClient
     .from('app_users')
     .select('role')
@@ -76,9 +76,9 @@ const requireAdmin = async (req: Request) => {
     return { ok: false as const, res: json(500, { error: roleErr.message }) }
   }
 
-  if (!roleRow || roleRow.role !== 'admin') {
-    console.log('[manage-users] forbidden for non-admin', userData.user.email)
-    return { ok: false as const, res: json(403, { error: 'Admin access required' }) }
+  if (!roleRow || roleRow.role !== 'super_admin') {
+    console.log('[manage-users] forbidden for non-super-admin', userData.user.email)
+    return { ok: false as const, res: json(403, { error: 'Super admin access required' }) }
   }
 
   return { ok: true as const, adminClient }
@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
   try {
     console.log('[manage-users] request', req.method, new URL(req.url).pathname)
 
-    const ctx = await requireAdmin(req)
+    const ctx = await requireSuperAdmin(req)
     if (!ctx.ok) return ctx.res
     const supabaseAdmin = ctx.adminClient
 
