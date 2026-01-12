@@ -22,6 +22,8 @@ type DailyDealFlow = {
 const router = useRouter()
 const auth = useAuth()
 
+const canSeeLeadVendorUi = computed(() => auth.state.value.profile?.role === 'super_admin')
+
 const loading = ref(false)
 const error = ref<string | null>(null)
 const query = ref('')
@@ -81,7 +83,7 @@ const filteredRows = computed(() => {
 
   const q = query.value.trim().toLowerCase()
   const base = rows.value.filter((r) => {
-    if (vendorFilter !== ALL && (r.lead_vendor ?? null) !== vendorFilter) return false
+    if (canSeeLeadVendorUi.value && vendorFilter !== ALL && (r.lead_vendor ?? null) !== vendorFilter) return false
     if (statusFilter !== ALL && (r.status ?? null) !== statusFilter) return false
     if (attorneyFilter !== ALL && (r.assigned_attorney_id ?? null) !== attorneyFilter) return false
     return true
@@ -94,7 +96,7 @@ const filteredRows = computed(() => {
       r.insured_name ?? '',
       r.client_phone_number ?? '',
       r.status ?? '',
-      r.lead_vendor ?? '',
+      ...(canSeeLeadVendorUi.value ? [r.lead_vendor ?? ''] : []),
       r.assigned_attorney_name ?? ''
     ].join(' ').toLowerCase()
 
@@ -121,37 +123,44 @@ const pagedRows = computed(() => {
   return filteredRows.value.slice(start, start + PAGE_SIZE)
 })
 
-const columns: TableColumn<DailyDealFlow>[] = [
-  {
-    accessorKey: 'date',
-    header: 'Date'
-  },
-  {
-    accessorKey: 'insured_name',
-    header: 'Customer Name'
-  },
-  {
-    accessorKey: 'client_phone_number',
-    header: 'Phone Number'
-  },
-  {
-    accessorKey: 'lead_vendor',
-    header: 'Lead Vendor'
-  },
-  {
-    accessorKey: 'status',
-    header: 'Status'
-  },
-  {
-    accessorKey: 'assigned_attorney',
-    header: 'Assigned Attorney'
-  },
-  {
-    id: 'actions',
-    header: 'Actions',
-    meta: { class: { th: 'w-[110px] text-center', td: 'w-[110px] text-center' } }
+const columns = computed<TableColumn<DailyDealFlow>[]>(() => {
+  const base: TableColumn<DailyDealFlow>[] = [
+    {
+      accessorKey: 'date',
+      header: 'Date'
+    },
+    {
+      accessorKey: 'insured_name',
+      header: 'Customer Name'
+    },
+    {
+      accessorKey: 'client_phone_number',
+      header: 'Phone Number'
+    },
+    {
+      accessorKey: 'status',
+      header: 'Status'
+    },
+    {
+      accessorKey: 'assigned_attorney',
+      header: 'Assigned Attorney'
+    },
+    {
+      id: 'actions',
+      header: 'Actions',
+      meta: { class: { th: 'w-[110px] text-center', td: 'w-[110px] text-center' } }
+    }
+  ]
+
+  if (canSeeLeadVendorUi.value) {
+    base.splice(3, 0, {
+      accessorKey: 'lead_vendor',
+      header: 'Lead Vendor'
+    })
   }
-]
+
+  return base
+})
 
 const load = async () => {
   loading.value = true
@@ -303,6 +312,7 @@ const openRow = (row: DailyDealFlow) => {
             />
 
             <USelect
+              v-if="canSeeLeadVendorUi"
               v-model="selectedLeadVendor"
               class="w-56"
               :items="leadVendorOptions"

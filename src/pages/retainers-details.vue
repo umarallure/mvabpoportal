@@ -56,6 +56,8 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuth()
 
+const canSeeLeadVendorUi = computed(() => auth.state.value.profile?.role === 'super_admin')
+
 const id = computed(() => route.params.id as string)
 
 const loading = ref(false)
@@ -279,7 +281,9 @@ const basicInfoFields = computed(() => {
     { key: 'zip_code', label: 'Zip', value: lead?.zip_code },
     { key: 'email', label: 'Email', value: lead?.email },
     { key: 'status', label: 'Status', value: (row.value as any).status },
-    { key: 'lead_vendor', label: 'Lead Vendor', value: (row.value as any).lead_vendor },
+    ...(canSeeLeadVendorUi.value
+      ? [{ key: 'lead_vendor', label: 'Lead Vendor', value: (row.value as any).lead_vendor }]
+      : []),
     { key: 'assigned_attorney', label: 'Assigned Attorney', value: assignedAttorneyName.value },
     { key: 'date', label: 'Submission Date', value: (row.value as any).date }
   ]
