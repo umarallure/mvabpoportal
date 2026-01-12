@@ -281,6 +281,9 @@ const basicInfoFields = computed(() => {
     { key: 'zip_code', label: 'Zip', value: lead?.zip_code },
     { key: 'email', label: 'Email', value: lead?.email },
     { key: 'status', label: 'Status', value: (row.value as any).status },
+    { key: 'ip_address', label: 'IP Address', value: (row.value as any).ip_address },
+    { key: 'source_url', label: 'Source URL', value: (row.value as any).source_url },
+    { key: 'trustedform_cert_url', label: 'TrustedForm Cert URL', value: (row.value as any).trustedform_cert_url },
     ...(canSeeLeadVendorUi.value
       ? [{ key: 'lead_vendor', label: 'Lead Vendor', value: (row.value as any).lead_vendor }]
       : []),
@@ -297,6 +300,11 @@ const accidentDetailsFields = computed(() => {
     ['accident_date', 'Accident Date'],
     ['accident_location', 'Accident Location'],
     ['accident_scenario', 'Accident Scenario'],
+    ['accident_last_12_months', 'Accident (Last 12 Months)'],
+    ['is_lead_at_fault', 'Lead At Fault'],
+    ['currently_represented', 'Currently Represented'],
+    ['is_injured', 'Injured'],
+    ['received_medical_treatment', 'Received Medical Treatment'],
     ['prior_attorney_involved', 'Prior Attorney Involved'],
     ['prior_attorney_details', 'Prior Attorney Details'],
     ['medical_attention', 'Medical Attention'],
