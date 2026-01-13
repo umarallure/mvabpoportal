@@ -33,9 +33,30 @@ const links = computed(() => [[{
     open.value = false
   }
 }, {
+  label: 'Transfers',
+  icon: 'i-lucide-arrow-right-left',
+  to: '/transfers',
+  onSelect: () => {
+    open.value = false
+  }
+}, {
   label: 'Retainers',
   icon: 'i-lucide-briefcase',
   to: '/retainers',
+  onSelect: () => {
+    open.value = false
+  }
+}, {
+  label: 'Invoicing',
+  icon: 'i-lucide-receipt',
+  to: '/invoicing',
+  onSelect: () => {
+    open.value = false
+  }
+}, {
+  label: 'Sales Map',
+  icon: 'i-lucide-map',
+  to: '/sales-map',
   onSelect: () => {
     open.value = false
   }
@@ -66,7 +87,21 @@ const links = computed(() => [[{
     onSelect: () => {
       open.value = false
     }
-  }]
+  }, ...(auth.state.value.profile?.role === 'super_admin' ? [{
+    label: 'Sales Map Admin',
+    to: '/settings/sales-map-admin',
+    exact: true,
+    onSelect: () => {
+      open.value = false
+    }
+  }, {
+    label: 'Export Sheets',
+    to: '/settings/export-sheets',
+    exact: true,
+    onSelect: () => {
+      open.value = false
+    }
+  }] : [])]
 }]] satisfies NavigationMenuItem[][])
 
 const isPublicPage = computed(() => ['/login', '/', '/get-started'].includes(route.path))

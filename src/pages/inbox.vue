@@ -1,31 +1,133 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
-const unreadCount = ref(0)
+type Message = {
+  id: string
+  from: string
+  subject: string
+  preview: string
+  timestamp: string
+  read: boolean
+  category: string
+}
+
+const mockMessages = ref<Message[]>([
+  { id: '1', from: 'Attorney Smith', subject: 'Case Review Required', preview: 'Please review the attached documents for case #12345...', timestamp: '2 hours ago', read: false, category: 'Legal' },
+  { id: '2', from: 'Admin Team', subject: 'New Retainer Approved', preview: 'Retainer for John Doe has been approved and is ready...', timestamp: '5 hours ago', read: false, category: 'Admin' },
+  { id: '3', from: 'Client Services', subject: 'Follow-up Required', preview: 'Client Jane Smith requested additional information...', timestamp: '1 day ago', read: true, category: 'Client' },
+  { id: '4', from: 'System', subject: 'Weekly Report Available', preview: 'Your weekly performance report is now available...', timestamp: '2 days ago', read: true, category: 'System' },
+  { id: '5', from: 'Attorney Johnson', subject: 'Document Verification', preview: 'Need verification on documents submitted for case...', timestamp: '3 days ago', read: false, category: 'Legal' },
+  { id: '6', from: 'BPO Manager', subject: 'Team Meeting Tomorrow', preview: 'Reminder: Team meeting scheduled for tomorrow at 10 AM...', timestamp: '3 days ago', read: true, category: 'Admin' }
+])
+
+const selectedMessage = ref<Message | null>(null)
+const query = ref('')
+
+const unreadCount = computed(() => mockMessages.value.filter(m => !m.read).length)
+
+const filteredMessages = computed(() => {
+  const q = query.value.trim().toLowerCase()
+  if (!q) return mockMessages.value
+  
+  return mockMessages.value.filter(m => {
+    const haystack = [m.from, m.subject, m.preview].join(' ').toLowerCase()
+    return haystack.includes(q)
+  })
+})
+
+const selectMessage = (message: Message) => {
+  selectedMessage.value = message
+  message.read = true
+}
 </script>
 
 <template>
-  <UDashboardPanel
-    id="inbox-1"
-    :default-size="25"
-    :min-size="20"
-    :max-size="30"
-    resizable
-  >
-    <UDashboardNavbar title="Inbox">
-      <template #leading>
-        <UDashboardSidebarCollapse />
-      </template>
-      <template #trailing>
-        <UBadge :label="unreadCount" variant="subtle" />
-      </template>
-    </UDashboardNavbar>
+  <UDashboardPanel id="inbox">
+    <template #header>
+      <UDashboardNavbar title="Inbox">
+        <template #leading>
+          <UDashboardSidebarCollapse />
+        </template>
+        <template #right>
+          <UBadge v-if="unreadCount > 0" color="primary" variant="subtle" :label="`${unreadCount} unread`" />
+        </template>
+      </UDashboardNavbar>
+    </template>
 
-    <div class="flex flex-1 items-center justify-center p-6">
-      <div class="flex flex-col items-center gap-3 text-center">
-        <UIcon name="i-lucide-inbox" class="size-16 text-dimmed" />
-        <p class="text-sm text-dimmed">Inbox is currently empty.</p>
+    <template #body>
+      <div class="flex h-full min-h-0 flex-col">
+        <div class="mb-4">
+          <UInput
+            v-model="query"
+            icon="i-lucide-search"
+            placeholder="Search messages..."
+          />
+        </div>
+
+        <div class="flex min-h-0 flex-1 gap-4">
+          <div class="w-1/3 min-w-0 space-y-2 overflow-auto">
+            <UCard
+              v-for="message in filteredMessages"
+              :key="message.id"
+              :class="['cursor-pointer transition', !message.read && 'bg-primary/5', selectedMessage?.id === message.id && 'ring-2 ring-primary']"
+              @click="selectMessage(message)"
+            >
+              <div class="space-y-1">
+                <div class="flex items-start justify-between">
+                  <h4 class="text-sm font-semibold">{{ message.from }}</h4>
+                  <UBadge v-if="!message.read" color="primary" size="xs" label="New" />
+                </div>
+                <p class="text-sm font-medium">{{ message.subject }}</p>
+                <p class="text-xs text-muted line-clamp-2">{{ message.preview }}</p>
+                <div class="flex items-center justify-between">
+                  <UBadge variant="subtle" size="xs" :label="message.category" />
+                  <span class="text-xs text-muted">{{ message.timestamp }}</span>
+                </div>
+              </div>
+            </UCard>
+
+            <div v-if="filteredMessages.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
+              <UIcon name="i-lucide-inbox" class="size-16 text-dimmed" />
+              <p class="mt-3 text-sm text-dimmed">No messages found.</p>
+            </div>
+          </div>
+
+          <div class="flex-1 min-w-0">
+            <UCard v-if="selectedMessage" class="h-full">
+              <div class="space-y-4">
+                <div class="border-b border-default pb-4">
+                  <div class="flex items-start justify-between">
+                    <div>
+                      <h2 class="text-xl font-semibold">{{ selectedMessage.subject }}</h2>
+                      <p class="text-sm text-muted">From: {{ selectedMessage.from }}</p>
+                    </div>
+                    <UBadge variant="subtle" :label="selectedMessage.category" />
+                  </div>
+                  <p class="mt-2 text-xs text-muted">{{ selectedMessage.timestamp }}</p>
+                </div>
+
+                <div class="prose prose-sm max-w-none">
+                  <p>{{ selectedMessage.preview }}</p>
+                  <p class="mt-4">This is a prototype message view. In the full implementation, the complete message content would be displayed here with formatting, attachments, and action buttons.</p>
+                </div>
+
+                <div class="flex gap-2 border-t border-default pt-4">
+                  <UButton icon="i-lucide-reply">Reply</UButton>
+                  <UButton color="neutral" variant="outline" icon="i-lucide-forward">Forward</UButton>
+                  <UButton color="neutral" variant="outline" icon="i-lucide-archive">Archive</UButton>
+                </div>
+              </div>
+            </UCard>
+
+            <div v-else class="flex h-full items-center justify-center">
+              <div class="flex flex-col items-center gap-3 text-center">
+                <UIcon name="i-lucide-mail" class="size-16 text-dimmed" />
+                <p class="text-sm text-dimmed">Select a message to view</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+    </template>
   </UDashboardPanel>
 </template>

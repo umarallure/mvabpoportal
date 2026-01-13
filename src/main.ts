@@ -11,19 +11,24 @@ const app = createApp(App)
 const router = createRouter({
   routes: [
     { path: '/', component: () => import('./pages/index.vue'), meta: { public: true } },
-    { path: '/get-started', component: () => import('./pages/get-started.vue'), meta: { public: true } },
     { path: '/login', component: () => import('./pages/login.vue'), meta: { public: true } },
+    { path: '/get-started', component: () => import('./pages/get-started.vue') },
     { path: '/dashboard', component: () => import('./pages/dashboard.vue') },
     { path: '/inbox', component: () => import('./pages/inbox.vue') },
+    { path: '/transfers', component: () => import('./pages/transfers.vue') },
     { path: '/retainers', component: () => import('./pages/retainers.vue') },
     { path: '/retainers/:id', component: () => import('./pages/retainers-details.vue') },
+    { path: '/invoicing', component: () => import('./pages/invoicing.vue') },
+    { path: '/sales-map', component: () => import('./pages/sales-map.vue') },
     { path: '/users', component: () => import('./pages/users.vue'), meta: { requiresSuperAdmin: true } },
     {
       path: '/settings',
       component: () => import('./pages/settings.vue'),
       children: [
         { path: '', component: () => import('./pages/settings/index.vue') },
-        { path: 'bpo-profile', component: () => import('./pages/settings/bpo-profile.vue') }
+        { path: 'bpo-profile', component: () => import('./pages/settings/bpo-profile.vue') },
+        { path: 'sales-map-admin', component: () => import('./pages/settings/sales-map-admin.vue') },
+        { path: 'export-sheets', component: () => import('./pages/settings/export-sheets.vue') }
       ]
     }
   ],
