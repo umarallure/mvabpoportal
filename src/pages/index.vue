@@ -3,50 +3,50 @@ import { RouterLink } from 'vue-router'
 import { BRANDING } from '../lib/branding'
 
 const modules = [{
-  title: 'Lead Intake',
-  description: 'Capture, validate, and standardize inbound accident leads from every channel.',
+  title: 'Transfers pipeline',
+  description: 'Track transfers across stages like pending info, approval, and callbacks with a clear kanban view.',
   icon: 'i-lucide-briefcase'
 }, {
-  title: 'Case Packaging',
-  description: 'Collect key facts, docs, and signals so downstream teams can act fast.',
+  title: 'Retainers & assignments',
+  description: 'View retainer records, filter by status, and see which attorney is assigned before handoff.',
   icon: 'i-lucide-id-card'
 }, {
-  title: 'Client Onboarding',
-  description: 'Automate follow-ups, status updates, and handoffs with a consistent workflow.',
+  title: 'Invoicing & reporting',
+  description: 'Stay on top of invoices and export operational reports for partners and internal QA.',
   icon: 'i-lucide-clipboard-list'
 }]
 
 const highlights = [{
-  title: 'Purpose-built for MVA operations',
-  body: 'Standardize scripts, intake flows, and QA checks for motor vehicle accident leads.'
+  title: 'Built for BPO operations',
+  body: 'One workspace for agents and admins to manage transfers, retainers, and follow-ups end to end.'
 }, {
-  title: 'Compliance & audit trails',
-  body: 'Structured data capture, timestamps, and exports that stand up to scrutiny.'
+  title: 'Clear stage tracking',
+  body: 'Move work through defined stages like pending information and pending approval with fewer handoff misses.'
 }, {
-  title: 'Secure collaboration',
-  body: 'Role-based workspaces so BPO admins, agents, and partners stay in sync.'
+  title: 'Sales map visibility',
+  body: 'See where you can sell, where it is restricted, and how volume looks by state.'
 }]
 
 const stats = [{
-  value: '78%',
-  label: 'Faster lead intake to handoff'
+  value: 'Stage clarity',
+  label: 'Transfers grouped by status so teams know what to work next'
 }, {
-  value: '45%',
-  label: 'Reduction in manual follow-ups'
+  value: 'Fewer misses',
+  label: 'Visibility into pending info and callbacks before transfers stall'
 }, {
-  value: '24/7',
-  label: 'Operational visibility'
+  value: 'Export ready',
+  label: 'Download transfer, retainer, invoice, and analytics reports when needed'
 }]
 
 const steps = [{
-  title: 'Bring your lead sources',
-  copy: 'Connect forms, spreadsheets, or CSVs and map them into a consistent intake schema.'
+  title: 'Triage transfers',
+  copy: 'Work transfers by stage and keep your team focused on approvals, missing info, and callbacks.'
 }, {
-  title: 'Configure roles',
-  copy: 'Assign admins, agents, and partner access controls from one place.'
+  title: 'Confirm retainer assignment',
+  copy: 'Review retainer records, verify details, and confirm attorney assignment before moving forward.'
 }, {
-  title: 'Launch your workflow',
-  copy: 'Track status, documents, and handoffs without juggling email threads.'
+  title: 'Track billing and export',
+  copy: 'Monitor invoicing status and export reports for reconciliation and partner updates.'
 }]
 </script>
 
@@ -73,12 +73,11 @@ const steps = [{
         <section class="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div class="space-y-6">
             <h1 class="text-4xl font-semibold leading-tight text-white md:text-5xl lg:text-6xl">
-              Publisher-first workflows for intake, packaging, and handoff.
+              A BPO workspace for transfers, retainers, and operational reporting.
             </h1>
             <p class="text-base leading-relaxed text-white/70 md:text-lg">
-              Give every admin and operations team a single workspace—from first contact to verified lead handoff.
-              Centralize intake, automate follow-ups, and deliver clean, structured case packets to your downstream
-              partners.
+              Manage transfers by stage, keep retainer records organized, and stay on top of invoicing.
+              Use the sales map to guide where you can sell and export clean reports when partners ask.
             </p>
             <div class="flex flex-col gap-3 text-sm text-white/70 sm:flex-row sm:items-center sm:gap-6">
               <div class="flex items-center gap-2">
@@ -90,19 +89,13 @@ const steps = [{
                 publisher teams scaling with Publisher Portal.
               </div>
             </div>
-            <div class="flex flex-col gap-3 sm:flex-row">
+            <div class="flex flex-col items-center gap-3 sm:flex-row">
               <RouterLink
                 to="/get-started"
-                class="flex-1 rounded-xl bg-[var(--ap-accent)] px-5 py-3 text-center text-sm font-semibold uppercase tracking-wide text-white shadow-lg transition hover:translate-y-0.5"
+                class="inline-flex items-center justify-center self-center rounded-xl bg-[var(--ap-accent)] px-6 py-3 text-center text-sm font-semibold uppercase tracking-wide text-white shadow-lg transition hover:translate-y-0.5 sm:w-auto"
                 style="box-shadow: 0 15px 30px var(--ap-accent-shadow);"
               >
                 Get started
-              </RouterLink>
-              <RouterLink
-                to="/login"
-                class="flex-1 rounded-xl border border-white/15 px-5 py-3 text-center text-sm font-semibold uppercase tracking-wide text-white/80 transition hover:border-white/40 hover:text-white"
-              >
-                Sign in to workspace
               </RouterLink>
             </div>
           </div>
@@ -110,24 +103,24 @@ const steps = [{
           <div class="rounded-[32px] border border-white/10 bg-white/5 p-6 shadow-2xl shadow-black/60 backdrop-blur-xl">
             <div class="rounded-3xl border border-white/10 bg-black/30 p-6">
               <div class="flex items-center justify-between text-xs uppercase tracking-[0.4em] text-white/50">
-                <span>Live workflow</span>
-                <span>January docket</span>
+                <span>Workflow snapshot</span>
+                <span>This month</span>
               </div>
               <div class="mt-6 space-y-4">
                 <div class="rounded-2xl bg-white/5 p-4">
-                  <p class="text-xs uppercase tracking-[0.4em] text-white/50">Intake</p>
+                  <p class="text-xs uppercase tracking-[0.4em] text-white/50">Transfers</p>
                   <p class="mt-2 text-3xl font-semibold text-white">42 matters</p>
-                  <p class="text-sm text-white/60">Next steps automatically routed to the right queue.</p>
+                  <p class="text-sm text-white/60">Work items staged for approval, callbacks, and missing info.</p>
                 </div>
                 <div class="rounded-2xl bg-white/5 p-4">
-                  <p class="text-xs uppercase tracking-[0.4em] text-white/50">Packaging</p>
+                  <p class="text-xs uppercase tracking-[0.4em] text-white/50">Retainers</p>
                   <p class="mt-2 text-3xl font-semibold text-white">17 pending</p>
-                  <p class="text-sm text-white/60">Docs + claim details queued for verification.</p>
+                  <p class="text-sm text-white/60">Pending review, status updates, or attorney assignment.</p>
                 </div>
                 <div class="rounded-2xl bg-white/5 p-4">
-                  <p class="text-xs uppercase tracking-[0.4em] text-white/50">Onboarding</p>
+                  <p class="text-xs uppercase tracking-[0.4em] text-white/50">Invoicing</p>
                   <p class="mt-2 text-3xl font-semibold text-white">8 welcomes</p>
-                  <p class="text-sm text-white/60">Follow-ups scheduled and status updates logged.</p>
+                  <p class="text-sm text-white/60">Invoices in motion with paid, pending, and chargeback tracking.</p>
                 </div>
               </div>
             </div>
@@ -147,7 +140,7 @@ const steps = [{
           <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
               <p class="text-xs uppercase tracking-[0.4em] text-white/50">Modules</p>
-              <h2 class="mt-1 text-3xl font-semibold text-white">One workspace for every intake milestone.</h2>
+              <h2 class="mt-1 text-3xl font-semibold text-white">One workspace for every transfer and handoff step.</h2>
             </div>
             <RouterLink to="/dashboard" class="text-sm font-semibold text-[var(--ap-highlight)] hover:text-white">
               See dashboard view →
@@ -174,8 +167,8 @@ const steps = [{
 
         <section class="grid gap-6 rounded-3xl border border-white/10 bg-black/20 p-6 lg:grid-cols-[1.1fr_0.9fr]">
           <div class="space-y-6">
-            <p class="text-xs uppercase tracking-[0.4em] text-white/50">Implementation</p>
-            <h2 class="text-3xl font-semibold text-white">Launch in a weekend.</h2>
+            <p class="text-xs uppercase tracking-[0.4em] text-white/50">How teams use it</p>
+            <h2 class="text-3xl font-semibold text-white">Designed for daily BPO operations.</h2>
             <div class="space-y-4">
               <div
                 v-for="(step, index) in steps"
@@ -195,7 +188,7 @@ const steps = [{
           <div class="flex flex-col justify-between rounded-3xl border border-white/10 bg-gradient-to-b from-[var(--ap-accent)] to-[var(--ap-accent-dark)] p-6">
             <div>
               <p class="text-xs uppercase tracking-[0.4em] text-white/60">Impact</p>
-              <h3 class="mt-2 text-3xl font-semibold text-white">Operational clarity from day one.</h3>
+              <h3 class="mt-2 text-3xl font-semibold text-white">Less ambiguity across transfers and handoffs.</h3>
             </div>
             <div class="mt-6 grid gap-4">
               <div v-for="stat in stats" :key="stat.label" class="rounded-2xl bg-black/30 p-4">
@@ -203,29 +196,6 @@ const steps = [{
                 <p class="text-sm text-white/70">{{ stat.label }}</p>
               </div>
             </div>
-          </div>
-        </section>
-
-        <section class="rounded-3xl border border-white/10 bg-white/5 p-8 text-center">
-          <p class="text-xs uppercase tracking-[0.4em] text-white/60">Ready to build?</p>
-          <h2 class="mt-4 text-3xl font-semibold text-white">Plug the Publisher Portal into your existing stack.</h2>
-          <p class="mx-auto mt-3 max-w-3xl text-sm text-white/70">
-            Reuse your Supabase models, reconfigure RBAC, and keep your analytics intact. We ship a Vue and Next.js
-            starter so your engineers stay in flow.
-          </p>
-          <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
-            <RouterLink
-              to="/dashboard"
-              class="rounded-full bg-white px-5 py-2 text-sm font-semibold uppercase tracking-wide text-[var(--ap-text-dark)]"
-            >
-              Browse the dashboard
-            </RouterLink>
-            <RouterLink
-              to="/login"
-              class="rounded-full border border-white/20 px-5 py-2 text-sm font-semibold uppercase tracking-wide text-white/80"
-            >
-              Access your workspace
-            </RouterLink>
           </div>
         </section>
       </main>

@@ -32,9 +32,10 @@ const PAGE_SIZE = 25
 const page = ref(1)
 
 const ALL = '__all__' as const
+const PENDING_APPROVAL = 'Pending Approval'
 
 const selectedLeadVendor = ref<string>(ALL)
-const selectedStatus = ref<string>(ALL)
+const selectedStatus = ref<string>(PENDING_APPROVAL)
 const selectedAttorneyId = ref<string>(ALL)
 
 const leadVendors = ref<string[]>([])
@@ -49,13 +50,7 @@ const leadVendorOptions = computed(() => {
 })
 
 const statusOptions = computed(() => {
-  const statuses = [...new Set(rows.value
-    .map((r) => r.status)
-    .filter((s): s is string => Boolean(s && String(s).trim().length))
-    .map((s) => String(s).trim())
-  )].sort((a, b) => a.localeCompare(b))
-
-  return [{ value: ALL, label: 'All statuses' }, ...statuses.map((s) => ({ value: s, label: s }))]
+  return [{ value: PENDING_APPROVAL, label: PENDING_APPROVAL }]
 })
 
 const attorneyOptions = computed(() => {
@@ -78,13 +73,12 @@ const attorneyOptions = computed(() => {
 
 const filteredRows = computed(() => {
   const vendorFilter = selectedLeadVendor.value
-  const statusFilter = selectedStatus.value
   const attorneyFilter = selectedAttorneyId.value
 
   const q = query.value.trim().toLowerCase()
   const base = rows.value.filter((r) => {
+    if ((r.status ?? null) !== PENDING_APPROVAL) return false
     if (canSeeLeadVendorUi.value && vendorFilter !== ALL && (r.lead_vendor ?? null) !== vendorFilter) return false
-    if (statusFilter !== ALL && (r.status ?? null) !== statusFilter) return false
     if (attorneyFilter !== ALL && (r.assigned_attorney_id ?? null) !== attorneyFilter) return false
     return true
   })
@@ -220,6 +214,8 @@ const load = async () => {
     if (!canSeeAll) {
       q = q.eq('lead_vendor', leadVendor)
     }
+
+    q = q.eq('status', PENDING_APPROVAL)
 
     const { data, error: supaError } = await q
 
