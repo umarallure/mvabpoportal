@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import type { TableColumn } from '@nuxt/ui'
+import { useAuth } from '../composables/useAuth'
+import { supabase } from '../lib/supabase'
 
 type StageKey =
   | 'transfer_api'
@@ -35,6 +38,8 @@ type TransferLead = {
 
 type ViewMode = 'kanban' | 'list'
 
+const router = useRouter()
+const auth = useAuth()
 const loading = ref(false)
 const query = ref('')
 const page = ref(1)
@@ -42,22 +47,11 @@ const PAGE_SIZE = 25
 const viewMode = ref<ViewMode>('kanban')
 const selectedStage = ref<'all' | StageKey>('all')
 
-const mockTransfers = ref<TransferLead[]>([
-  { id: 'T-1001', date: '2024-01-15', clientName: 'John Smith', phone: '111-111-1111', opportunityValue: 120, stage: 'transfer_api', publisher: 'Publisher A' },
-  { id: 'T-1002', date: '2024-01-15', clientName: 'Jane Wilson', phone: '222-222-2222', opportunityValue: 180, stage: 'transfer_api', publisher: 'Publisher B' },
-  { id: 'T-1003', date: '2024-01-14', clientName: 'Robert Johnson', phone: '333-333-3333', opportunityValue: 90, stage: 'incomplete_transfer', publisher: 'Publisher A' },
-  { id: 'T-1004', date: '2024-01-14', clientName: 'Alice Williams', phone: '444-444-4444', opportunityValue: 60, stage: 'returned_to_center_dq', publisher: 'Publisher C' },
-  { id: 'T-1005', date: '2024-01-13', clientName: 'Michael Brown', phone: '555-555-5555', opportunityValue: 250, stage: 'previously_sold_bpo', publisher: 'Publisher B' },
-  { id: 'T-1006', date: '2024-01-13', clientName: 'Emily Davis', phone: '666-666-6666', opportunityValue: 140, stage: 'needs_bpo_callback', publisher: 'Publisher A' },
-  { id: 'T-1007', date: '2024-01-12', clientName: 'Daniel Miller', phone: '777-777-7777', opportunityValue: 110, stage: 'application_withdrawn', publisher: 'Publisher C' },
-  { id: 'T-1008', date: '2024-01-12', clientName: 'Sophia Garcia', phone: '888-888-8888', opportunityValue: 200, stage: 'pending_information', publisher: 'Publisher A' },
-  { id: 'T-1009', date: '2024-01-11', clientName: 'William Martinez', phone: '999-999-9999', opportunityValue: 160, stage: 'pending_approval', publisher: 'Publisher B' },
-  { id: 'T-1010', date: '2024-01-11', clientName: 'Olivia Anderson', phone: '101-101-1010', opportunityValue: 130, stage: 'pending_information', publisher: 'Publisher C' }
-])
+const transfers = ref<TransferLead[]>([])
 
 const filteredLeads = computed(() => {
   const q = query.value.trim().toLowerCase()
-  return mockTransfers.value.filter((t) => {
+  return transfers.value.filter((t) => {
     if (selectedStage.value !== 'all' && t.stage !== selectedStage.value) return false
     if (!q) return true
     const stageLabel = STAGES.find(s => s.key === t.stage)?.label ?? ''
@@ -73,7 +67,7 @@ const pagedRows = computed(() => {
   return filteredLeads.value.slice(start, start + PAGE_SIZE)
 })
 
-const totalVolume = computed(() => mockTransfers.value.reduce((sum, t) => sum + t.opportunityValue, 0))
+const totalVolume = computed(() => transfers.value.reduce((sum, t) => sum + t.opportunityValue, 0))
 
 const leadsByStage = computed(() => {
   const grouped = new Map<StageKey, TransferLead[]>()
@@ -95,6 +89,24 @@ const formatMoney = (n: number) => {
 
 const getStageLabel = (stage: StageKey) => STAGES.find(s => s.key === stage)?.label ?? stage
 
+const mapStatusToStage = (status: string | null): StageKey => {
+  if (!status) return 'transfer_api'
+  
+  const normalized = status.toLowerCase().trim()
+  
+  // Map database status values to our stage keys
+  if (normalized === 'transfer api') return 'transfer_api'
+  if (normalized === 'incomplete transfer') return 'incomplete_transfer'
+  if (normalized === 'returned to center - dq') return 'returned_to_center_dq'
+  if (normalized === 'previously sold bpo') return 'previously_sold_bpo'
+  if (normalized === 'needs bpo callback') return 'needs_bpo_callback'
+  if (normalized === 'application withdrawn') return 'application_withdrawn'
+  if (normalized === 'pending information' || normalized === 'information verification') return 'pending_information'
+  if (normalized === 'pending approval') return 'pending_approval'
+  
+  return 'transfer_api'
+}
+
 const columns: TableColumn<TransferLead>[] = [
   { accessorKey: 'date', header: 'Date' },
   { accessorKey: 'clientName', header: 'Client' },
@@ -103,6 +115,100 @@ const columns: TableColumn<TransferLead>[] = [
   { accessorKey: 'opportunityValue', header: 'Volume' },
   { accessorKey: 'publisher', header: 'Publisher' }
 ]
+
+const loadTransfers = async () => {
+  try {
+    loading.value = true
+    
+    // Initialize auth first
+    await auth.init()
+    
+    const profile = auth.state.value.profile
+    const isAdmin = profile?.role === 'admin'
+    const isSuperAdmin = profile?.role === 'super_admin'
+    const canSeeAll = isSuperAdmin || isAdmin || profile?.is_super_admin
+    const centerId = profile?.center_id ?? null
+    let leadVendor = profile?.lead_vendor ?? null
+
+    console.log('🔍 Transfer page - User profile:', {
+      role: profile?.role,
+      is_super_admin: profile?.is_super_admin,
+      center_id: centerId,
+      lead_vendor: leadVendor,
+      canSeeAll
+    })
+
+    // If not admin/super_admin, get lead vendor from centers table if needed
+    if (!canSeeAll && !leadVendor && centerId) {
+      console.log('📞 Fetching lead vendor from centers table for center_id:', centerId)
+      const { data: center, error: centerError } = await supabase
+        .from('centers')
+        .select('lead_vendor')
+        .eq('id', centerId)
+        .maybeSingle()
+
+      if (centerError) {
+        console.error('❌ Error fetching center:', centerError)
+      } else {
+        leadVendor = (center?.lead_vendor as string | null) ?? null
+        console.log('✅ Lead vendor from center:', leadVendor)
+      }
+    }
+
+    // If not admin and no lead vendor found, show no records
+    if (!canSeeAll && !leadVendor) {
+      console.log('⚠️ No lead vendor found and user is not admin')
+      transfers.value = []
+      return
+    }
+
+    let query = supabase.from('daily_deal_flow').select('*')
+
+    // Filter by lead vendor if user is not admin or super_admin
+    if (!canSeeAll && leadVendor) {
+      console.log('🔐 Filtering by lead vendor:', leadVendor)
+      query = query.eq('lead_vendor', leadVendor)
+    } else {
+      console.log('👑 Admin/Super Admin - showing all records')
+    }
+
+    console.log('📡 Making Supabase query to daily_deal_flow...')
+    const { data, error } = await query
+
+    if (error) {
+      console.error('❌ Error loading transfers:', error)
+      transfers.value = []
+      return
+    }
+
+    console.log('✅ Loaded transfers:', data?.length ?? 0, 'records')
+    
+    transfers.value = (data ?? []).map((row: any) => ({
+      id: row.id ?? '',
+      date: row.date ?? '',
+      clientName: row.client_name ?? row.insured_name ?? '',
+      phone: row.client_phone_number ?? row.phone ?? '',
+      opportunityValue: row.opportunity_value ?? 0,
+      stage: mapStatusToStage(row.status),
+      publisher: row.publisher ?? row.lead_vendor ?? ''
+    }))
+
+    console.log('✅ Processed transfers:', transfers.value.length)
+  } catch (error) {
+    console.error('❌ Error in loadTransfers:', error)
+    transfers.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+const viewLead = (leadId: string) => {
+  router.push(`/retainers/${leadId}`)
+}
+
+onMounted(() => {
+  loadTransfers()
+})
 </script>
 
 <template>
@@ -133,7 +239,7 @@ const columns: TableColumn<TransferLead>[] = [
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm text-muted">Total Transfers</p>
-                <p class="text-2xl font-semibold">{{ mockTransfers.length }}</p>
+                <p class="text-2xl font-semibold">{{ transfers.length }}</p>
               </div>
               <UIcon name="i-lucide-arrow-right-left" class="size-8 text-primary" />
             </div>
@@ -153,7 +259,7 @@ const columns: TableColumn<TransferLead>[] = [
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm text-muted">Avg Volume</p>
-                <p class="text-2xl font-semibold">{{ Math.round(totalVolume / mockTransfers.length) }}</p>
+                <p class="text-2xl font-semibold">{{ transfers.length > 0 ? Math.round(totalVolume / transfers.length) : 0 }}</p>
               </div>
               <UIcon name="i-lucide-bar-chart" class="size-8 text-primary" />
             </div>
@@ -221,11 +327,19 @@ const columns: TableColumn<TransferLead>[] = [
                   :ui="{ body: '!p-2 sm:!p-2' }"
                 >
                   <div class="flex items-start justify-between gap-2">
-                    <div class="min-w-0">
+                    <div class="min-w-0 flex-1">
                       <div class="truncate text-sm font-semibold">{{ lead.clientName }}</div>
-                      <div class="mt-0.5 text-xs text-muted">{{ lead.id }} · {{ lead.phone }}</div>
+                      <div class="mt-0.5 text-xs text-muted">{{ lead.phone }}</div>
                     </div>
-                    <div class="shrink-0 text-sm font-semibold">{{ formatMoney(lead.opportunityValue) }}</div>
+                    <div class="shrink-0">
+                      <UButton
+                        icon="i-lucide-eye"
+                        color="neutral"
+                        variant="ghost"
+                        size="xs"
+                        @click="viewLead(lead.id)"
+                      />
+                    </div>
                   </div>
 
                   <div class="mt-2 flex items-center justify-between gap-2">
