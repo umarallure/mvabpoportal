@@ -22,7 +22,14 @@ type DailyDealFlow = {
 const router = useRouter()
 const auth = useAuth()
 
-const canSeeLeadVendorUi = computed(() => auth.state.value.profile?.role === 'super_admin')
+const canSeeLeadVendorUi = computed(() => {
+  const role = auth.state.value.profile?.role
+  return role === 'super_admin' || role === 'admin'
+})
+
+const isAdmin = computed(() => auth.state.value.profile?.role === 'admin')
+const isSuperAdmin = computed(() => auth.state.value.profile?.role === 'super_admin')
+const canSeeAllStatuses = computed(() => isAdmin.value || isSuperAdmin.value)
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -35,7 +42,7 @@ const ALL = '__all__' as const
 const PENDING_APPROVAL = 'Pending Approval'
 
 const selectedLeadVendor = ref<string>(ALL)
-const selectedStatus = ref<string>(PENDING_APPROVAL)
+const selectedStatus = ref<string>(ALL)
 const selectedAttorneyId = ref<string>(ALL)
 
 const leadVendors = ref<string[]>([])
@@ -50,6 +57,12 @@ const leadVendorOptions = computed(() => {
 })
 
 const statusOptions = computed(() => {
+  if (canSeeAllStatuses.value) {
+    return [
+      { value: ALL, label: 'All statuses' },
+      { value: PENDING_APPROVAL, label: PENDING_APPROVAL }
+    ]
+  }
   return [{ value: PENDING_APPROVAL, label: PENDING_APPROVAL }]
 })
 
@@ -74,10 +87,12 @@ const attorneyOptions = computed(() => {
 const filteredRows = computed(() => {
   const vendorFilter = selectedLeadVendor.value
   const attorneyFilter = selectedAttorneyId.value
+  const statusFilter = selectedStatus.value
 
   const q = query.value.trim().toLowerCase()
   const base = rows.value.filter((r) => {
-    if ((r.status ?? null) !== PENDING_APPROVAL) return false
+    if (!canSeeAllStatuses.value && (r.status ?? null) !== PENDING_APPROVAL) return false
+    if (canSeeAllStatuses.value && statusFilter !== ALL && (r.status ?? null) !== statusFilter) return false
     if (canSeeLeadVendorUi.value && vendorFilter !== ALL && (r.lead_vendor ?? null) !== vendorFilter) return false
     if (attorneyFilter !== ALL && (r.assigned_attorney_id ?? null) !== attorneyFilter) return false
     return true
@@ -146,7 +161,7 @@ const columns = computed<TableColumn<DailyDealFlow>[]>(() => {
     }
   ]
 
-  if (canSeeLeadVendorUi.value) {
+  if (isSuperAdmin.value) {
     base.splice(3, 0, {
       accessorKey: 'lead_vendor',
       header: 'Lead Vendor'
@@ -215,7 +230,9 @@ const load = async () => {
       q = q.eq('lead_vendor', leadVendor)
     }
 
-    q = q.eq('status', PENDING_APPROVAL)
+    if (!isAdmin && !isSuperAdmin) {
+      q = q.eq('status', PENDING_APPROVAL)
+    }
 
     const { data, error: supaError } = await q
 
