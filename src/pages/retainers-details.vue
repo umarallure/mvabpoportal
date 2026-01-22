@@ -52,6 +52,13 @@ type CallUpdatesRow = {
   notes: string
 }
 
+type NoteRow = {
+  id: string
+  created_at: string
+  agent: string
+  note: string
+}
+
 const route = useRoute()
 const router = useRouter()
 const auth = useAuth()
@@ -72,7 +79,8 @@ const tabs = [
   { label: 'Basic Information', icon: 'i-lucide-user', value: 'basic' },
   { label: 'Accident Details', icon: 'i-lucide-car', value: 'accident' },
   { label: 'Insurance & Policy', icon: 'i-lucide-shield', value: 'insurance' },
-  { label: 'Call Updates', icon: 'i-lucide-phone', value: 'calls' }
+  { label: 'Call Updates', icon: 'i-lucide-phone', value: 'calls' },
+  { label: 'Notes', icon: 'i-lucide-sticky-note', value: 'notes' }
 ]
 
 const headerTitle = computed(() => {
@@ -360,6 +368,21 @@ const callUpdatesRows = computed<CallUpdatesRow[]>(() => {
   }))
 })
 
+const noteRows = computed<NoteRow[]>(() => {
+  return callResults.value
+    .map((r) => {
+      const note = (r.notes ?? '').trim()
+      if (!note) return null
+      return {
+        id: r.id,
+        created_at: formatDateTime(r.created_at),
+        agent: r.agent_who_took_call ?? r.submitting_agent ?? '—',
+        note
+      }
+    })
+    .filter((v): v is NoteRow => Boolean(v))
+})
+
 function formatValue(value: unknown) {
   if (value === null || value === undefined || value === '') return '—'
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
@@ -436,7 +459,11 @@ function formatDateOnly(value: string | null | undefined) {
       </div>
 
       <div v-else-if="row" class="space-y-4">
-        <UTabs v-model="activeTab" :items="tabs">
+        <UTabs
+          v-model="activeTab"
+          :items="tabs"
+          :ui="{ list: 'flex w-full', trigger: 'flex-1 justify-center' }"
+        >
           <template #content="{ item }">
             <UCard v-if="item.value === 'basic'">
               <div class="grid gap-4 md:grid-cols-2">
@@ -505,6 +532,27 @@ function formatDateOnly(value: string | null | undefined) {
                     </div>
                   </template>
                 </UTable>
+              </div>
+            </UCard>
+
+            <UCard v-else-if="item.value === 'notes'">
+              <div v-if="noteRows.length === 0" class="py-8 text-center text-muted">
+                No notes found
+              </div>
+              <div v-else class="space-y-3">
+                <div
+                  v-for="n in noteRows"
+                  :key="n.id"
+                  class="rounded-lg border border-default bg-elevated/20 p-3"
+                >
+                  <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+                    <div class="font-medium text-highlighted">{{ n.agent }}</div>
+                    <div>{{ n.created_at }}</div>
+                  </div>
+                  <div class="mt-2 whitespace-pre-wrap text-sm text-highlighted">
+                    {{ n.note }}
+                  </div>
+                </div>
               </div>
             </UCard>
           </template>
