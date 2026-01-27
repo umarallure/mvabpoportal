@@ -183,15 +183,35 @@ const loadTransfers = async () => {
 
     console.log('✅ Loaded transfers:', data?.length ?? 0, 'records')
     
-    transfers.value = (data ?? []).map((row: any) => ({
-      id: row.id ?? '',
-      date: row.date ?? '',
-      clientName: row.client_name ?? row.insured_name ?? '',
-      phone: row.client_phone_number ?? row.phone ?? '',
-      opportunityValue: row.opportunity_value ?? 0,
-      stage: mapStatusToStage(row.status),
-      publisher: row.publisher ?? row.lead_vendor ?? ''
-    }))
+    const getString = (record: Record<string, unknown>, key: string) => {
+      const value = record[key]
+      if (typeof value === 'string') return value
+      if (value == null) return ''
+      return String(value)
+    }
+
+    const getNumber = (record: Record<string, unknown>, key: string) => {
+      const value = record[key]
+      if (typeof value === 'number') return value
+      if (typeof value === 'string') {
+        const parsed = Number(value)
+        return Number.isFinite(parsed) ? parsed : 0
+      }
+      return 0
+    }
+
+    transfers.value = (data ?? []).map((row) => {
+      const record = (row ?? {}) as Record<string, unknown>
+      return {
+        id: getString(record, 'id'),
+        date: getString(record, 'date'),
+        clientName: getString(record, 'client_name') || getString(record, 'insured_name'),
+        phone: getString(record, 'client_phone_number') || getString(record, 'phone'),
+        opportunityValue: getNumber(record, 'opportunity_value'),
+        stage: mapStatusToStage(getString(record, 'status')),
+        publisher: getString(record, 'publisher') || getString(record, 'lead_vendor')
+      }
+    })
 
     console.log('✅ Processed transfers:', transfers.value.length)
   } catch (error) {

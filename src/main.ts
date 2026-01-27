@@ -20,6 +20,7 @@ const router = createRouter({
     { path: '/retainers/:id', component: () => import('./pages/retainers-details.vue') },
     { path: '/invoicing', component: () => import('./pages/invoicing.vue') },
     { path: '/sales-map', component: () => import('./pages/sales-map.vue') },
+    { path: '/submission-portal', component: () => import('./pages/submission-portal.vue') },
     { path: '/users', component: () => import('./pages/users.vue'), meta: { requiresSuperAdmin: true } },
     {
       path: '/settings',

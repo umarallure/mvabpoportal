@@ -54,6 +54,13 @@ const links = computed(() => [[{
     open.value = false
   }
 }, {
+  label: 'Submission Portal',
+  icon: 'i-lucide-layout-dashboard',
+  to: '/submission-portal',
+  onSelect: () => {
+    open.value = false
+  }
+}, {
   label: 'Sales Map',
   icon: 'i-lucide-map',
   to: '/sales-map',

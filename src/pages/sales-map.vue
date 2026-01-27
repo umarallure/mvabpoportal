@@ -3,16 +3,85 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 
 import usSvgFallbackRaw from '../assets/us.svg?raw'
+import { supabase } from '../lib/supabase'
 
 const US_SVG_URL = 'https://simplemaps.com/static/demos/resources/svg-library/svgs/us.svg'
 const US_SVG_CACHE_KEY = 'ap-us-map-svg-cache-v1'
 
+type UsState = {
+  code: string
+  name: string
+}
+
+const US_STATES: UsState[] = [
+  { code: 'AL', name: 'Alabama' },
+  { code: 'AK', name: 'Alaska' },
+  { code: 'AZ', name: 'Arizona' },
+  { code: 'AR', name: 'Arkansas' },
+  { code: 'CA', name: 'California' },
+  { code: 'CO', name: 'Colorado' },
+  { code: 'CT', name: 'Connecticut' },
+  { code: 'DE', name: 'Delaware' },
+  { code: 'FL', name: 'Florida' },
+  { code: 'GA', name: 'Georgia' },
+  { code: 'HI', name: 'Hawaii' },
+  { code: 'ID', name: 'Idaho' },
+  { code: 'IL', name: 'Illinois' },
+  { code: 'IN', name: 'Indiana' },
+  { code: 'IA', name: 'Iowa' },
+  { code: 'KS', name: 'Kansas' },
+  { code: 'KY', name: 'Kentucky' },
+  { code: 'LA', name: 'Louisiana' },
+  { code: 'ME', name: 'Maine' },
+  { code: 'MD', name: 'Maryland' },
+  { code: 'MA', name: 'Massachusetts' },
+  { code: 'MI', name: 'Michigan' },
+  { code: 'MN', name: 'Minnesota' },
+  { code: 'MS', name: 'Mississippi' },
+  { code: 'MO', name: 'Missouri' },
+  { code: 'MT', name: 'Montana' },
+  { code: 'NE', name: 'Nebraska' },
+  { code: 'NV', name: 'Nevada' },
+  { code: 'NH', name: 'New Hampshire' },
+  { code: 'NJ', name: 'New Jersey' },
+  { code: 'NM', name: 'New Mexico' },
+  { code: 'NY', name: 'New York' },
+  { code: 'NC', name: 'North Carolina' },
+  { code: 'ND', name: 'North Dakota' },
+  { code: 'OH', name: 'Ohio' },
+  { code: 'OK', name: 'Oklahoma' },
+  { code: 'OR', name: 'Oregon' },
+  { code: 'PA', name: 'Pennsylvania' },
+  { code: 'RI', name: 'Rhode Island' },
+  { code: 'SC', name: 'South Carolina' },
+  { code: 'SD', name: 'South Dakota' },
+  { code: 'TN', name: 'Tennessee' },
+  { code: 'TX', name: 'Texas' },
+  { code: 'UT', name: 'Utah' },
+  { code: 'VT', name: 'Vermont' },
+  { code: 'VA', name: 'Virginia' },
+  { code: 'WA', name: 'Washington' },
+  { code: 'WV', name: 'West Virginia' },
+  { code: 'WI', name: 'Wisconsin' },
+  { code: 'WY', name: 'Wyoming' }
+]
+
 type StateData = {
   code: string
   name: string
-  status: 'green' | 'yellow' | 'red'
+  status: 'gray' | 'green' | 'yellow' | 'red'
   volume: number
   criteria: string
+}
+
+type OrderRow = {
+  id: string
+  target_states: string[]
+  status?: string
+  quota_total?: number | null
+  quota_filled?: number | null
+  expires_at?: string | null
+  created_at?: string | null
 }
 
 const loading = ref(false)
@@ -33,55 +102,182 @@ const tooltip = ref<TooltipState>({
   state: null
 })
 
-const statesData = ref<StateData[]>([
-  { code: 'CA', name: 'California', status: 'green', volume: 450, criteria: 'High demand, excellent market' },
-  { code: 'TX', name: 'Texas', status: 'green', volume: 380, criteria: 'Strong market, good opportunities' },
-  { code: 'FL', name: 'Florida', status: 'yellow', volume: 250, criteria: 'Moderate demand, competitive' },
-  { code: 'NY', name: 'New York', status: 'green', volume: 420, criteria: 'High demand, premium market' },
-  { code: 'PA', name: 'Pennsylvania', status: 'yellow', volume: 180, criteria: 'Moderate demand' },
-  { code: 'IL', name: 'Illinois', status: 'green', volume: 310, criteria: 'Good market conditions' },
-  { code: 'OH', name: 'Ohio', status: 'yellow', volume: 200, criteria: 'Average market' },
-  { code: 'GA', name: 'Georgia', status: 'green', volume: 290, criteria: 'Growing market' },
-  { code: 'NC', name: 'North Carolina', status: 'yellow', volume: 160, criteria: 'Moderate opportunities' },
-  { code: 'MI', name: 'Michigan', status: 'red', volume: 90, criteria: 'Low demand, saturated' },
-  { code: 'NJ', name: 'New Jersey', status: 'green', volume: 270, criteria: 'Strong market' },
-  { code: 'VA', name: 'Virginia', status: 'yellow', volume: 150, criteria: 'Moderate demand' },
-  { code: 'WA', name: 'Washington', status: 'green', volume: 320, criteria: 'Excellent market' },
-  { code: 'AZ', name: 'Arizona', status: 'yellow', volume: 190, criteria: 'Growing market' },
-  { code: 'MA', name: 'Massachusetts', status: 'green', volume: 280, criteria: 'High demand' },
-  { code: 'TN', name: 'Tennessee', status: 'yellow', volume: 140, criteria: 'Moderate opportunities' },
-  { code: 'IN', name: 'Indiana', status: 'red', volume: 80, criteria: 'Low demand' },
-  { code: 'MO', name: 'Missouri', status: 'yellow', volume: 130, criteria: 'Average market' },
-  { code: 'MD', name: 'Maryland', status: 'green', volume: 240, criteria: 'Good opportunities' },
-  { code: 'WI', name: 'Wisconsin', status: 'red', volume: 70, criteria: 'Low demand, challenging' }
-])
+const toStatus = (volume: number): StateData['status'] => {
+  if (volume <= 0) return 'gray'
+  if (volume <= 5) return 'green'
+  if (volume <= 10) return 'yellow'
+  return 'red'
+}
+
+const criteriaForStatus = (status: StateData['status']) => {
+  if (status === 'gray') return 'No orders'
+  if (status === 'green') return 'Low competition'
+  if (status === 'yellow') return 'Moderate competition'
+  return 'High competition'
+}
+
+const statesData = ref<StateData[]>(
+  US_STATES.map((s) => ({
+    code: s.code,
+    name: s.name,
+    status: 'gray',
+    volume: 0,
+    criteria: criteriaForStatus('gray')
+  }))
+)
 
 const selectedStatus = ref('all')
 
+type OrdersFilter = 'all' | 'has_orders' | 'no_orders'
+const ordersFilter = ref<OrdersFilter>('all')
+
+const ordersFilterOptions = [
+  { value: 'all', label: 'All States' },
+  { value: 'has_orders', label: 'Has Open Orders' },
+  { value: 'no_orders', label: 'No Orders' }
+]
+
 const statusOptions = [
   { value: 'all', label: 'All States' },
-  { value: 'green', label: 'Green - Can Sell' },
-  { value: 'yellow', label: 'Yellow - Moderate' },
-  { value: 'red', label: 'Red - Restricted' }
+  { value: 'gray', label: 'No Orders' },
+  { value: 'green', label: 'Low Competition' },
+  { value: 'yellow', label: 'Moderate Competition' },
+  { value: 'red', label: 'High Competition' }
 ]
 
 const filteredStates = ref(statesData.value)
 
+const openOrders = ref<OrderRow[]>([])
+
+const openOrdersByStateCode = computed(() => {
+  const map = new Map<string, OrderRow[]>()
+  openOrders.value.forEach((o) => {
+    const targets = Array.isArray(o.target_states) ? o.target_states : []
+    targets.forEach((s) => {
+      const code = String(s || '').trim().toUpperCase()
+      if (!code) return
+      const next = map.get(code) ?? []
+      next.push(o)
+      map.set(code, next)
+    })
+  })
+  return map
+})
+
+const selectedStateCode = ref<string | null>(null)
+
+const selectedState = computed(() => {
+  if (!selectedStateCode.value) return null
+  return stateByCode.value.get(selectedStateCode.value) ?? null
+})
+
+const selectedStateOrders = computed(() => {
+  const code = selectedStateCode.value
+  if (!code) return []
+  return openOrdersByStateCode.value.get(code) ?? []
+})
+
+const selectState = (code: string) => {
+  selectedStateCode.value = String(code || '').trim().toUpperCase() || null
+}
+
+const clearSelectedState = () => {
+  selectedStateCode.value = null
+}
+
+const statesTableOpen = ref(false)
+
+watch([filteredStates], () => {
+  const code = selectedStateCode.value
+  if (!code) return
+  const stillVisible = filteredStates.value.some((s) => s.code === code)
+  if (!stillVisible) selectedStateCode.value = null
+})
+
+const orderProgressPercent = (order: Pick<OrderRow, 'quota_filled' | 'quota_total'>) => {
+  const total = Number(order.quota_total)
+  const filled = Number(order.quota_filled)
+  if (!Number.isFinite(total) || total <= 0) return 0
+  if (!Number.isFinite(filled) || filled <= 0) return 0
+  const pct = (filled / total) * 100
+  if (!Number.isFinite(pct)) return 0
+  return Math.max(0, Math.min(100, Math.round(pct)))
+}
+
 const filterStates = () => {
-  if (selectedStatus.value === 'all') {
-    filteredStates.value = statesData.value
-  } else {
-    filteredStates.value = statesData.value.filter(s => s.status === selectedStatus.value)
+  let next = statesData.value
+  if (selectedStatus.value !== 'all') {
+    next = next.filter(s => s.status === selectedStatus.value)
+  }
+
+  if (ordersFilter.value === 'has_orders') {
+    next = next.filter(s => s.volume > 0)
+  } else if (ordersFilter.value === 'no_orders') {
+    next = next.filter(s => s.volume <= 0)
+  }
+
+  filteredStates.value = next
+}
+
+const refreshCounts = async () => {
+  loading.value = true
+  try {
+    const supabaseUntyped = supabase as unknown as {
+      from: (
+        table: string
+      ) => {
+        select: (cols: string) => {
+          order: (
+            column: string,
+            opts: { ascending: boolean }
+          ) => Promise<{ data: OrderRow[] | null; error: unknown }>
+        }
+      }
+    }
+
+    const { data, error } = await supabaseUntyped
+      .from('orders')
+      .select('id,target_states,status,quota_total,quota_filled,expires_at,created_at')
+      .eq('status', 'OPEN')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      throw error instanceof Error ? error : new Error(String(error))
+    }
+
+    const rows = (data ?? []) as OrderRow[]
+    openOrders.value = rows
+    const counts = new Map<string, number>()
+
+    for (const row of rows) {
+      const targets = Array.isArray(row.target_states) ? row.target_states : []
+      for (const s of targets) {
+        const code = String(s || '').trim().toUpperCase()
+        if (!code) continue
+        counts.set(code, (counts.get(code) ?? 0) + 1)
+      }
+    }
+
+    statesData.value = US_STATES.map((s) => {
+      const volume = counts.get(s.code) ?? 0
+      const status = toStatus(volume)
+      return {
+        code: s.code,
+        name: s.name,
+        status,
+        volume,
+        criteria: criteriaForStatus(status)
+      }
+    })
+
+    filterStates()
+  } finally {
+    loading.value = false
   }
 }
 
-const getStatusColor = (status: string) => {
-  if (status === 'green') return 'bg-green-500'
-  if (status === 'yellow') return 'bg-yellow-500'
-  return 'bg-red-500'
-}
-
 const getStatusLabel = (status: string) => {
+  if (status === 'gray') return 'No Orders'
   if (status === 'green') return 'Can Sell'
   if (status === 'yellow') return 'Moderate'
   return 'Restricted'
@@ -90,6 +286,7 @@ const getStatusLabel = (status: string) => {
 const stateByCode = computed(() => new Map(statesData.value.map(s => [s.code, s])))
 
 const mapFill = (status: StateData['status'] | undefined) => {
+  if (status === 'gray') return '#d1d5db'
   if (status === 'green') return '#22c55e'
   if (status === 'yellow') return '#eab308'
   if (status === 'red') return '#ef4444'
@@ -99,6 +296,7 @@ const mapFill = (status: StateData['status'] | undefined) => {
 const mapStroke = () => '#0b0b0b'
 
 const textColorForStatus = (status: StateData['status'] | undefined) => {
+  if (status === 'gray') return '#111827'
   if (status === 'green') return '#ffffff'
   if (status === 'red') return '#ffffff'
   if (status === 'yellow') return '#111827'
@@ -172,6 +370,7 @@ const applyMapColors = () => {
   const visibleSet = new Set(filteredStates.value.map(s => s.code))
   const paths = svg.querySelectorAll('path[data-id]')
   paths.forEach((p) => {
+    const path = p as SVGPathElement
     const code = p.getAttribute('data-id') || p.getAttribute('id')
     if (!code) return
     const state = stateByCode.value.get(code)
@@ -182,11 +381,11 @@ const applyMapColors = () => {
 
     // Some SVGs include inline `style="fill:..."` which overrides `fill="..."`.
     // Force our color to win.
-    p.style.setProperty('fill', fill, 'important')
-    p.style.setProperty('stroke', stroke, 'important')
-    p.style.setProperty('stroke-width', '0.8', 'important')
-    p.style.cursor = state ? 'pointer' : 'default'
-    p.style.opacity = isVisible ? '1' : '0.15'
+    path.style.setProperty('fill', fill, 'important')
+    path.style.setProperty('stroke', stroke, 'important')
+    path.style.setProperty('stroke-width', '0.8', 'important')
+    path.style.cursor = state ? 'pointer' : 'default'
+    path.style.opacity = isVisible ? '1' : '0.15'
   })
 
   applyStateLabels()
@@ -264,6 +463,7 @@ onMounted(() => {
 
       mapRoot.value.innerHTML = svgText
       bindSvgEvents()
+      await refreshCounts()
       applyMapColors()
     } catch {
       const cached = (() => {
@@ -276,6 +476,7 @@ onMounted(() => {
 
       mapRoot.value.innerHTML = cached || usSvgFallbackRaw
       bindSvgEvents()
+      await refreshCounts()
       applyMapColors()
     }
   }
@@ -291,12 +492,18 @@ watch([selectedStatus, filteredStates], () => {
   applyMapColors()
 })
 
+watch([ordersFilter], () => {
+  filterStates()
+  applyMapColors()
+})
+
 const columns = computed<TableColumn<StateData>[]>(() => [
   { accessorKey: 'code', header: 'Code' },
   { accessorKey: 'name', header: 'State' },
   { accessorKey: 'status', header: 'Status' },
   { accessorKey: 'volume', header: 'Volume' },
-  { accessorKey: 'criteria', header: 'Criteria' }
+  { accessorKey: 'criteria', header: 'Criteria' },
+  { accessorKey: 'actions', header: '' }
 ])
 </script>
 
@@ -314,6 +521,7 @@ const columns = computed<TableColumn<StateData>[]>(() => [
             variant="outline"
             icon="i-lucide-refresh-cw"
             :loading="loading"
+            @click="refreshCounts().then(() => applyMapColors())"
           >
             Refresh
           </UButton>
@@ -327,18 +535,22 @@ const columns = computed<TableColumn<StateData>[]>(() => [
           <UCard>
             <div class="space-y-3">
               <h3 class="font-semibold">Sales Criteria Legend</h3>
-              <div class="grid gap-3 sm:grid-cols-3">
+              <div class="grid gap-3 sm:grid-cols-4">
+                <div class="flex items-center gap-2">
+                  <div class="size-4 rounded-full bg-gray-300" />
+                  <span class="text-sm">Gray - No Orders</span>
+                </div>
                 <div class="flex items-center gap-2">
                   <div class="size-4 rounded-full bg-green-500" />
-                  <span class="text-sm">Green - Can Sell (High Demand)</span>
+                  <span class="text-sm">Green - 1–5 Orders</span>
                 </div>
                 <div class="flex items-center gap-2">
                   <div class="size-4 rounded-full bg-yellow-500" />
-                  <span class="text-sm">Yellow - Moderate (Average Market)</span>
+                  <span class="text-sm">Yellow - 6–10 Orders</span>
                 </div>
                 <div class="flex items-center gap-2">
                   <div class="size-4 rounded-full bg-red-500" />
-                  <span class="text-sm">Red - Restricted (Low Demand)</span>
+                  <span class="text-sm">Red - 11+ Orders</span>
                 </div>
               </div>
             </div>
@@ -346,14 +558,25 @@ const columns = computed<TableColumn<StateData>[]>(() => [
         </div>
 
         <div class="flex items-center justify-between">
-          <USelect
-            v-model="selectedStatus"
-            class="w-64"
-            :items="statusOptions"
-            value-key="value"
-            label-key="label"
-            @change="filterStates"
-          />
+          <div class="flex items-center gap-3">
+            <USelect
+              v-model="selectedStatus"
+              class="w-64"
+              :items="statusOptions"
+              value-key="value"
+              label-key="label"
+              @change="filterStates"
+            />
+
+            <USelect
+              v-model="ordersFilter"
+              class="w-56"
+              :items="ordersFilterOptions"
+              value-key="value"
+              label-key="label"
+              @change="filterStates"
+            />
+          </div>
 
           <UBadge variant="subtle" :label="`${filteredStates.length} states`" />
         </div>
@@ -374,7 +597,7 @@ const columns = computed<TableColumn<StateData>[]>(() => [
               <div class="text-sm font-semibold">{{ tooltip.state.name }} ({{ tooltip.state.code }})</div>
               <div class="mt-1 flex items-center gap-2">
                 <UBadge
-                  :color="tooltip.state.status === 'green' ? 'success' : tooltip.state.status === 'yellow' ? 'warning' : 'error'"
+                  :color="tooltip.state.status === 'green' ? 'success' : tooltip.state.status === 'yellow' ? 'warning' : tooltip.state.status === 'red' ? 'error' : 'neutral'"
                   variant="subtle"
                   :label="getStatusLabel(tooltip.state.status)"
                   size="xs"
@@ -386,27 +609,115 @@ const columns = computed<TableColumn<StateData>[]>(() => [
           </div>
         </UCard>
 
+
+        <UCard :ui="{ body: 'p-4' }">
+          <div class="flex items-center justify-between">
+            <div class="text-sm font-semibold">Open Orders (In Progress)</div>
+            <UBadge
+              variant="subtle"
+              :label="`${openOrders.reduce((sum, o) => sum + (Array.isArray(o.target_states) ? o.target_states.length : 0), 0)} targets`"
+            />
+          </div>
+
+          <div class="mt-3">
+            <div v-if="!selectedState" class="text-xs text-muted">Select a state from the table to view open order progress.</div>
+
+            <div v-else class="rounded-lg border border-default">
+              <div class="flex items-center justify-between border-b border-default bg-elevated/30 px-3 py-2">
+                <div class="text-sm font-semibold">{{ selectedState.code }} - {{ selectedState.name }}</div>
+                <div class="flex items-center gap-2">
+                  <UBadge variant="subtle" size="xs" :label="`${selectedStateOrders.length} open`" />
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    icon="i-lucide-x"
+                    @click="clearSelectedState()"
+                  />
+                </div>
+              </div>
+
+              <div class="p-3">
+                <div v-if="selectedStateOrders.length === 0" class="text-xs text-muted">No open orders for this state.</div>
+
+                <div v-else class="space-y-3">
+                  <div
+                    v-for="order in selectedStateOrders"
+                    :key="order.id"
+                    class="rounded-md border border-default bg-white px-3 py-2"
+                  >
+                    <div class="flex items-center justify-between gap-3">
+                      <div class="min-w-0">
+                        <div class="truncate text-sm font-semibold">Order #{{ order.id }}</div>
+                        <div class="mt-0.5 text-xs text-muted">
+                          {{ Number(order.quota_filled ?? 0) }} / {{ Number(order.quota_total ?? 0) }} filled
+                        </div>
+                      </div>
+                      <UBadge variant="subtle" size="xs" :label="`${orderProgressPercent(order)}%`" />
+                    </div>
+
+                    <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
+                      <div class="h-2 rounded-full bg-primary" :style="{ width: `${orderProgressPercent(order)}%` }" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </UCard>
+
         <UCard :ui="{ body: 'p-0' }">
-          <UTable
-            :data="filteredStates"
-            :columns="columns"
-            :ui="{
-              base: 'w-full',
-              thead: '[&>tr]:bg-elevated/50',
-              tbody: '[&>tr]:hover:bg-muted/50',
-              th: 'px-4 py-3 text-left',
-              td: 'px-4 py-3 align-top'
-            }"
+          <button
+            type="button"
+            class="flex w-full items-center justify-between border-b border-default px-4 py-3 text-left"
+            @click="statesTableOpen = !statesTableOpen"
           >
-            <template #status-cell="{ row }">
-              <UBadge
-                :color="row.original.status === 'green' ? 'success' : row.original.status === 'yellow' ? 'warning' : 'error'"
-                variant="subtle"
-                :label="getStatusLabel(row.original.status)"
-                size="xs"
-              />
-            </template>
-          </UTable>
+            <div class="flex items-center gap-2">
+              <div class="text-sm font-semibold">States</div>
+              <UBadge variant="subtle" size="xs" :label="String(filteredStates.length)" />
+            </div>
+
+            <UIcon
+              name="i-lucide-chevron-down"
+              class="size-5 text-dimmed transition-transform duration-200"
+              :class="statesTableOpen ? 'rotate-180' : ''"
+            />
+          </button>
+
+          <div v-show="statesTableOpen">
+            <UTable
+              :data="filteredStates"
+              :columns="columns"
+              :ui="{
+                base: 'w-full',
+                thead: '[&>tr]:bg-elevated/50',
+                tbody: '[&>tr]:hover:bg-muted/50',
+                th: 'px-4 py-3 text-left',
+                td: 'px-4 py-3 align-top'
+              }"
+            >
+              <template #status-cell="{ row }">
+                <UBadge
+                  :color="row.original.status === 'green' ? 'success' : row.original.status === 'yellow' ? 'warning' : row.original.status === 'red' ? 'error' : 'neutral'"
+                  variant="subtle"
+                  :label="getStatusLabel(row.original.status)"
+                  size="xs"
+                />
+              </template>
+
+              <template #actions-cell="{ row }">
+                <UButton
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  icon="i-lucide-eye"
+                  @click="selectState(row.original.code)"
+                >
+                  View
+                </UButton>
+              </template>
+            </UTable>
+          </div>
         </UCard>
       </div>
     </template>
