@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import type { TableColumn } from '@nuxt/ui'
-
 import usSvgFallbackRaw from '../assets/us.svg?raw'
 import { supabase } from '../lib/supabase'
 
@@ -110,10 +108,10 @@ const toStatus = (volume: number): StateData['status'] => {
 }
 
 const criteriaForStatus = (status: StateData['status']) => {
-  if (status === 'gray') return 'No orders'
-  if (status === 'green') return 'Low competition'
-  if (status === 'yellow') return 'Moderate competition'
-  return 'High competition'
+  if (status === 'gray') return 'No open orders available'
+  if (status === 'green') return 'High selling capacity'
+  if (status === 'yellow') return 'Moderate selling capacity'
+  return 'Low selling capacity'
 }
 
 const statesData = ref<StateData[]>(
@@ -139,53 +137,17 @@ const ordersFilterOptions = [
 
 const statusOptions = [
   { value: 'all', label: 'All States' },
-  { value: 'gray', label: 'No Orders' },
-  { value: 'green', label: 'Low Competition' },
-  { value: 'yellow', label: 'Moderate Competition' },
-  { value: 'red', label: 'High Competition' }
+  { value: 'gray', label: 'No Open Orders' },
+  { value: 'green', label: 'High Selling Capacity' },
+  { value: 'yellow', label: 'Moderate Selling Capacity' },
+  { value: 'red', label: 'Low Selling Capacity' }
 ]
 
 const filteredStates = ref(statesData.value)
 
 const openOrders = ref<OrderRow[]>([])
 
-const openOrdersByStateCode = computed(() => {
-  const map = new Map<string, OrderRow[]>()
-  openOrders.value.forEach((o) => {
-    const targets = Array.isArray(o.target_states) ? o.target_states : []
-    targets.forEach((s) => {
-      const code = String(s || '').trim().toUpperCase()
-      if (!code) return
-      const next = map.get(code) ?? []
-      next.push(o)
-      map.set(code, next)
-    })
-  })
-  return map
-})
-
 const selectedStateCode = ref<string | null>(null)
-
-const selectedState = computed(() => {
-  if (!selectedStateCode.value) return null
-  return stateByCode.value.get(selectedStateCode.value) ?? null
-})
-
-const selectedStateOrders = computed(() => {
-  const code = selectedStateCode.value
-  if (!code) return []
-  return openOrdersByStateCode.value.get(code) ?? []
-})
-
-const selectState = (code: string) => {
-  selectedStateCode.value = String(code || '').trim().toUpperCase() || null
-}
-
-const clearSelectedState = () => {
-  selectedStateCode.value = null
-}
-
-const statesTableOpen = ref(false)
 
 watch([filteredStates], () => {
   const code = selectedStateCode.value
@@ -193,16 +155,6 @@ watch([filteredStates], () => {
   const stillVisible = filteredStates.value.some((s) => s.code === code)
   if (!stillVisible) selectedStateCode.value = null
 })
-
-const orderProgressPercent = (order: Pick<OrderRow, 'quota_filled' | 'quota_total'>) => {
-  const total = Number(order.quota_total)
-  const filled = Number(order.quota_filled)
-  if (!Number.isFinite(total) || total <= 0) return 0
-  if (!Number.isFinite(filled) || filled <= 0) return 0
-  const pct = (filled / total) * 100
-  if (!Number.isFinite(pct)) return 0
-  return Math.max(0, Math.min(100, Math.round(pct)))
-}
 
 const filterStates = () => {
   let next = statesData.value
@@ -227,10 +179,12 @@ const refreshCounts = async () => {
         table: string
       ) => {
         select: (cols: string) => {
-          order: (
-            column: string,
-            opts: { ascending: boolean }
-          ) => Promise<{ data: OrderRow[] | null; error: unknown }>
+          eq: (column: string, value: unknown) => {
+            order: (
+              column: string,
+              opts: { ascending: boolean }
+            ) => Promise<{ data: OrderRow[] | null; error: unknown }>
+          }
         }
       }
     }
@@ -277,10 +231,10 @@ const refreshCounts = async () => {
 }
 
 const getStatusLabel = (status: string) => {
-  if (status === 'gray') return 'No Orders'
-  if (status === 'green') return 'Can Sell'
-  if (status === 'yellow') return 'Moderate'
-  return 'Restricted'
+  if (status === 'gray') return 'No opportunities'
+  if (status === 'green') return 'High capacity'
+  if (status === 'yellow') return 'Moderate capacity'
+  return 'Low capacity'
 }
 
 const stateByCode = computed(() => new Map(statesData.value.map(s => [s.code, s])))
@@ -496,15 +450,6 @@ watch([ordersFilter], () => {
   filterStates()
   applyMapColors()
 })
-
-const columns = computed<TableColumn<StateData>[]>(() => [
-  { accessorKey: 'code', header: 'Code' },
-  { accessorKey: 'name', header: 'State' },
-  { accessorKey: 'status', header: 'Status' },
-  { accessorKey: 'volume', header: 'Volume' },
-  { accessorKey: 'criteria', header: 'Criteria' },
-  { accessorKey: 'actions', header: '' }
-])
 </script>
 
 <template>
@@ -534,23 +479,26 @@ const columns = computed<TableColumn<StateData>[]>(() => [
         <div>
           <UCard>
             <div class="space-y-3">
-              <h3 class="font-semibold">Sales Criteria Legend</h3>
+              <h3 class="font-semibold">Sales Capacity Legend</h3>
+              <div class="text-sm text-muted">
+                Colors represent selling capacity based on the number of open orders in each state.
+              </div>
               <div class="grid gap-3 sm:grid-cols-4">
                 <div class="flex items-center gap-2">
                   <div class="size-4 rounded-full bg-gray-300" />
-                  <span class="text-sm">Gray - No Orders</span>
+                  <span class="text-sm">Gray - No open orders</span>
                 </div>
                 <div class="flex items-center gap-2">
                   <div class="size-4 rounded-full bg-green-500" />
-                  <span class="text-sm">Green - 1–5 Orders</span>
+                  <span class="text-sm">Green - High selling capacity (1–5 open orders)</span>
                 </div>
                 <div class="flex items-center gap-2">
                   <div class="size-4 rounded-full bg-yellow-500" />
-                  <span class="text-sm">Yellow - 6–10 Orders</span>
+                  <span class="text-sm">Yellow - Moderate selling capacity (6–10 open orders)</span>
                 </div>
                 <div class="flex items-center gap-2">
                   <div class="size-4 rounded-full bg-red-500" />
-                  <span class="text-sm">Red - 11+ Orders</span>
+                  <span class="text-sm">Red - Low selling capacity (11+ open orders)</span>
                 </div>
               </div>
             </div>
@@ -602,121 +550,10 @@ const columns = computed<TableColumn<StateData>[]>(() => [
                   :label="getStatusLabel(tooltip.state.status)"
                   size="xs"
                 />
-                <span class="text-xs text-muted">Volume: {{ tooltip.state.volume }}</span>
+                <span class="text-xs text-muted">Open orders: {{ tooltip.state.volume }}</span>
               </div>
               <div class="mt-1 text-xs text-muted">{{ tooltip.state.criteria }}</div>
             </div>
-          </div>
-        </UCard>
-
-
-        <UCard :ui="{ body: 'p-4' }">
-          <div class="flex items-center justify-between">
-            <div class="text-sm font-semibold">Open Orders (In Progress)</div>
-            <UBadge
-              variant="subtle"
-              :label="`${openOrders.reduce((sum, o) => sum + (Array.isArray(o.target_states) ? o.target_states.length : 0), 0)} targets`"
-            />
-          </div>
-
-          <div class="mt-3">
-            <div v-if="!selectedState" class="text-xs text-muted">Select a state from the table to view open order progress.</div>
-
-            <div v-else class="rounded-lg border border-default">
-              <div class="flex items-center justify-between border-b border-default bg-elevated/30 px-3 py-2">
-                <div class="text-sm font-semibold">{{ selectedState.code }} - {{ selectedState.name }}</div>
-                <div class="flex items-center gap-2">
-                  <UBadge variant="subtle" size="xs" :label="`${selectedStateOrders.length} open`" />
-                  <UButton
-                    color="neutral"
-                    variant="ghost"
-                    size="xs"
-                    icon="i-lucide-x"
-                    @click="clearSelectedState()"
-                  />
-                </div>
-              </div>
-
-              <div class="p-3">
-                <div v-if="selectedStateOrders.length === 0" class="text-xs text-muted">No open orders for this state.</div>
-
-                <div v-else class="space-y-3">
-                  <div
-                    v-for="order in selectedStateOrders"
-                    :key="order.id"
-                    class="rounded-md border border-default bg-white px-3 py-2"
-                  >
-                    <div class="flex items-center justify-between gap-3">
-                      <div class="min-w-0">
-                        <div class="truncate text-sm font-semibold">Order #{{ order.id }}</div>
-                        <div class="mt-0.5 text-xs text-muted">
-                          {{ Number(order.quota_filled ?? 0) }} / {{ Number(order.quota_total ?? 0) }} filled
-                        </div>
-                      </div>
-                      <UBadge variant="subtle" size="xs" :label="`${orderProgressPercent(order)}%`" />
-                    </div>
-
-                    <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
-                      <div class="h-2 rounded-full bg-primary" :style="{ width: `${orderProgressPercent(order)}%` }" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </UCard>
-
-        <UCard :ui="{ body: 'p-0' }">
-          <button
-            type="button"
-            class="flex w-full items-center justify-between border-b border-default px-4 py-3 text-left"
-            @click="statesTableOpen = !statesTableOpen"
-          >
-            <div class="flex items-center gap-2">
-              <div class="text-sm font-semibold">States</div>
-              <UBadge variant="subtle" size="xs" :label="String(filteredStates.length)" />
-            </div>
-
-            <UIcon
-              name="i-lucide-chevron-down"
-              class="size-5 text-dimmed transition-transform duration-200"
-              :class="statesTableOpen ? 'rotate-180' : ''"
-            />
-          </button>
-
-          <div v-show="statesTableOpen">
-            <UTable
-              :data="filteredStates"
-              :columns="columns"
-              :ui="{
-                base: 'w-full',
-                thead: '[&>tr]:bg-elevated/50',
-                tbody: '[&>tr]:hover:bg-muted/50',
-                th: 'px-4 py-3 text-left',
-                td: 'px-4 py-3 align-top'
-              }"
-            >
-              <template #status-cell="{ row }">
-                <UBadge
-                  :color="row.original.status === 'green' ? 'success' : row.original.status === 'yellow' ? 'warning' : row.original.status === 'red' ? 'error' : 'neutral'"
-                  variant="subtle"
-                  :label="getStatusLabel(row.original.status)"
-                  size="xs"
-                />
-              </template>
-
-              <template #actions-cell="{ row }">
-                <UButton
-                  color="neutral"
-                  variant="ghost"
-                  size="xs"
-                  icon="i-lucide-eye"
-                  @click="selectState(row.original.code)"
-                >
-                  View
-                </UButton>
-              </template>
-            </UTable>
           </div>
         </UCard>
       </div>
