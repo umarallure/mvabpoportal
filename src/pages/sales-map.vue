@@ -102,9 +102,9 @@ const tooltip = ref<TooltipState>({
 
 const toStatus = (volume: number): StateData['status'] => {
   if (volume <= 0) return 'gray'
-  if (volume <= 5) return 'green'
+  if (volume <= 5) return 'red'
   if (volume <= 10) return 'yellow'
-  return 'red'
+  return 'green'
 }
 
 const criteriaForStatus = (status: StateData['status']) => {
@@ -490,15 +490,15 @@ watch([ordersFilter], () => {
                 </div>
                 <div class="flex items-center gap-2">
                   <div class="size-4 rounded-full bg-green-500" />
-                  <span class="text-sm">Green - High selling capacity (1–5 open orders)</span>
+                  <span class="text-sm">Green - High selling capacity</span>
                 </div>
                 <div class="flex items-center gap-2">
                   <div class="size-4 rounded-full bg-yellow-500" />
-                  <span class="text-sm">Yellow - Moderate selling capacity (6–10 open orders)</span>
+                  <span class="text-sm">Yellow - Moderate selling capacity</span>
                 </div>
                 <div class="flex items-center gap-2">
                   <div class="size-4 rounded-full bg-red-500" />
-                  <span class="text-sm">Red - Low selling capacity (11+ open orders)</span>
+                  <span class="text-sm">Red - Low selling capacity</span>
                 </div>
               </div>
             </div>
@@ -550,7 +550,6 @@ watch([ordersFilter], () => {
                   :label="getStatusLabel(tooltip.state.status)"
                   size="xs"
                 />
-                <span class="text-xs text-muted">Open orders: {{ tooltip.state.volume }}</span>
               </div>
               <div class="mt-1 text-xs text-muted">{{ tooltip.state.criteria }}</div>
             </div>
