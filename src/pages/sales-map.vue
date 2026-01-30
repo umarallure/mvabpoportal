@@ -67,7 +67,7 @@ const US_STATES: UsState[] = [
 type StateData = {
   code: string
   name: string
-  status: 'gray' | 'green' | 'yellow' | 'red'
+  status: 'green' | 'yellow' | 'red'
   volume: number
   criteria: string
 }
@@ -101,14 +101,12 @@ const tooltip = ref<TooltipState>({
 })
 
 const toStatus = (volume: number): StateData['status'] => {
-  if (volume <= 0) return 'gray'
-  if (volume <= 5) return 'red'
-  if (volume <= 10) return 'yellow'
+  if (volume <= 10) return 'red'
+  if (volume <= 20) return 'yellow'
   return 'green'
 }
 
 const criteriaForStatus = (status: StateData['status']) => {
-  if (status === 'gray') return 'No open orders available'
   if (status === 'green') return 'High selling capacity'
   if (status === 'yellow') return 'Moderate selling capacity'
   return 'Low selling capacity'
@@ -118,9 +116,9 @@ const statesData = ref<StateData[]>(
   US_STATES.map((s) => ({
     code: s.code,
     name: s.name,
-    status: 'gray',
+    status: 'red',
     volume: 0,
-    criteria: criteriaForStatus('gray')
+    criteria: criteriaForStatus('red')
   }))
 )
 
@@ -131,16 +129,15 @@ const ordersFilter = ref<OrdersFilter>('all')
 
 const ordersFilterOptions = [
   { value: 'all', label: 'All States' },
-  { value: 'has_orders', label: 'Has Open Orders' },
-  { value: 'no_orders', label: 'No Orders' }
+  { value: 'has_orders', label: 'Has Selling Volume' },
+  { value: 'no_orders', label: 'No Selling Volume' }
 ]
 
 const statusOptions = [
   { value: 'all', label: 'All States' },
-  { value: 'gray', label: 'No Open Orders' },
+  { value: 'red', label: 'Low Selling Capacity' },
   { value: 'green', label: 'High Selling Capacity' },
-  { value: 'yellow', label: 'Moderate Selling Capacity' },
-  { value: 'red', label: 'Low Selling Capacity' }
+  { value: 'yellow', label: 'Moderate Selling Capacity' }
 ]
 
 const filteredStates = ref(statesData.value)
@@ -231,16 +228,14 @@ const refreshCounts = async () => {
 }
 
 const getStatusLabel = (status: string) => {
-  if (status === 'gray') return 'No opportunities'
-  if (status === 'green') return 'High capacity'
-  if (status === 'yellow') return 'Moderate capacity'
-  return 'Low capacity'
+  if (status === 'green') return 'High selling capacity'
+  if (status === 'yellow') return 'Moderate selling capacity'
+  return 'Low selling capacity'
 }
 
 const stateByCode = computed(() => new Map(statesData.value.map(s => [s.code, s])))
 
 const mapFill = (status: StateData['status'] | undefined) => {
-  if (status === 'gray') return '#d1d5db'
   if (status === 'green') return '#22c55e'
   if (status === 'yellow') return '#eab308'
   if (status === 'red') return '#ef4444'
@@ -250,7 +245,6 @@ const mapFill = (status: StateData['status'] | undefined) => {
 const mapStroke = () => '#0b0b0b'
 
 const textColorForStatus = (status: StateData['status'] | undefined) => {
-  if (status === 'gray') return '#111827'
   if (status === 'green') return '#ffffff'
   if (status === 'red') return '#ffffff'
   if (status === 'yellow') return '#111827'
@@ -481,13 +475,9 @@ watch([ordersFilter], () => {
             <div class="space-y-3">
               <h3 class="font-semibold">Sales Capacity Legend</h3>
               <div class="text-sm text-muted">
-                Colors represent selling capacity based on the number of open orders in each state.
+                Colors represent selling capacity based on selling volume in each state.
               </div>
-              <div class="grid gap-3 sm:grid-cols-4">
-                <div class="flex items-center gap-2">
-                  <div class="size-4 rounded-full bg-gray-300" />
-                  <span class="text-sm">Gray - No open orders</span>
-                </div>
+              <div class="grid gap-3 sm:grid-cols-3">
                 <div class="flex items-center gap-2">
                   <div class="size-4 rounded-full bg-green-500" />
                   <span class="text-sm">Green - High selling capacity</span>
