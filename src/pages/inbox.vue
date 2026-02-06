@@ -11,14 +11,7 @@ type Message = {
   category: string
 }
 
-const mockMessages = ref<Message[]>([
-  { id: '1', from: 'Attorney Smith', subject: 'Case Review Required', preview: 'Please review the attached documents for case #12345...', timestamp: '2 hours ago', read: false, category: 'Legal' },
-  { id: '2', from: 'Admin Team', subject: 'New Retainer Approved', preview: 'Retainer for John Doe has been approved and is ready...', timestamp: '5 hours ago', read: false, category: 'Admin' },
-  { id: '3', from: 'Client Services', subject: 'Follow-up Required', preview: 'Client Jane Smith requested additional information...', timestamp: '1 day ago', read: true, category: 'Client' },
-  { id: '4', from: 'System', subject: 'Weekly Report Available', preview: 'Your weekly performance report is now available...', timestamp: '2 days ago', read: true, category: 'System' },
-  { id: '5', from: 'Attorney Johnson', subject: 'Document Verification', preview: 'Need verification on documents submitted for case...', timestamp: '3 days ago', read: false, category: 'Legal' },
-  { id: '6', from: 'BPO Manager', subject: 'Team Meeting Tomorrow', preview: 'Reminder: Team meeting scheduled for tomorrow at 10 AM...', timestamp: '3 days ago', read: true, category: 'Admin' }
-])
+const mockMessages = ref<Message[]>([])
 
 const selectedMessage = ref<Message | null>(null)
 const query = ref('')
@@ -49,7 +42,12 @@ const selectMessage = (message: Message) => {
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
-          <UBadge v-if="unreadCount > 0" color="primary" variant="subtle" :label="`${unreadCount} unread`" />
+          <UBadge
+            v-if="unreadCount > 0"
+            color="primary"
+            variant="subtle"
+            :label="`${unreadCount} unread`"
+          />
         </template>
       </UDashboardNavbar>
     </template>
@@ -64,7 +62,17 @@ const selectMessage = (message: Message) => {
           />
         </div>
 
-        <div class="flex min-h-0 flex-1 gap-4">
+        <div
+          v-if="filteredMessages.length === 0"
+          class="flex min-h-0 flex-1 items-center justify-center"
+        >
+          <div class="flex flex-col items-center justify-center py-12 text-center">
+            <UIcon name="i-lucide-inbox" class="size-16 text-dimmed" />
+            <p class="mt-3 text-sm text-dimmed">No messages found.</p>
+          </div>
+        </div>
+
+        <div v-else class="flex min-h-0 flex-1 gap-4">
           <div class="w-1/3 min-w-0 space-y-2 overflow-auto">
             <UCard
               v-for="message in filteredMessages"
@@ -75,7 +83,12 @@ const selectMessage = (message: Message) => {
               <div class="space-y-1">
                 <div class="flex items-start justify-between">
                   <h4 class="text-sm font-semibold">{{ message.from }}</h4>
-                  <UBadge v-if="!message.read" color="primary" size="xs" label="New" />
+                  <UBadge
+                    v-if="!message.read"
+                    color="primary"
+                    size="xs"
+                    label="New"
+                  />
                 </div>
                 <p class="text-sm font-medium">{{ message.subject }}</p>
                 <p class="text-xs text-muted line-clamp-2">{{ message.preview }}</p>
@@ -85,11 +98,6 @@ const selectMessage = (message: Message) => {
                 </div>
               </div>
             </UCard>
-
-            <div v-if="filteredMessages.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
-              <UIcon name="i-lucide-inbox" class="size-16 text-dimmed" />
-              <p class="mt-3 text-sm text-dimmed">No messages found.</p>
-            </div>
           </div>
 
           <div class="flex-1 min-w-0">
@@ -108,13 +116,6 @@ const selectMessage = (message: Message) => {
 
                 <div class="prose prose-sm max-w-none">
                   <p>{{ selectedMessage.preview }}</p>
-                  <p class="mt-4">This is a prototype message view. In the full implementation, the complete message content would be displayed here with formatting, attachments, and action buttons.</p>
-                </div>
-
-                <div class="flex gap-2 border-t border-default pt-4">
-                  <UButton icon="i-lucide-reply">Reply</UButton>
-                  <UButton color="neutral" variant="outline" icon="i-lucide-forward">Forward</UButton>
-                  <UButton color="neutral" variant="outline" icon="i-lucide-archive">Archive</UButton>
                 </div>
               </div>
             </UCard>

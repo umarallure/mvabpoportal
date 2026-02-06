@@ -305,7 +305,7 @@ onMounted(() => {
           </div>
 
           <div class="flex items-center gap-3">
-            <div class="inline-flex rounded-lg border border-default bg-white p-0.5">
+            <div class="inline-flex rounded-lg border border-default bg-white p-0.5 dark:bg-elevated/20">
               <button
                 v-for="mode in ['kanban', 'list']"
                 :key="mode"

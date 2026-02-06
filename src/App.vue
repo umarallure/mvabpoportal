@@ -28,7 +28,6 @@ const links = computed(() => [[{
   label: 'Inbox',
   icon: 'i-lucide-inbox',
   to: '/inbox',
-  badge: '4',
   onSelect: () => {
     open.value = false
   }
@@ -46,14 +45,16 @@ const links = computed(() => [[{
   onSelect: () => {
     open.value = false
   }
-}, {
-  label: 'Invoicing',
-  icon: 'i-lucide-receipt',
-  to: '/invoicing',
-  onSelect: () => {
-    open.value = false
-  }
-}, {
+},
+// {
+//   label: 'Invoicing',
+//   icon: 'i-lucide-receipt',
+//   to: '/invoicing',
+//   onSelect: () => {
+//     open.value = false
+//   }
+// },
+...([] as NavigationMenuItem[]), {
   label: 'Submission Portal',
   icon: 'i-lucide-layout-dashboard',
   to: '/submission-portal',
