@@ -4,62 +4,28 @@ import { useRouter } from 'vue-router'
 
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../composables/useAuth'
+import { usePipelineStages } from '../composables/usePipelineStages'
 
-type StageKey =
-  | 'stage_9'
-  | 'stage_10'
-  | 'stage_11'
-  | 'stage_1'
-  | 'stage_2'
-  | 'stage_3'
-  | 'stage_4'
-  | 'stage_5'
-  | 'stage_6'
-  | 'stage_7'
-  | 'stage_8'
-  | 'stage_12'
-  | 'stage_13'
+const { stages: dbStages } = usePipelineStages('submission_portal')
 
-const STAGES: Array<{ key: StageKey; label: string }> = [
-  { key: 'stage_9', label: 'Pending Signature' },
-  { key: 'stage_10', label: 'Pending Police Report' },
-  { key: 'stage_11', label: 'Signed & Police Report Pending' },
-  { key: 'stage_1', label: 'Information Verification' },
-  { key: 'stage_2', label: 'Attorney Submission' },
-  { key: 'stage_3', label: 'Insurance Verification' },
-  { key: 'stage_4', label: 'Retainer Process (Email)' },
-  { key: 'stage_5', label: 'Retainer Process (Postal Mail)' },
-  { key: 'stage_6', label: 'Retainer Signed Pending' },
-  { key: 'stage_7', label: 'Retainer Signed' },
-  { key: 'stage_8', label: 'Attorney Decision' },
-  { key: 'stage_12', label: 'Retainer Signed – Payable' },
-  { key: 'stage_13', label: 'Retainer Paid' }
-]
+const STAGES = computed(() => dbStages.value.map((s) => ({ key: s.key, label: s.label })))
 
-const stageCardClass = (stageKey: StageKey) => {
-  const styles: Record<StageKey, string> = {
-    stage_9: 'bg-slate-50 border border-slate-300 dark:bg-slate-950/20 dark:border-slate-600',
-    stage_10: 'bg-lime-50 border border-lime-300 dark:bg-lime-950/15 dark:border-lime-700',
-    stage_11: 'bg-blue-50 border border-blue-300 dark:bg-blue-950/15 dark:border-blue-700',
-    stage_1: 'bg-cyan-50 border border-cyan-300 dark:bg-cyan-950/15 dark:border-cyan-700',
-    stage_2: 'bg-violet-50 border border-violet-300 dark:bg-violet-950/15 dark:border-violet-700',
-    stage_3: 'bg-amber-50 border border-amber-300 dark:bg-amber-950/15 dark:border-amber-700',
-    stage_4: 'bg-rose-50 border border-rose-300 dark:bg-rose-950/15 dark:border-rose-700',
-    stage_5: 'bg-orange-50 border border-orange-300 dark:bg-orange-950/15 dark:border-orange-700',
-    stage_6: 'bg-emerald-50 border border-emerald-300 dark:bg-emerald-950/15 dark:border-emerald-700',
-    stage_7: 'bg-teal-50 border border-teal-300 dark:bg-teal-950/15 dark:border-teal-700',
-    stage_8: 'bg-purple-50 border border-purple-300 dark:bg-purple-950/15 dark:border-purple-700',
-    stage_12: 'bg-teal-50 border border-teal-300 dark:bg-teal-950/15 dark:border-teal-700',
-    stage_13: 'bg-fuchsia-50 border border-fuchsia-300 dark:bg-fuchsia-950/15 dark:border-fuchsia-700'
-  }
+const stageTheme = computed(() => {
+  const theme: Record<string, string> = {}
+  dbStages.value.forEach((s) => {
+    theme[s.key] = s.column_class || ''
+  })
+  return theme
+})
 
-  return styles[stageKey]
+const stageCardClass = (stageKey: string) => {
+  return stageTheme.value[stageKey] || ''
 }
 
 const buildAllowedStatuses = () => {
   const pendingApprovalStatus = 'Pending Approval'
-  const withPrefix = STAGES.map((s) => s.label)
-  const withoutPrefix = STAGES.map((s) => s.label.replace(/^Stage\s+\d+\s*:\s*/i, ''))
+  const withPrefix = STAGES.value.map((s) => s.label)
+  const withoutPrefix = STAGES.value.map((s) => s.label.replace(/^Stage\s+\d+\s*:\s*/i, ''))
   return Array.from(new Set([pendingApprovalStatus, ...withPrefix, ...withoutPrefix]))
 }
 
@@ -100,16 +66,18 @@ const getString = (record: Record<string, unknown>, key: string) => {
 
 const getBool = (record: Record<string, unknown>, key: string) => Boolean(record[key])
 
-const deriveStageKey = (row: SubmissionPortalRow): StageKey => {
+const deriveStageKey = (row: SubmissionPortalRow): string => {
   const status = String(row.status || '').trim()
-  if (!status || status === 'Pending Approval') return 'stage_1'
-  const exact = STAGES.find((s) => s.label === status)
-  return (exact?.key ?? 'stage_1') as StageKey
+  if (!status || status === 'Pending Approval') return STAGES.value.find((s) => s.label === 'Information Verification')?.key ?? 'information_verification'
+  const exact = STAGES.value.find((s) => s.label === status)
+  return exact?.key ?? STAGES.value[0]?.key ?? 'pending_signature'
 }
 
-const getStatusForStage = (stageKey: StageKey) => {
-  if (stageKey === 'stage_1') return 'Pending Approval'
-  return STAGES.find((s) => s.key === stageKey)?.label ?? 'Pending Approval'
+const getStatusForStage = (stageKey: string) => {
+  const found = STAGES.value.find((s) => s.key === stageKey)
+  if (!found) return 'Pending Approval'
+  if (found.label === 'Information Verification') return 'Pending Approval'
+  return found.label
 }
 
 const auth = useAuth()
@@ -193,7 +161,7 @@ const leadVendorFilter = ref('__ALL__')
 const showDuplicates = ref(true)
 
 const draggingId = ref<string | null>(null)
-const dragOverStage = ref<StageKey | null>(null)
+const dragOverStage = ref<string | null>(null)
 
 const editOpen = ref(false)
 const editSaving = ref(false)
@@ -207,6 +175,37 @@ const canSeeAll = computed(() => {
   const isAdmin = role === 'admin'
   return isSuperAdmin || isAdmin
 })
+
+const resolvedLeadVendor = ref<string | null>(null)
+
+const ensureResolvedLeadVendor = async () => {
+  resolvedLeadVendor.value = null
+
+  if (canSeeAll.value) return
+
+  const direct = String(auth.state.value.profile?.lead_vendor ?? '').trim()
+  if (direct) {
+    resolvedLeadVendor.value = direct
+    return
+  }
+
+  const centerId = String(auth.state.value.profile?.center_id ?? '').trim()
+  if (!centerId) return
+
+  try {
+    const { data: center, error } = await supabase
+      .from('centers')
+      .select('lead_vendor')
+      .eq('id', centerId)
+      .maybeSingle()
+
+    if (error) return
+    const vendor = String((center as { lead_vendor?: unknown } | null)?.lead_vendor ?? '').trim()
+    if (vendor) resolvedLeadVendor.value = vendor
+  } catch {
+    // ignore
+  }
+}
 
 const canSeeLeadVendorUi = computed(() => {
   const role = auth.state.value.profile?.role
@@ -260,14 +259,9 @@ const filteredRows = computed(() => {
   let data = rows.value.slice()
 
   if (!canSeeAll.value) {
-    const vendor = String(auth.state.value.profile?.lead_vendor ?? '').trim()
-    const centerId = String(auth.state.value.profile?.center_id ?? '').trim()
-    if (vendor && centerId) {
-      data = data.filter((r) => {
-        const rowVendor = String(r.lead_vendor || '').trim()
-        const rowCenterId = String((r as Record<string, unknown>).center_id ?? '').trim()
-        return rowVendor === vendor && rowCenterId === centerId
-      })
+    const vendor = String(resolvedLeadVendor.value ?? '').trim()
+    if (vendor) {
+      data = data.filter((r) => String(r.lead_vendor || '').trim() === vendor)
     } else {
       data = []
     }
@@ -313,8 +307,8 @@ const filteredRows = computed(() => {
 })
 
 const leadsByStage = computed(() => {
-  const grouped = new Map<StageKey, SubmissionPortalRow[]>()
-  STAGES.forEach((s) => grouped.set(s.key, []))
+  const grouped = new Map<string, SubmissionPortalRow[]>()
+  STAGES.value.forEach((s) => grouped.set(s.key, []))
 
   filteredRows.value.forEach((row) => {
     const stageKey = deriveStageKey(row)
@@ -325,7 +319,7 @@ const leadsByStage = computed(() => {
 })
 
 const stageOptions = computed(() => {
-  return STAGES.map((s) => ({ label: s.label, value: s.label }))
+  return STAGES.value.map((s) => ({ label: s.label, value: s.label }))
 })
 
 const fetchAttorneys = async () => {
@@ -352,6 +346,7 @@ const fetchData = async (showRefreshToast = false) => {
 
   try {
     await auth.init()
+    await ensureResolvedLeadVendor()
 
     const allowedStatuses = buildAllowedStatuses()
 
@@ -361,6 +356,13 @@ const fetchData = async (showRefreshToast = false) => {
       .in('status', allowedStatuses)
       .order('date', { ascending: false })
       .order('created_at', { ascending: false })
+
+    if (!canSeeAll.value) {
+      const vendor = String(resolvedLeadVendor.value ?? '').trim()
+      if (vendor) {
+        transfersQuery = transfersQuery.eq('lead_vendor', vendor)
+      }
+    }
 
     if (dateFilter.value) {
       transfersQuery = transfersQuery.eq('date', dateFilter.value)
@@ -447,7 +449,7 @@ const fetchData = async (showRefreshToast = false) => {
   }
 }
 
-const handleDropToStage = async (rowId: string, stageKey: StageKey) => {
+const handleDropToStage = async (rowId: string, stageKey: string) => {
   const nextStatus = getStatusForStage(stageKey)
 
   const prev = rows.value
@@ -520,7 +522,7 @@ const saveEdit = async () => {
           author_name: authorName.value
         })
       } catch {
-        // ignore if table not present / RLS blocks
+        console.log('Failed to insert lead note')
       }
     }
 
@@ -531,7 +533,7 @@ const saveEdit = async () => {
       const toast = useToast()
       toast.add({ title: 'Updated', description: 'Stage and notes updated successfully.' })
     } catch {
-      // ignore
+      console.log('Failed to add toast')
     }
 
     editOpen.value = false
@@ -540,7 +542,7 @@ const saveEdit = async () => {
       const toast = useToast()
       toast.add({ title: 'Error', description: 'Failed to update stage/notes', color: 'error' })
     } catch {
-      // ignore
+      console.log('Failed to add toast')
     }
   } finally {
     editSaving.value = false
@@ -551,7 +553,13 @@ watch([dateFilter], () => {
   void fetchData()
 })
 
-const handleStageDrop = (stageKey: StageKey, e: DragEvent) => {
+watch(dbStages, (newStages) => {
+  if (newStages.length > 0) {
+    void fetchData()
+  }
+})
+
+const handleStageDrop = (stageKey: string, e: DragEvent) => {
   e.preventDefault()
   const droppedId = e.dataTransfer?.getData('text/plain') || ''
   if (!droppedId) return
@@ -639,10 +647,13 @@ onMounted(async () => {
         </div>
 
         <div v-if="loading" class="flex flex-1 items-center justify-center text-sm text-muted">
-          Loading submission portal data...
+          <div class="flex items-center gap-2">
+            <UIcon name="i-lucide-loader-2" class="h-4 w-4 animate-spin" />
+            <span>Loading submission portal data</span>
+          </div>
         </div>
 
-        <div v-else class="min-h-0 flex-1 overflow-auto">
+        <div v-else class="min-h-0 flex-1 overflow-auto p-2">
           <div
             class="flex h-full min-h-0 items-stretch gap-3 pr-2"
             :style="{ minWidth: `${STAGES.length * 18}rem` }"
@@ -650,7 +661,7 @@ onMounted(async () => {
             <UCard
               v-for="stage in STAGES"
               :key="stage.key"
-              class="flex h-full w-104 flex-col"
+              class="flex min-h-[560px] w-[26rem] flex-col"
               :class="stageCardClass(stage.key)"
               :ui="{ body: '!p-0 !sm:p-0 min-h-0 flex-1 flex flex-col' }"
               @dragover.prevent

@@ -4,27 +4,11 @@ import { useRouter } from 'vue-router'
 import type { TableColumn } from '@nuxt/ui'
 import { useAuth } from '../composables/useAuth'
 import { supabase } from '../lib/supabase'
+import { usePipelineStages } from '../composables/usePipelineStages'
 
-type StageKey =
-  | 'transfer_api'
-  | 'incomplete_transfer'
-  | 'returned_to_center_dq'
-  | 'previously_sold_bpo'
-  | 'needs_bpo_callback'
-  | 'application_withdrawn'
-  | 'pending_information'
-  | 'pending_approval'
+const { stages: dbStages } = usePipelineStages('transfer_portal')
 
-const STAGES: { key: StageKey, label: string }[] = [
-  { key: 'transfer_api', label: 'Transfer API' },
-  { key: 'incomplete_transfer', label: 'Incomplete Transfer' },
-  { key: 'returned_to_center_dq', label: 'Returned To Center - DQ' },
-  { key: 'previously_sold_bpo', label: 'Previously Sold BPO' },
-  { key: 'needs_bpo_callback', label: 'Needs BPO Callback' },
-  { key: 'application_withdrawn', label: 'Application Withdrawn' },
-  { key: 'pending_information', label: 'Pending Information' },
-  { key: 'pending_approval', label: 'Pending Approval' }
-]
+const STAGES = computed(() => dbStages.value.map((s) => ({ key: s.key, label: s.label })))
 
 type TransferLead = {
   id: string
@@ -32,7 +16,7 @@ type TransferLead = {
   clientName: string
   phone: string
   opportunityValue: number
-  stage: StageKey
+  stage: string
   publisher: string
 }
 
@@ -45,7 +29,7 @@ const query = ref('')
 const page = ref(1)
 const PAGE_SIZE = 25
 const viewMode = ref<ViewMode>('kanban')
-const selectedStage = ref<'all' | StageKey>('all')
+const selectedStage = ref<string>('all')
 
 const transfers = ref<TransferLead[]>([])
 
@@ -54,7 +38,7 @@ const filteredLeads = computed(() => {
   return transfers.value.filter((t) => {
     if (selectedStage.value !== 'all' && t.stage !== selectedStage.value) return false
     if (!q) return true
-    const stageLabel = STAGES.find(s => s.key === t.stage)?.label ?? ''
+    const stageLabel = STAGES.value.find(s => s.key === t.stage)?.label ?? ''
     const haystack = [t.id, t.clientName, t.phone, stageLabel, t.publisher].join(' ').toLowerCase()
     return haystack.includes(q)
   })
@@ -70,8 +54,8 @@ const pagedRows = computed(() => {
 const totalVolume = computed(() => transfers.value.reduce((sum, t) => sum + t.opportunityValue, 0))
 
 const leadsByStage = computed(() => {
-  const grouped = new Map<StageKey, TransferLead[]>()
-  STAGES.forEach((s) => grouped.set(s.key, []))
+  const grouped = new Map<string, TransferLead[]>()
+  STAGES.value.forEach((s) => grouped.set(s.key, []))
   filteredLeads.value.forEach((l) => {
     const arr = grouped.get(l.stage)
     if (arr) arr.push(l)
@@ -87,24 +71,18 @@ const formatMoney = (n: number) => {
   }
 }
 
-const getStageLabel = (stage: StageKey) => STAGES.find(s => s.key === stage)?.label ?? stage
+const getStageLabel = (stage: string) => STAGES.value.find(s => s.key === stage)?.label ?? stage
 
-const mapStatusToStage = (status: string | null): StageKey => {
-  if (!status) return 'transfer_api'
-  
-  const normalized = status.toLowerCase().trim()
-  
-  // Map database status values to our stage keys
-  if (normalized === 'transfer api') return 'transfer_api'
-  if (normalized === 'incomplete transfer') return 'incomplete_transfer'
-  if (normalized === 'returned to center - dq') return 'returned_to_center_dq'
-  if (normalized === 'previously sold bpo') return 'previously_sold_bpo'
-  if (normalized === 'needs bpo callback') return 'needs_bpo_callback'
-  if (normalized === 'application withdrawn') return 'application_withdrawn'
-  if (normalized === 'pending information' || normalized === 'information verification') return 'pending_information'
-  if (normalized === 'pending approval') return 'pending_approval'
-  
-  return 'transfer_api'
+const mapStatusToStage = (status: string | null): string => {
+  if (!status) return STAGES.value[0]?.key ?? 'transfer_api'
+  const trimmed = status.trim()
+  // Match by label (case-insensitive)
+  const exact = STAGES.value.find((s) => s.label.toLowerCase() === trimmed.toLowerCase())
+  if (exact) return exact.key
+  // Match by key
+  const byKey = STAGES.value.find((s) => s.key === trimmed)
+  if (byKey) return byKey.key
+  return STAGES.value[0]?.key ?? 'transfer_api'
 }
 
 const columns: TableColumn<TransferLead>[] = [
