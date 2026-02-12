@@ -146,10 +146,14 @@ const columns = computed<TableColumn<DailyDealFlow>[]>(() => {
       accessorKey: 'client_phone_number',
       header: 'Phone Number'
     },
-    {
-      accessorKey: 'status',
-      header: 'Status'
-    },
+    ...(canSeeAllStatuses.value
+      ? [
+          {
+            accessorKey: 'status',
+            header: 'Status'
+          }
+        ]
+      : []),
     {
       accessorKey: 'assigned_attorney',
       header: 'Assigned Attorney'
@@ -334,6 +338,7 @@ const openRow = (row: DailyDealFlow) => {
             />
 
             <USelect
+              v-if="canSeeAllStatuses"
               v-model="selectedStatus"
               class="w-48"
               :items="statusOptions"
@@ -406,7 +411,7 @@ const openRow = (row: DailyDealFlow) => {
             </button>
           </template>
 
-          <template #status-cell="{ row }">
+          <template v-if="canSeeAllStatuses" #status-cell="{ row }">
             <button type="button" class="block w-full text-left" @click="openRow(row.original)">
               <UBadge
                 v-if="row.original.status"
