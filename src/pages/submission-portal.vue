@@ -17,6 +17,8 @@ type StageKey =
   | 'stage_6'
   | 'stage_7'
   | 'stage_8'
+  | 'stage_12'
+  | 'stage_13'
 
 const STAGES: Array<{ key: StageKey; label: string }> = [
   { key: 'stage_9', label: 'Pending Signature' },
@@ -29,7 +31,9 @@ const STAGES: Array<{ key: StageKey; label: string }> = [
   { key: 'stage_5', label: 'Retainer Process (Postal Mail)' },
   { key: 'stage_6', label: 'Retainer Signed Pending' },
   { key: 'stage_7', label: 'Retainer Signed' },
-  { key: 'stage_8', label: 'Attorney Decision' }
+  { key: 'stage_8', label: 'Attorney Decision' },
+  { key: 'stage_12', label: 'Retainer Signed – Payable' },
+  { key: 'stage_13', label: 'Retainer Paid' }
 ]
 
 const stageCardClass = (stageKey: StageKey) => {
@@ -44,7 +48,9 @@ const stageCardClass = (stageKey: StageKey) => {
     stage_5: 'bg-orange-50 border border-orange-300 dark:bg-orange-950/15 dark:border-orange-700',
     stage_6: 'bg-emerald-50 border border-emerald-300 dark:bg-emerald-950/15 dark:border-emerald-700',
     stage_7: 'bg-teal-50 border border-teal-300 dark:bg-teal-950/15 dark:border-teal-700',
-    stage_8: 'bg-purple-50 border border-purple-300 dark:bg-purple-950/15 dark:border-purple-700'
+    stage_8: 'bg-purple-50 border border-purple-300 dark:bg-purple-950/15 dark:border-purple-700',
+    stage_12: 'bg-teal-50 border border-teal-300 dark:bg-teal-950/15 dark:border-teal-700',
+    stage_13: 'bg-fuchsia-50 border border-fuchsia-300 dark:bg-fuchsia-950/15 dark:border-fuchsia-700'
   }
 
   return styles[stageKey]
