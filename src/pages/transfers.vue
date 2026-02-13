@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import type { TableColumn } from '@nuxt/ui'
 import { useAuth } from '../composables/useAuth'
 import { supabase } from '../lib/supabase'
@@ -20,9 +20,16 @@ type TransferLead = {
   publisher: string
 }
 
+const handleRefresh = async () => {
+  if (loading.value) return
+  page.value = 1
+  await loadTransfers()
+}
+
 type ViewMode = 'kanban' | 'list'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuth()
 const loading = ref(false)
 const query = ref('')
@@ -219,7 +226,10 @@ const loadTransfers = async () => {
 }
 
 const viewLead = (leadId: string) => {
-  router.push(`/retainers/${leadId}`)
+  router.push({
+    path: `/retainers/${leadId}`,
+    query: { from: route.fullPath }
+  })
 }
 
 onMounted(() => {
@@ -241,6 +251,7 @@ onMounted(() => {
             variant="outline"
             icon="i-lucide-refresh-cw"
             :loading="loading"
+            @click="handleRefresh"
           >
             Refresh
           </UButton>
@@ -321,7 +332,10 @@ onMounted(() => {
         </div>
 
         <div v-if="viewMode === 'kanban'" class="no-scrollbar mt-4 flex min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
-          <div class="flex h-full min-h-0 gap-3 pr-2" style="min-width: 2200px;">
+          <div
+            class="flex h-full min-h-0 items-stretch gap-3 pr-2"
+            :style="{ minWidth: `${STAGES.length * 18}rem` }"
+          >
             <div
               v-for="stage in STAGES"
               :key="stage.key"

@@ -72,14 +72,9 @@ type StateData = {
   criteria: string
 }
 
-type OrderRow = {
-  id: string
-  target_states: string[]
-  status?: string
-  quota_total?: number | null
-  quota_filled?: number | null
-  expires_at?: string | null
-  created_at?: string | null
+type OpenOrderCountRow = {
+  state_code?: string | null
+  open_orders?: number | string | null
 }
 
 const loading = ref(false)
@@ -142,8 +137,6 @@ const statusOptions = [
 
 const filteredStates = ref(statesData.value)
 
-const openOrders = ref<OrderRow[]>([])
-
 const selectedStateCode = ref<string | null>(null)
 
 watch([filteredStates], () => {
@@ -176,51 +169,33 @@ const refreshCounts = async () => {
         table: string
       ) => {
         select: (cols: string) => {
-          eq: (column: string, value: unknown) => {
-            order: (
-              column: string,
-              opts: { ascending: boolean }
-            ) => Promise<{ data: OrderRow[] | null; error: unknown }>
-          }
+          order: (
+            column: string,
+            opts: { ascending: boolean }
+          ) => Promise<{ data: OpenOrderCountRow[] | null; error: unknown }>
         }
       }
     }
 
     const { data, error } = await supabaseUntyped
-      .from('orders')
-      .select('id,target_states,status,quota_total,quota_filled,expires_at,created_at')
-      .eq('status', 'OPEN')
-      .order('created_at', { ascending: false })
+      .from('open_order_counts_by_state_test')
+      .select('state_code,open_orders')
+      .order('state_code', { ascending: true })
 
     if (error) {
       throw error instanceof Error ? error : new Error(String(error))
     }
 
-    const rows = (data ?? []) as OrderRow[]
-    const now = new Date()
-    const eligibleRows = rows.filter((row) => {
-      if (row.expires_at) {
-        const exp = new Date(row.expires_at)
-        if (!Number.isNaN(exp.getTime()) && exp < now) return false
-      }
-
-      if (row.quota_total != null && row.quota_filled != null) {
-        if (row.quota_filled >= row.quota_total) return false
-      }
-
-      return true
-    })
-
-    openOrders.value = eligibleRows
+    const rows = (data ?? []) as OpenOrderCountRow[]
     const counts = new Map<string, number>()
 
-    for (const row of eligibleRows) {
-      const targets = Array.isArray(row.target_states) ? row.target_states : []
-      for (const s of targets) {
-        const code = String(s || '').trim().toUpperCase()
-        if (!code) continue
-        counts.set(code, (counts.get(code) ?? 0) + 1)
-      }
+    for (const row of rows) {
+      const code = String(row.state_code || '').trim().toUpperCase()
+      if (!code) continue
+
+      const openOrders = Number(row.open_orders)
+      const volume = Number.isFinite(openOrders) ? Math.max(0, openOrders) : 0
+      counts.set(code, (counts.get(code) ?? 0) + volume)
     }
 
     statesData.value = US_STATES.map((s) => {

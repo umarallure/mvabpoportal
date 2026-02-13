@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../composables/useAuth'
@@ -73,14 +73,8 @@ const deriveStageKey = (row: SubmissionPortalRow): string => {
   return exact?.key ?? STAGES.value[0]?.key ?? 'pending_signature'
 }
 
-const getStatusForStage = (stageKey: string) => {
-  const found = STAGES.value.find((s) => s.key === stageKey)
-  if (!found) return 'Pending Approval'
-  if (found.label === 'Information Verification') return 'Pending Approval'
-  return found.label
-}
-
 const auth = useAuth()
+const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
@@ -159,9 +153,6 @@ const dateFilter = ref('')
 const statusFilter = ref('__ALL__')
 const leadVendorFilter = ref('__ALL__')
 const showDuplicates = ref(true)
-
-const draggingId = ref<string | null>(null)
-const dragOverStage = ref<string | null>(null)
 
 const editOpen = ref(false)
 const editSaving = ref(false)
@@ -449,41 +440,12 @@ const fetchData = async (showRefreshToast = false) => {
   }
 }
 
-const handleDropToStage = async (rowId: string, stageKey: string) => {
-  const nextStatus = getStatusForStage(stageKey)
-
-  const prev = rows.value
-  const next = prev.map((r) => (r.id === rowId ? { ...r, status: nextStatus } : r))
-  rows.value = next
-
-  try {
-    const { error: transferError } = await supabase
-      .from('daily_deal_flow')
-      .update({ status: nextStatus })
-      .eq('id', rowId)
-
-    if (transferError) throw transferError
-
-    try {
-      const toast = useToast()
-      toast.add({ title: 'Status Updated', description: `Lead status updated to "${nextStatus}"` })
-    } catch {
-      // ignore
-    }
-  } catch {
-    rows.value = prev
-    try {
-      const toast = useToast()
-      toast.add({ title: 'Error', description: 'Failed to update lead status', color: 'error' })
-    } catch {
-      // ignore
-    }
-  }
-}
-
 const handleView = (row: SubmissionPortalRow) => {
   if (!row?.id) return
-  router.push(`/retainers/${encodeURIComponent(String(row.id))}`)
+  router.push({
+    path: `/retainers/${encodeURIComponent(String(row.id))}`,
+    query: { from: route.fullPath }
+  })
 }
 
 const openEdit = (row: SubmissionPortalRow) => {
@@ -558,20 +520,6 @@ watch(dbStages, (newStages) => {
     void fetchData()
   }
 })
-
-const handleStageDrop = (stageKey: string, e: DragEvent) => {
-  e.preventDefault()
-  const droppedId = e.dataTransfer?.getData('text/plain') || ''
-  if (!droppedId) return
-  void handleDropToStage(droppedId, stageKey)
-  draggingId.value = null
-  dragOverStage.value = null
-}
-
-const handleRowDragStart = (rowId: string, e: DragEvent) => {
-  e.dataTransfer?.setData('text/plain', String(rowId))
-  draggingId.value = String(rowId)
-}
 
 onMounted(async () => {
   await fetchAttorneys()
@@ -664,15 +612,8 @@ onMounted(async () => {
               class="flex min-h-[560px] w-[26rem] flex-col"
               :class="stageCardClass(stage.key)"
               :ui="{ body: '!p-0 !sm:p-0 min-h-0 flex-1 flex flex-col' }"
-              @dragover.prevent
-              @dragenter="dragOverStage = stage.key"
-              @dragleave="dragOverStage = dragOverStage === stage.key ? null : dragOverStage"
-              @drop="handleStageDrop(stage.key, $event)"
             >
-              <div
-                class="flex items-center justify-between border-b border-default px-3 py-2"
-                :class="dragOverStage === stage.key ? 'bg-muted/50' : ''"
-              >
+              <div class="flex items-center justify-between border-b border-default px-3 py-2">
                 <div class="text-sm font-semibold">{{ stage.label }}</div>
                 <UBadge variant="subtle" :label="String(leadsByStage.get(stage.key)?.length ?? 0)" />
               </div>
@@ -683,10 +624,7 @@ onMounted(async () => {
                   :key="row.id"
                   class="w-full cursor-pointer"
                   :ui="{ body: '!p-2 sm:!p-2' }"
-                  draggable="true"
                   @click="handleView(row)"
-                  @dragstart="handleRowDragStart(String(row.id), $event)"
-                  @dragend="() => { draggingId = null; dragOverStage = null }"
                 >
                   <div class="flex items-start justify-between gap-2">
                     <div class="min-w-0 flex-1">

@@ -67,6 +67,19 @@ const canSeeLeadVendorUi = computed(() => auth.state.value.profile?.role === 'su
 
 const id = computed(() => route.params.id as string)
 
+const backTarget = computed(() => {
+  const from = route.query.from
+  if (typeof from !== 'string') return '/retainers'
+  const normalized = from.trim()
+  if (!normalized.startsWith('/')) return '/retainers'
+  if (normalized.startsWith('//')) return '/retainers'
+  return normalized
+})
+
+const goBack = () => {
+  router.push(backTarget.value)
+}
+
 const loading = ref(false)
 const error = ref<string | null>(null)
 const row = ref<DailyDealFlow | null>(null)
@@ -425,7 +438,7 @@ function formatDateOnly(value: string | null | undefined) {
             color="neutral"
             variant="ghost"
             icon="i-lucide-arrow-left"
-            @click="router.push('/retainers')"
+            @click="goBack"
           >
             Back
           </UButton>
