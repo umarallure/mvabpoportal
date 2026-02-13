@@ -73,7 +73,7 @@ const steps = [{
         <section class="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div class="space-y-6">
             <h1 class="text-4xl font-semibold leading-tight text-white md:text-5xl lg:text-6xl">
-              A BPO workspace for transfers, retainers, and operational reporting.
+              A BPO Platform for transfers, retainers, and operational reporting.
             </h1>
             <p class="text-base leading-relaxed text-white/70 md:text-lg">
               Manage transfers by stage, keep retainer records organized, and stay on top of invoicing.
@@ -81,12 +81,12 @@ const steps = [{
             </p>
             <div class="flex flex-col gap-3 text-sm text-white/70 sm:flex-row sm:items-center sm:gap-6">
               <div class="flex items-center gap-2">
-                <span class="text-2xl font-bold text-white">250+</span>
-                active matters orchestrated each month.
+                <span class="text-2xl font-bold text-white">2500+</span>
+                active signed retainers orchestrated per month
               </div>
               <div class="flex items-center gap-2">
-                <span class="text-2xl font-bold text-white">12</span>
-                publisher teams scaling with Publisher Portal.
+                <span class="text-2xl font-bold text-white">250+</span>
+                publisher teams scaling with Accident Payments.
               </div>
             </div>
             <div class="flex flex-col items-center gap-3 sm:flex-row">
@@ -109,17 +109,17 @@ const steps = [{
               <div class="mt-6 space-y-4">
                 <div class="rounded-2xl bg-white/5 p-4">
                   <p class="text-xs uppercase tracking-[0.4em] text-white/50">Transfers</p>
-                  <p class="mt-2 text-3xl font-semibold text-white">42 matters</p>
+                  <p class="mt-2 text-3xl font-semibold text-white">42 Opportunities</p>
                   <p class="text-sm text-white/60">Work items staged for approval, callbacks, and missing info.</p>
                 </div>
                 <div class="rounded-2xl bg-white/5 p-4">
                   <p class="text-xs uppercase tracking-[0.4em] text-white/50">Retainers</p>
-                  <p class="mt-2 text-3xl font-semibold text-white">17 pending</p>
+                  <p class="mt-2 text-3xl font-semibold text-white">8 Pending</p>
                   <p class="text-sm text-white/60">Pending review, status updates, or attorney assignment.</p>
                 </div>
                 <div class="rounded-2xl bg-white/5 p-4">
                   <p class="text-xs uppercase tracking-[0.4em] text-white/50">Invoicing</p>
-                  <p class="mt-2 text-3xl font-semibold text-white">8 welcomes</p>
+                  <p class="mt-2 text-3xl font-semibold text-white">17 Welcomes</p>
                   <p class="text-sm text-white/60">Invoices in motion with paid, pending, and chargeback tracking.</p>
                 </div>
               </div>

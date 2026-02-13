@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, useTemplateRef, ref, watch } from 'vue'
-import { eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval, format } from 'date-fns'
+import { eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval, format, startOfWeek, startOfMonth } from 'date-fns'
 import { VisXYContainer, VisLine, VisAxis, VisArea, VisCrosshair, VisTooltip } from '@unovis/vue'
 import { useElementSize } from '@vueuse/core'
 import type { Period, Range } from '../../types'
+import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../composables/useAuth'
 
 const cardRef = useTemplateRef<HTMLElement | null>('cardRef')
 
@@ -11,6 +13,8 @@ const props = defineProps<{
   period: Period
   range: Range
 }>()
+
+const auth = useAuth()
 
 type DataRecord = {
   date: Date
@@ -21,22 +25,113 @@ const { width } = useElementSize(cardRef)
 
 const data = ref<DataRecord[]>([])
 
-watch([() => props.period, () => props.range], () => {
-  const dates = ({
+const RETAINER_STATUSES = [
+  'Pending Approval',
+  'Retainer Signed',
+  'Retainer Signed Pending',
+  'Retainer Signed – Payable',
+  'Retainer Paid'
+]
+
+const resolveLeadVendor = async (): Promise<string | null> => {
+  await auth.init()
+  const profile = auth.state.value.profile
+  if (!profile) return null
+
+  const role = profile.role
+  const isAdmin = role === 'admin' || role === 'super_admin'
+  if (isAdmin) return null
+
+  if (profile.lead_vendor) return profile.lead_vendor
+
+  if (profile.center_id) {
+    const { data: center } = await supabase
+      .from('centers')
+      .select('lead_vendor')
+      .eq('id', profile.center_id)
+      .maybeSingle()
+    return (center?.lead_vendor as string | null) ?? null
+  }
+
+  return '__none__'
+}
+
+const fetchChartData = async () => {
+  const intervalFn = ({
     daily: eachDayOfInterval,
     weekly: eachWeekOfInterval,
     monthly: eachMonthOfInterval
-  } as Record<Period, typeof eachDayOfInterval>)[props.period](props.range)
+  } as Record<Period, typeof eachDayOfInterval>)[props.period]
 
-  data.value = dates.map(date => ({ date, amount: 0 }))
+  const dates = intervalFn(props.range)
+  const buckets = dates.map(date => ({ date, amount: 0 }))
+
+  try {
+    const leadVendor = await resolveLeadVendor()
+
+    if (leadVendor === '__none__') {
+      data.value = buckets
+      return
+    }
+
+    const startDate = format(props.range.start, 'yyyy-MM-dd')
+    const endDate = format(props.range.end, 'yyyy-MM-dd')
+
+    let query = supabase
+      .from('daily_deal_flow')
+      .select('date, status')
+      .in('status', RETAINER_STATUSES)
+      .gte('date', startDate)
+      .lte('date', endDate)
+
+    if (leadVendor) {
+      query = query.eq('lead_vendor', leadVendor)
+    }
+
+    const { data: rows, error } = await query
+
+    if (error) {
+      console.warn('Failed to fetch chart data', error)
+      data.value = buckets
+      return
+    }
+
+    const bucketKey = (d: Date): string => {
+      if (props.period === 'monthly') return format(startOfMonth(d), 'yyyy-MM-dd')
+      if (props.period === 'weekly') return format(startOfWeek(d), 'yyyy-MM-dd')
+      return format(d, 'yyyy-MM-dd')
+    }
+
+    const countMap = new Map<string, number>()
+    buckets.forEach(b => countMap.set(bucketKey(b.date), 0))
+
+    ;(rows ?? []).forEach(r => {
+      if (!r.date) return
+      const rowDate = new Date(r.date + 'T00:00:00')
+      const key = bucketKey(rowDate)
+      if (countMap.has(key)) {
+        countMap.set(key, (countMap.get(key) ?? 0) + 1)
+      }
+    })
+
+    data.value = buckets.map(b => ({
+      date: b.date,
+      amount: countMap.get(bucketKey(b.date)) ?? 0
+    }))
+  } catch (e) {
+    console.warn('Chart data error', e)
+    data.value = buckets
+  }
+}
+
+watch([() => props.period, () => props.range], () => {
+  fetchChartData()
 }, { immediate: true })
 
 const x = (_: DataRecord, i: number) => i
 const y = (d: DataRecord) => d.amount
 
 const total = computed(() => data.value.reduce((acc: number, { amount }) => acc + amount, 0))
-
-const formatNumber = new Intl.NumberFormat('en', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format
 
 const formatDate = (date: Date): string => {
   return ({
@@ -54,7 +149,7 @@ const xTicks = (i: number) => {
   return formatDate(data.value[i].date)
 }
 
-const template = (d: DataRecord) => `${formatDate(d.date)}: ${formatNumber(d.amount)}`
+const template = (d: DataRecord) => `${formatDate(d.date)}: ${d.amount} retainer${d.amount !== 1 ? 's' : ''}`
 </script>
 
 <template>
@@ -62,10 +157,10 @@ const template = (d: DataRecord) => `${formatDate(d.date)}: ${formatNumber(d.amo
     <template #header>
       <div>
         <p class="text-xs text-muted uppercase mb-1.5">
-          Revenue
+          Retainers
         </p>
         <p class="text-3xl text-highlighted font-semibold">
-          {{ formatNumber(total) }}
+          {{ total }}
         </p>
       </div>
     </template>

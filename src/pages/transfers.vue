@@ -51,7 +51,13 @@ const pagedRows = computed(() => {
   return filteredLeads.value.slice(start, start + PAGE_SIZE)
 })
 
-const totalVolume = computed(() => transfers.value.reduce((sum, t) => sum + t.opportunityValue, 0))
+const totalTransfersCount = computed(() => filteredLeads.value.length)
+
+const totalVolume = computed(() => filteredLeads.value.reduce((sum, t) => sum + t.opportunityValue, 0))
+
+const avgVolume = computed(() => {
+  return totalTransfersCount.value > 0 ? Math.round(totalVolume.value / totalTransfersCount.value) : 0
+})
 
 const leadsByStage = computed(() => {
   const grouped = new Map<string, TransferLead[]>()
@@ -172,7 +178,8 @@ const loadTransfers = async () => {
       const value = record[key]
       if (typeof value === 'number') return value
       if (typeof value === 'string') {
-        const parsed = Number(value)
+        const cleaned = value.replace(/[^0-9.+-]/g, '')
+        const parsed = Number(cleaned)
         return Number.isFinite(parsed) ? parsed : 0
       }
       return 0
@@ -180,12 +187,23 @@ const loadTransfers = async () => {
 
     transfers.value = (data ?? []).map((row) => {
       const record = (row ?? {}) as Record<string, unknown>
+
+      const opportunityValue =
+        getNumber(record, 'face_amount') ||
+        getNumber(record, 'monthly_premium') ||
+        getNumber(record, 'opportunity_value') ||
+        getNumber(record, 'opportunityValue') ||
+        getNumber(record, 'volume') ||
+        getNumber(record, 'deal_value') ||
+        getNumber(record, 'value') ||
+        getNumber(record, 'amount')
+
       return {
         id: getString(record, 'id'),
         date: getString(record, 'date'),
         clientName: getString(record, 'client_name') || getString(record, 'insured_name'),
         phone: getString(record, 'client_phone_number') || getString(record, 'phone'),
-        opportunityValue: getNumber(record, 'opportunity_value'),
+        opportunityValue,
         stage: mapStatusToStage(getString(record, 'status')),
         publisher: getString(record, 'publisher') || getString(record, 'lead_vendor')
       }
@@ -237,7 +255,7 @@ onMounted(() => {
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm text-muted">Total Transfers</p>
-                <p class="text-2xl font-semibold">{{ transfers.length }}</p>
+                <p class="text-2xl font-semibold">{{ totalTransfersCount }}</p>
               </div>
               <UIcon name="i-lucide-arrow-right-left" class="size-8 text-primary" />
             </div>
@@ -247,7 +265,7 @@ onMounted(() => {
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm text-muted">Total Volume</p>
-                <p class="text-2xl font-semibold">{{ totalVolume }}</p>
+                <p class="text-2xl font-semibold">{{ formatMoney(totalVolume) }}</p>
               </div>
               <UIcon name="i-lucide-trending-up" class="size-8 text-primary" />
             </div>
@@ -257,7 +275,7 @@ onMounted(() => {
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-sm text-muted">Avg Volume</p>
-                <p class="text-2xl font-semibold">{{ transfers.length > 0 ? Math.round(totalVolume / transfers.length) : 0 }}</p>
+                <p class="text-2xl font-semibold">{{ formatMoney(avgVolume) }}</p>
               </div>
               <UIcon name="i-lucide-bar-chart" class="size-8 text-primary" />
             </div>
@@ -302,12 +320,12 @@ onMounted(() => {
           </div>
         </div>
 
-        <div v-if="viewMode === 'kanban'" class="mt-4 min-h-0 flex-1 overflow-auto">
-          <div class="flex min-h-0 gap-3 pr-2" style="min-width: 2200px;">
+        <div v-if="viewMode === 'kanban'" class="no-scrollbar mt-4 flex min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
+          <div class="flex h-full min-h-0 gap-3 pr-2" style="min-width: 2200px;">
             <div
               v-for="stage in STAGES"
               :key="stage.key"
-              class="flex min-h-[560px] w-[26rem] flex-col rounded-lg border border-default bg-elevated/20"
+              class="flex h-full w-[26rem] shrink-0 flex-col rounded-lg border border-default bg-elevated/20"
             >
               <div class="flex items-center justify-between border-b border-default px-3 py-2">
                 <div class="text-sm font-semibold">{{ stage.label }}</div>
@@ -317,7 +335,7 @@ onMounted(() => {
                 />
               </div>
 
-              <div class="flex-1 space-y-2 p-2">
+              <div class="flex-1 space-y-2 overflow-y-auto p-2">
                 <UCard
                   v-for="lead in (leadsByStage.get(stage.key) ?? [])"
                   :key="lead.id"
@@ -411,3 +429,14 @@ onMounted(() => {
     </template>
   </UDashboardPanel>
 </template>
+
+<style scoped>
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+</style>

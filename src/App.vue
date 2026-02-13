@@ -25,13 +25,6 @@ const links = computed(() => [[{
     open.value = false
   }
 }, {
-  label: 'Inbox',
-  icon: 'i-lucide-inbox',
-  to: '/inbox',
-  onSelect: () => {
-    open.value = false
-  }
-}, {
   label: 'Transfers',
   icon: 'i-lucide-arrow-right-left',
   to: '/transfers',
@@ -76,6 +69,13 @@ const links = computed(() => [[{
     open.value = false
   }
 }] : []), {
+  label: 'Inbox',
+  icon: 'i-lucide-inbox',
+  to: '/inbox',
+  onSelect: () => {
+    open.value = false
+  }
+}, {
   label: 'Settings',
   to: '/settings',
   icon: 'i-lucide-settings',

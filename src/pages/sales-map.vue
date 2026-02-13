@@ -101,8 +101,8 @@ const tooltip = ref<TooltipState>({
 })
 
 const toStatus = (volume: number): StateData['status'] => {
-  if (volume <= 10) return 'red'
-  if (volume <= 20) return 'yellow'
+  if (volume <= 5) return 'red'
+  if (volume <= 10) return 'yellow'
   return 'green'
 }
 
@@ -197,10 +197,24 @@ const refreshCounts = async () => {
     }
 
     const rows = (data ?? []) as OrderRow[]
-    openOrders.value = rows
+    const now = new Date()
+    const eligibleRows = rows.filter((row) => {
+      if (row.expires_at) {
+        const exp = new Date(row.expires_at)
+        if (!Number.isNaN(exp.getTime()) && exp < now) return false
+      }
+
+      if (row.quota_total != null && row.quota_filled != null) {
+        if (row.quota_filled >= row.quota_total) return false
+      }
+
+      return true
+    })
+
+    openOrders.value = eligibleRows
     const counts = new Map<string, number>()
 
-    for (const row of rows) {
+    for (const row of eligibleRows) {
       const targets = Array.isArray(row.target_states) ? row.target_states : []
       for (const s of targets) {
         const code = String(s || '').trim().toUpperCase()
