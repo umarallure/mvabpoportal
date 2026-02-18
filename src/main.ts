@@ -22,6 +22,7 @@ const router = createRouter({
     { path: '/sales-map', component: () => import('./pages/sales-map.vue') },
     { path: '/submission-portal', component: () => import('./pages/submission-portal.vue') },
     { path: '/users', component: () => import('./pages/users.vue'), meta: { requiresSuperAdmin: true } },
+    { path: '/product-guide', component: () => import('./pages/product-guide.vue'), meta: { requiresAdminOrSuperAdmin: true } },
     {
       path: '/settings',
       component: () => import('./pages/settings.vue'),
@@ -45,6 +46,7 @@ router.beforeEach(async (to) => {
   const isLoggedIn = Boolean(auth.state.value.user)
   const requiresAdmin = Boolean(to.meta.requiresAdmin)
   const requiresSuperAdmin = Boolean(to.meta.requiresSuperAdmin)
+  const requiresAdminOrSuperAdmin = Boolean(to.meta.requiresAdminOrSuperAdmin)
   const isAdmin = auth.state.value.profile?.role === 'admin'
   const isSuperAdmin = auth.state.value.profile?.role === 'super_admin'
   const isLawyer = auth.state.value.profile?.role === 'lawyer'
@@ -86,6 +88,18 @@ router.beforeEach(async (to) => {
     }
 
     if (!isSuperAdmin) {
+      return { path: '/dashboard' }
+    }
+
+    return true
+  }
+
+  if (requiresAdminOrSuperAdmin) {
+    if (!isLoggedIn) {
+      return { path: '/login', query: { redirect: to.fullPath } }
+    }
+
+    if (!isAdmin && !isSuperAdmin) {
       return { path: '/dashboard' }
     }
 

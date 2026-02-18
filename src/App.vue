@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useStorage } from '@vueuse/core'
 import type { NavigationMenuItem } from '@nuxt/ui'
@@ -11,6 +11,15 @@ const route = useRoute()
 const auth = useAuth()
 
 const open = ref(false)
+const sidebarCollapsed = ref(false)
+
+watch(() => route.path, (newPath, oldPath) => {
+  if (newPath === '/product-guide') {
+    sidebarCollapsed.value = true
+  } else if (oldPath === '/product-guide') {
+    sidebarCollapsed.value = false
+  }
+})
 
 onMounted(() => {
   auth.init().catch(() => {
@@ -65,6 +74,13 @@ const links = computed(() => [[{
   label: 'Users',
   icon: 'i-lucide-users',
   to: '/users',
+  onSelect: () => {
+    open.value = false
+  }
+}] : []), ...(['admin', 'super_admin'].includes(auth.state.value.profile?.role ?? '') ? [{
+  label: 'Product Guide',
+  icon: 'i-lucide-play-circle',
+  to: '/product-guide',
   onSelect: () => {
     open.value = false
   }
@@ -157,6 +173,7 @@ if (cookie.value !== 'accepted') {
         <UDashboardSidebar
           id="default"
           v-model:open="open"
+          v-model:collapsed="sidebarCollapsed"
           collapsible
           resizable
           class="bg-elevated/25 dark:bg-[#202020]"

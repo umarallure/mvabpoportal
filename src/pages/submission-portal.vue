@@ -8,12 +8,60 @@ import { usePipelineStages } from '../composables/usePipelineStages'
 
 const { stages: dbStages } = usePipelineStages('submission_portal')
 
-const STAGES = computed(() => dbStages.value.map((s) => ({ key: s.key, label: s.label })))
+// --- Stage/reason parsing helpers ---
+const REASON_SEPARATOR = ' - '
+
+function parseStageLabel(label: string): { parent: string; reason: string | null } {
+  const idx = label.indexOf(REASON_SEPARATOR)
+  if (idx === -1) return { parent: label, reason: null }
+  return { parent: label.substring(0, idx), reason: label.substring(idx + REASON_SEPARATOR.length) }
+}
+
+function slugifyParent(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+}
+
+interface ParentStage {
+  key: string
+  label: string
+  columnClass: string
+  headerClass: string
+  reasons: string[]
+}
+
+function deriveParentStagesFromDb(stages: { label: string; column_class: string | null; header_class: string | null }[]): ParentStage[] {
+  const map = new Map<string, ParentStage>()
+  for (const s of stages) {
+    const { parent, reason } = parseStageLabel(s.label)
+    const key = slugifyParent(parent)
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        label: parent,
+        columnClass: s.column_class || '',
+        headerClass: s.header_class || '',
+        reasons: []
+      })
+    }
+    if (reason) map.get(key)!.reasons.push(reason)
+  }
+  return Array.from(map.values())
+}
+
+function buildStatusLabel(parentLabel: string, reason: string | null): string {
+  if (reason) return `${parentLabel}${REASON_SEPARATOR}${reason}`
+  return parentLabel
+}
+
+// --- Derived parent stages (kanban columns) ---
+const parentStages = computed(() => deriveParentStagesFromDb(dbStages.value))
+
+const STAGES = computed(() => parentStages.value.map((s) => ({ key: s.key, label: s.label })))
 
 const stageTheme = computed(() => {
   const theme: Record<string, string> = {}
-  dbStages.value.forEach((s) => {
-    theme[s.key] = s.column_class || ''
+  parentStages.value.forEach((s) => {
+    theme[s.key] = s.columnClass || ''
   })
   return theme
 })
@@ -22,11 +70,18 @@ const stageCardClass = (stageKey: string) => {
   return stageTheme.value[stageKey] || ''
 }
 
+const reasonsByParent = computed(() => {
+  const map: Record<string, string[]> = {}
+  parentStages.value.forEach((s) => {
+    if (s.reasons.length > 0) map[s.label] = s.reasons
+  })
+  return map
+})
+
 const buildAllowedStatuses = () => {
-  const pendingApprovalStatus = 'Pending Approval'
-  const withPrefix = STAGES.value.map((s) => s.label)
-  const withoutPrefix = STAGES.value.map((s) => s.label.replace(/^Stage\s+\d+\s*:\s*/i, ''))
-  return Array.from(new Set([pendingApprovalStatus, ...withPrefix, ...withoutPrefix]))
+  const fullLabels = dbStages.value.map((s) => s.label)
+  const parentLabels = parentStages.value.map((s) => s.label)
+  return Array.from(new Set([...fullLabels, ...parentLabels]))
 }
 
 type SubmissionPortalRow = Record<string, unknown> & {
@@ -68,9 +123,18 @@ const getBool = (record: Record<string, unknown>, key: string) => Boolean(record
 
 const deriveStageKey = (row: SubmissionPortalRow): string => {
   const status = String(row.status || '').trim()
-  if (!status || status === 'Pending Approval') return STAGES.value.find((s) => s.label === 'Information Verification')?.key ?? 'information_verification'
-  const exact = STAGES.value.find((s) => s.label === status)
-  return exact?.key ?? STAGES.value[0]?.key ?? 'pending_signature'
+  if (!status) return parentStages.value[0]?.key ?? ''
+  // Find matching DB stage label, then derive parent key
+  const matched = dbStages.value.find((s) => s.label === status)
+  if (matched) {
+    const { parent } = parseStageLabel(matched.label)
+    return slugifyParent(parent)
+  }
+  // Fallback: try parsing status directly
+  const { parent } = parseStageLabel(status)
+  const parentKey = slugifyParent(parent)
+  if (parentStages.value.some((s) => s.key === parentKey)) return parentKey
+  return parentStages.value[0]?.key ?? ''
 }
 
 const auth = useAuth()
@@ -158,7 +222,13 @@ const editOpen = ref(false)
 const editSaving = ref(false)
 const editRow = ref<SubmissionPortalRow | null>(null)
 const editStage = ref('')
+const editReason = ref('')
 const editNotes = ref('')
+
+const editAvailableReasons = computed(() => {
+  const parentLabel = String(editStage.value || '').trim()
+  return reasonsByParent.value[parentLabel] || []
+})
 
 const canSeeAll = computed(() => {
   const role = auth.state.value.profile?.role
@@ -233,8 +303,8 @@ const leadVendorOptions = computed(() => {
 })
 
 const statusOptions = computed(() => {
-  const allowed = buildAllowedStatuses()
-  return [{ label: 'All Statuses', value: '__ALL__' }, ...allowed.map((s) => ({ label: s, value: s }))]
+  const fullLabels = dbStages.value.map((s) => s.label)
+  return [{ label: 'All Statuses', value: '__ALL__' }, ...fullLabels.map((s) => ({ label: s, value: s }))]
 })
 
 const removeDuplicates = (records: SubmissionPortalRow[]): SubmissionPortalRow[] => {
@@ -310,7 +380,11 @@ const leadsByStage = computed(() => {
 })
 
 const stageOptions = computed(() => {
-  return STAGES.value.map((s) => ({ label: s.label, value: s.label }))
+  return parentStages.value.map((s) => ({ label: s.label, value: s.label }))
+})
+
+const reasonOptions = computed(() => {
+  return editAvailableReasons.value.map((r) => ({ label: r, value: r }))
 })
 
 const fetchAttorneys = async () => {
@@ -450,7 +524,9 @@ const handleView = (row: SubmissionPortalRow) => {
 
 const openEdit = (row: SubmissionPortalRow) => {
   editRow.value = row
-  editStage.value = String(row.status || '').trim()
+  const { parent, reason } = parseStageLabel(String(row.status || '').trim())
+  editStage.value = parent
+  editReason.value = reason || ''
   editNotes.value = ''
   editOpen.value = true
 }
@@ -458,8 +534,15 @@ const openEdit = (row: SubmissionPortalRow) => {
 const saveEdit = async () => {
   if (!editRow.value) return
 
-  const nextStage = String(editStage.value || '').trim()
-  if (!nextStage) return
+  const parentLabel = String(editStage.value || '').trim()
+  if (!parentLabel) return
+
+  // Build the full status: "Parent - Reason" or just "Parent"
+  const reasons = reasonsByParent.value[parentLabel]
+  const selectedReason = String(editReason.value || '').trim()
+  const nextStage = reasons && reasons.length > 0 && selectedReason
+    ? buildStatusLabel(parentLabel, selectedReason)
+    : parentLabel
 
   const rowId = editRow.value.id
 
@@ -660,7 +743,20 @@ onMounted(async () => {
 
                   <div class="mt-2 flex items-center justify-between gap-2">
                     <UBadge variant="subtle" :label="String(row.lead_vendor || '—')" size="xs" />
-                    <div class="text-xs text-muted">{{ String(row.date || '') }}</div>
+                    <div class="text-xs text-muted">
+                      {{ String(row.date || '') }}
+                    </div>
+                  </div>
+
+                  <div
+                    v-if="parseStageLabel(String(row.status || '')).reason"
+                    class="mt-1.5"
+                  >
+                    <UBadge
+                      variant="outline"
+                      size="xs"
+                      :label="parseStageLabel(String(row.status || '')).reason!"
+                    />
                   </div>
 
                   <div class="mt-2 grid grid-cols-1 gap-1 text-xs text-muted">
@@ -712,9 +808,20 @@ onMounted(async () => {
               <UFormField label="Stage">
                 <USelect
                   v-model="editStage"
-                  :items="[{ label: 'Pending Approval', value: 'Pending Approval' }, ...stageOptions]"
+                  :items="stageOptions"
                   value-key="value"
                   label-key="label"
+                  @update:model-value="editReason = ''"
+                />
+              </UFormField>
+
+              <UFormField v-if="editAvailableReasons.length > 0" label="Reason">
+                <USelect
+                  v-model="editReason"
+                  :items="reasonOptions"
+                  value-key="value"
+                  label-key="label"
+                  placeholder="Select reason..."
                 />
               </UFormField>
 
