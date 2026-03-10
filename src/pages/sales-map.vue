@@ -67,14 +67,17 @@ const US_STATES: UsState[] = [
 type StateData = {
   code: string
   name: string
-  status: 'green' | 'yellow' | 'red'
+  status: 'green' | 'yellow' | 'red' | 'blocked'
   volume: number
   criteria: string
 }
 
-type OpenOrderCountRow = {
-  state_code?: string | null
-  open_orders?: number | string | null
+type OrderRow = {
+  target_states?: string[] | null
+  status?: string | null
+  quota_total?: number | null
+  quota_filled?: number | null
+  expires_at?: string | null
 }
 
 const loading = ref(false)
@@ -96,12 +99,14 @@ const tooltip = ref<TooltipState>({
 })
 
 const toStatus = (volume: number): StateData['status'] => {
-  if (volume <= 5) return 'red'
-  if (volume <= 10) return 'yellow'
+  if (volume <= 0) return 'blocked'
+  if (volume === 1) return 'red'
+  if (volume === 2) return 'yellow'
   return 'green'
 }
 
 const criteriaForStatus = (status: StateData['status']) => {
+  if (status === 'blocked') return 'No selling capacity'
   if (status === 'green') return 'High selling capacity'
   if (status === 'yellow') return 'Moderate selling capacity'
   return 'Low selling capacity'
@@ -111,9 +116,9 @@ const statesData = ref<StateData[]>(
   US_STATES.map((s) => ({
     code: s.code,
     name: s.name,
-    status: 'red',
+    status: 'blocked',
     volume: 0,
-    criteria: criteriaForStatus('red')
+    criteria: criteriaForStatus('blocked')
   }))
 )
 
@@ -130,6 +135,7 @@ const ordersFilterOptions = [
 
 const statusOptions = [
   { value: 'all', label: 'All States' },
+  { value: 'blocked', label: 'Blocked (No selling capacity)' },
   { value: 'red', label: 'Low Selling Capacity' },
   { value: 'green', label: 'High Selling Capacity' },
   { value: 'yellow', label: 'Moderate Selling Capacity' }
@@ -169,33 +175,46 @@ const refreshCounts = async () => {
         table: string
       ) => {
         select: (cols: string) => {
-          order: (
-            column: string,
-            opts: { ascending: boolean }
-          ) => Promise<{ data: OpenOrderCountRow[] | null; error: unknown }>
+          eq: (column: string, value: unknown) => {
+            order: (
+              column: string,
+              opts: { ascending: boolean }
+            ) => Promise<{ data: OrderRow[] | null; error: unknown }>
+          }
         }
       }
     }
 
     const { data, error } = await supabaseUntyped
-      .from('open_order_counts_by_state_test')
-      .select('state_code,open_orders')
-      .order('state_code', { ascending: true })
+      .from('orders')
+      .select('target_states,status,quota_total,quota_filled,expires_at')
+      .eq('status', 'OPEN')
+      .order('created_at', { ascending: false })
 
     if (error) {
       throw error instanceof Error ? error : new Error(String(error))
     }
 
-    const rows = (data ?? []) as OpenOrderCountRow[]
+    const rows = (data ?? []) as OrderRow[]
     const counts = new Map<string, number>()
+    const now = new Date()
 
     for (const row of rows) {
-      const code = String(row.state_code || '').trim().toUpperCase()
-      if (!code) continue
+      if (row.expires_at) {
+        const exp = new Date(row.expires_at)
+        if (!Number.isNaN(exp.getTime()) && exp < now) continue
+      }
 
-      const openOrders = Number(row.open_orders)
-      const volume = Number.isFinite(openOrders) ? Math.max(0, openOrders) : 0
-      counts.set(code, (counts.get(code) ?? 0) + volume)
+      const quotaTotal = Number(row.quota_total ?? 0)
+      const quotaFilled = Number(row.quota_filled ?? 0)
+      if (Number.isFinite(quotaTotal) && Number.isFinite(quotaFilled) && quotaTotal > 0 && quotaFilled >= quotaTotal) continue
+
+      const targets = Array.isArray(row.target_states) ? row.target_states : []
+      for (const state of targets) {
+        const code = String(state || '').trim().toUpperCase()
+        if (!code) continue
+        counts.set(code, (counts.get(code) ?? 0) + 1)
+      }
     }
 
     statesData.value = US_STATES.map((s) => {
@@ -217,6 +236,7 @@ const refreshCounts = async () => {
 }
 
 const getStatusLabel = (status: string) => {
+  if (status === 'blocked') return 'Blocked state'
   if (status === 'green') return 'High selling capacity'
   if (status === 'yellow') return 'Moderate selling capacity'
   return 'Low selling capacity'
@@ -224,10 +244,47 @@ const getStatusLabel = (status: string) => {
 
 const stateByCode = computed(() => new Map(statesData.value.map(s => [s.code, s])))
 
+const MAP_PATH_SELECTOR = 'path[data-id], path[id]'
+
+const BLOCKED_PATTERN_ID = 'blocked-hatch'
+
+const ensureBlockedPattern = (svg: SVGSVGElement) => {
+  const existing = svg.querySelector(`#${BLOCKED_PATTERN_ID}`)
+  if (existing) return
+
+  let defs = svg.querySelector('defs')
+  if (!defs) {
+    defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs')
+    svg.insertBefore(defs, svg.firstChild)
+  }
+
+  const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern')
+  pattern.setAttribute('id', BLOCKED_PATTERN_ID)
+  pattern.setAttribute('patternUnits', 'userSpaceOnUse')
+  pattern.setAttribute('width', '10')
+  pattern.setAttribute('height', '10')
+  pattern.setAttribute('patternTransform', 'rotate(45)')
+
+  const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+  bg.setAttribute('width', '10')
+  bg.setAttribute('height', '10')
+  bg.setAttribute('fill', '#f3f4f6')
+
+  const stripe = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+  stripe.setAttribute('width', '2')
+  stripe.setAttribute('height', '10')
+  stripe.setAttribute('fill', '#111827')
+
+  pattern.appendChild(bg)
+  pattern.appendChild(stripe)
+  defs.appendChild(pattern)
+}
+
 const mapFill = (status: StateData['status'] | undefined) => {
   if (status === 'green') return '#22c55e'
   if (status === 'yellow') return '#eab308'
   if (status === 'red') return '#ef4444'
+  if (status === 'blocked') return `url(#${BLOCKED_PATTERN_ID})`
   return '#e5e7eb'
 }
 
@@ -237,6 +294,7 @@ const textColorForStatus = (status: StateData['status'] | undefined) => {
   if (status === 'green') return '#ffffff'
   if (status === 'red') return '#ffffff'
   if (status === 'yellow') return '#111827'
+  if (status === 'blocked') return '#111827'
   return '#111827'
 }
 
@@ -256,7 +314,7 @@ const applyStateLabels = () => {
   g.setAttribute('id', 'state-labels')
   g.setAttribute('pointer-events', 'none')
 
-  const paths = svg.querySelectorAll('path[data-id]')
+  const paths = svg.querySelectorAll(MAP_PATH_SELECTOR)
   paths.forEach((p) => {
     const code = p.getAttribute('data-id') || p.getAttribute('id')
     if (!code) return
@@ -279,6 +337,9 @@ const applyStateLabels = () => {
     const fontSize = clamp(Math.min(bbox.width, bbox.height) / 3, 6, 14)
     const fill = textColorForStatus(state?.status)
 
+    const outlineStroke = state?.status === 'blocked' ? '#f9fafb' : 'rgba(0,0,0,0.35)'
+    const outlineWidth = state?.status === 'blocked' ? '3' : '1'
+
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text')
     text.textContent = code
     text.setAttribute('x', String(cx))
@@ -289,8 +350,8 @@ const applyStateLabels = () => {
     text.style.setProperty('font-weight', '700', 'important')
     text.style.setProperty('fill', fill, 'important')
     text.style.setProperty('paint-order', 'stroke', 'important')
-    text.style.setProperty('stroke', 'rgba(0,0,0,0.35)', 'important')
-    text.style.setProperty('stroke-width', '1', 'important')
+    text.style.setProperty('stroke', outlineStroke, 'important')
+    text.style.setProperty('stroke-width', outlineWidth, 'important')
 
     g.appendChild(text)
   })
@@ -304,8 +365,10 @@ const applyMapColors = () => {
   const svg = root.querySelector('svg')
   if (!svg) return
 
+  ensureBlockedPattern(svg as SVGSVGElement)
+
   const visibleSet = new Set(filteredStates.value.map(s => s.code))
-  const paths = svg.querySelectorAll('path[data-id]')
+  const paths = svg.querySelectorAll(MAP_PATH_SELECTOR)
   paths.forEach((p) => {
     const path = p as SVGPathElement
     const code = p.getAttribute('data-id') || p.getAttribute('id')
@@ -466,18 +529,25 @@ watch([ordersFilter], () => {
               <div class="text-sm text-muted">
                 Colors represent selling capacity based on selling volume in each state.
               </div>
-              <div class="grid gap-3 sm:grid-cols-3">
+              <div class="grid gap-3 sm:grid-cols-4">
                 <div class="flex items-center gap-2">
-                  <div class="size-4 rounded-full bg-green-500" />
-                  <span class="text-sm">Green - High selling capacity</span>
+                  <div
+                    class="size-4 rounded-full border border-default"
+                    style="background-color:#f3f4f6;background-image:repeating-linear-gradient(45deg,#111827 0,#111827 2px,transparent 2px,transparent 6px);"
+                  />
+                  <span class="text-sm">Blocked - No selling capacity</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <div class="size-4 rounded-full bg-red-500" />
+                  <span class="text-sm">Red - Low selling capacity</span>
                 </div>
                 <div class="flex items-center gap-2">
                   <div class="size-4 rounded-full bg-yellow-500" />
                   <span class="text-sm">Yellow - Moderate selling capacity</span>
                 </div>
                 <div class="flex items-center gap-2">
-                  <div class="size-4 rounded-full bg-red-500" />
-                  <span class="text-sm">Red - Low selling capacity</span>
+                  <div class="size-4 rounded-full bg-green-500" />
+                  <span class="text-sm">Green - High selling capacity</span>
                 </div>
               </div>
             </div>

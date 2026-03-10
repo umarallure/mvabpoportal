@@ -3,12 +3,6 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 
 const links = [[
   {
-    label: 'General',
-    icon: 'i-lucide-user',
-    to: '/settings',
-    exact: true
-  },
-  {
     label: 'BPO Profile',
     icon: 'i-lucide-building-2',
     to: '/settings/bpo-profile',

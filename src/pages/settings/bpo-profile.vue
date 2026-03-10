@@ -6,6 +6,21 @@ import type { FormSubmitEvent } from '@nuxt/ui'
 import { useAuth } from '../../composables/useAuth'
 import { supabase } from '../../lib/supabase'
 
+type BpoProfileRow = Partial<{
+  center_name: string | null
+  location: string | null
+  website_or_linkedin: string | null
+  contact_email: string | null
+  contact_phone: string | null
+  number_of_agents: string | null
+  languages: string[] | null
+  operating_hours: string | null
+  case_rate_per_deal: number | null
+  upfront_payment_percentage: number | null
+  payment_window_days: number | null
+  chargeback_window_days: number | null
+}>
+
 const profileSchema = z.object({
   centerName: z.string().trim().min(2, 'BPO / Center name is required'),
   location: z.string().trim().optional(),
@@ -14,7 +29,11 @@ const profileSchema = z.object({
   contactPhone: z.string().trim().optional(),
   numberOfAgents: z.string().trim().optional(),
   languages: z.array(z.string()).optional(),
-  operatingHours: z.string().trim().optional()
+  operatingHours: z.string().trim().optional(),
+  caseRatePerDeal: z.number().min(0).optional().or(z.literal('')),
+  upfrontPaymentPercentage: z.number().min(0).max(100).optional().or(z.literal('')),
+  paymentWindowDays: z.number().int().min(0).optional().or(z.literal('')),
+  chargebackWindowDays: z.number().int().min(0).optional().or(z.literal(''))
 })
 
 type ProfileSchema = z.output<typeof profileSchema>
@@ -49,10 +68,14 @@ const profile = reactive<Partial<ProfileSchema>>({
   contactPhone: '',
   numberOfAgents: '',
   languages: [],
-  operatingHours: ''
+  operatingHours: '',
+  caseRatePerDeal: '',
+  upfrontPaymentPercentage: '',
+  paymentWindowDays: '',
+  chargebackWindowDays: ''
 })
 
-const hydrateFromDb = (data?: any) => {
+const hydrateFromDb = (data?: BpoProfileRow | null) => {
   profile.centerName = data?.center_name ?? ''
   profile.location = data?.location ?? ''
   profile.websiteOrLinkedIn = data?.website_or_linkedin ?? ''
@@ -61,6 +84,10 @@ const hydrateFromDb = (data?: any) => {
   profile.numberOfAgents = data?.number_of_agents ?? ''
   profile.languages = data?.languages ?? []
   profile.operatingHours = data?.operating_hours ?? ''
+  profile.caseRatePerDeal = data?.case_rate_per_deal ?? ''
+  profile.upfrontPaymentPercentage = data?.upfront_payment_percentage ?? ''
+  profile.paymentWindowDays = data?.payment_window_days ?? ''
+  profile.chargebackWindowDays = data?.chargeback_window_days ?? ''
 }
 
 const loadProfile = async () => {
@@ -109,7 +136,11 @@ async function onSubmit(event: FormSubmitEvent<ProfileSchema>) {
       contact_phone: event.data.contactPhone?.trim() || null,
       number_of_agents: event.data.numberOfAgents?.trim() || null,
       languages: event.data.languages ?? [],
-      operating_hours: event.data.operatingHours?.trim() || null
+      operating_hours: event.data.operatingHours?.trim() || null,
+      case_rate_per_deal: event.data.caseRatePerDeal === '' ? null : (event.data.caseRatePerDeal ?? null),
+      upfront_payment_percentage: event.data.upfrontPaymentPercentage === '' ? null : (event.data.upfrontPaymentPercentage ?? null),
+      payment_window_days: event.data.paymentWindowDays === '' ? null : (event.data.paymentWindowDays ?? null),
+      chargeback_window_days: event.data.chargebackWindowDays === '' ? null : (event.data.chargebackWindowDays ?? null)
     }
 
     const { error, data } = await supabase
@@ -201,7 +232,9 @@ const cancelEditing = async () => {
     <UPageCard variant="subtle" class="mb-6">
       <div class="space-y-6">
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-semibold">Basic identity</h3>
+          <h3 class="text-lg font-semibold">
+            Basic identity
+          </h3>
         </div>
 
         <UFormField
@@ -289,7 +322,9 @@ const cancelEditing = async () => {
     <UPageCard variant="subtle">
       <div class="space-y-6">
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-semibold">Stats & capacity</h3>
+          <h3 class="text-lg font-semibold">
+            Stats & capacity
+          </h3>
         </div>
 
         <UFormField
@@ -336,6 +371,82 @@ const cancelEditing = async () => {
           <UInput
             v-model="profile.operatingHours"
             placeholder="e.g., 24/7 or 9-5 EST"
+            autocomplete="off"
+            :disabled="disabled"
+          />
+        </UFormField>
+      </div>
+    </UPageCard>
+
+    <UPageCard variant="subtle" class="mt-6">
+      <div class="space-y-6">
+        <div class="flex items-center justify-between">
+          <h3 class="text-lg font-semibold">
+            Pricing
+          </h3>
+        </div>
+
+        <UFormField
+          name="caseRatePerDeal"
+          label="Rate Per Case"
+          description="Fixed amount charged per deal (optional)"
+          class="flex max-sm:flex-col justify-between items-start gap-4"
+        >
+          <UInput
+            v-model.number="profile.caseRatePerDeal"
+            type="number"
+            placeholder="0"
+            autocomplete="off"
+            :disabled="disabled"
+          />
+        </UFormField>
+
+        <USeparator />
+
+        <UFormField
+          name="upfrontPaymentPercentage"
+          label="Upfront Settlement Percentage"
+          description="Percent of settlement amount to invoice upfront (optional)"
+          class="flex max-sm:flex-col justify-between items-start gap-4"
+        >
+          <UInput
+            v-model.number="profile.upfrontPaymentPercentage"
+            type="number"
+            placeholder="0"
+            autocomplete="off"
+            :disabled="disabled"
+          />
+        </UFormField>
+
+        <USeparator />
+
+        <UFormField
+          name="paymentWindowDays"
+          label="Payment Window (days)"
+          description="How many days you allow to receive payment (optional)"
+          class="flex max-sm:flex-col justify-between items-start gap-4"
+        >
+          <UInput
+            v-model.number="profile.paymentWindowDays"
+            type="number"
+            placeholder="0"
+            autocomplete="off"
+            :disabled="disabled"
+          />
+        </UFormField>
+
+        <USeparator />
+
+        <UFormField
+          name="chargebackWindowDays"
+          label="Chargeback Window (days)"
+          description="Number of days allowed to request a chargeback (optional)"
+          class="flex max-sm:flex-col justify-between items-start gap-4"
+        >
+          <UInput
+            v-model.number="profile.chargebackWindowDays"
+            type="number"
+            placeholder="0"
             autocomplete="off"
             :disabled="disabled"
           />

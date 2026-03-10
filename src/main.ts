@@ -27,7 +27,7 @@ const router = createRouter({
       path: '/settings',
       component: () => import('./pages/settings.vue'),
       children: [
-        { path: '', component: () => import('./pages/settings/index.vue') },
+        { path: '', redirect: '/settings/bpo-profile' },
         { path: 'bpo-profile', component: () => import('./pages/settings/bpo-profile.vue') },
         { path: 'sales-map-admin', component: () => import('./pages/settings/sales-map-admin.vue') },
         { path: 'export-sheets', component: () => import('./pages/settings/export-sheets.vue') }

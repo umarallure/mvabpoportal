@@ -98,13 +98,6 @@ const links = computed(() => [[{
   defaultOpen: false,
   type: 'trigger',
   children: [{
-    label: 'General',
-    to: '/settings',
-    exact: true,
-    onSelect: () => {
-      open.value = false
-    }
-  }, {
     label: 'BPO Profile',
     to: '/settings/bpo-profile',
     exact: true,
