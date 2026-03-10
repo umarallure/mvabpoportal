@@ -167,6 +167,16 @@ const filterStates = () => {
   filteredStates.value = next
 }
 
+const statusOverrideForState = (code: string): StateData['status'] | null => {
+  const normalized = String(code || '').trim().toUpperCase()
+  if (!normalized) return null
+
+  if (normalized === 'TX' || normalized === 'AZ' || normalized === 'NY') return 'green'
+  if (normalized === 'NV' || normalized === 'NM' || normalized === 'WA' || normalized === 'IL' || normalized === 'IN') return 'red'
+  if (normalized === 'GA' || normalized === 'WI' || normalized === 'NC') return 'yellow'
+  return null
+}
+
 const refreshCounts = async () => {
   loading.value = true
   try {
@@ -219,7 +229,7 @@ const refreshCounts = async () => {
 
     statesData.value = US_STATES.map((s) => {
       const volume = counts.get(s.code) ?? 0
-      const status = toStatus(volume)
+      const status = statusOverrideForState(s.code) ?? toStatus(volume)
       return {
         code: s.code,
         name: s.name,
