@@ -85,6 +85,13 @@ const links = computed(() => [[{
     open.value = false
   }
 }, {
+  label: 'Product Offering',
+  icon: 'i-lucide-package',
+  to: '/product-offering',
+  onSelect: () => {
+    open.value = false
+  }
+}, {
   label: 'Settings',
   to: '/settings',
   icon: 'i-lucide-settings',
