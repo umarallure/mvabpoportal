@@ -1,14 +1,28 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { TableColumn } from '@nuxt/ui'
 import { useAuth } from '../composables/useAuth'
+import {
+  ALL_FILTER_VALUE,
+  formatSourceTypeLabel,
+  matchesPipelineDateRange,
+  PIPELINE_DATE_RANGE_OPTIONS,
+  resolvePipelineSourceType,
+  resolvePipelineState,
+  type PipelineDateRange
+} from '../lib/pipeline-filters'
 import { supabase } from '../lib/supabase'
+import { getTransferStageDescription } from '../lib/pipeline-stage-descriptions'
 import { usePipelineStages } from '../composables/usePipelineStages'
 
 const { stages: dbStages } = usePipelineStages('transfer_portal')
 
-const STAGES = computed(() => dbStages.value.map((s) => ({ key: s.key, label: s.label })))
+const STAGES = computed(() => dbStages.value.map((s) => ({
+  key: s.key,
+  label: s.label,
+  description: getTransferStageDescription(s.key)
+})))
 
 type TransferLead = {
   id: string
@@ -17,6 +31,8 @@ type TransferLead = {
   phone: string
   opportunityValue: number
   stage: string
+  state: string
+  sourceType: string
   publisher: string
 }
 
@@ -36,17 +52,57 @@ const query = ref('')
 const page = ref(1)
 const PAGE_SIZE = 25
 const viewMode = ref<ViewMode>('kanban')
-const selectedStage = ref<string>('all')
+const filtersOpen = ref(false)
+const selectedStage = ref<string>(ALL_FILTER_VALUE)
+const selectedSourceType = ref<string>(ALL_FILTER_VALUE)
+const selectedStates = ref<string[]>([])
+const selectedDateRange = ref<PipelineDateRange>('all')
+const customStartDate = ref('')
+const customEndDate = ref('')
 
 const transfers = ref<TransferLead[]>([])
+
+const stageOptions = computed(() => [
+  { label: 'All Stages', value: ALL_FILTER_VALUE },
+  ...STAGES.value.map(stage => ({ label: stage.label, value: stage.key }))
+])
+
+const sourceTypeOptions = computed(() => {
+  const values = Array.from(new Set(transfers.value.map(lead => lead.sourceType).filter(Boolean)))
+  return [
+    { label: 'All Sources', value: ALL_FILTER_VALUE },
+    ...values
+      .sort((a, b) => formatSourceTypeLabel(a).localeCompare(formatSourceTypeLabel(b)))
+      .map(value => ({ label: formatSourceTypeLabel(value), value }))
+  ]
+})
+
+const stateOptions = computed(() => {
+  const values = Array.from(new Set(transfers.value.map(lead => lead.state).filter(Boolean)))
+  return values
+    .sort((a, b) => a.localeCompare(b))
+    .map(value => ({ label: value, value }))
+})
+
+const activeFilterCount = computed(() => {
+  let count = 0
+  if (selectedDateRange.value !== 'all') count += 1
+  if (selectedStage.value !== ALL_FILTER_VALUE) count += 1
+  if (selectedSourceType.value !== ALL_FILTER_VALUE) count += 1
+  if (selectedStates.value.length > 0) count += 1
+  return count
+})
 
 const filteredLeads = computed(() => {
   const q = query.value.trim().toLowerCase()
   return transfers.value.filter((t) => {
-    if (selectedStage.value !== 'all' && t.stage !== selectedStage.value) return false
+    if (!matchesPipelineDateRange(t.date, selectedDateRange.value, customStartDate.value, customEndDate.value)) return false
+    if (selectedStage.value !== ALL_FILTER_VALUE && t.stage !== selectedStage.value) return false
+    if (selectedSourceType.value !== ALL_FILTER_VALUE && t.sourceType !== selectedSourceType.value) return false
+    if (selectedStates.value.length > 0 && !selectedStates.value.includes(t.state)) return false
     if (!q) return true
     const stageLabel = STAGES.value.find(s => s.key === t.stage)?.label ?? ''
-    const haystack = [t.id, t.clientName, t.phone, stageLabel, t.publisher].join(' ').toLowerCase()
+    const haystack = [t.id, t.clientName, t.phone, stageLabel, t.publisher, t.state, formatSourceTypeLabel(t.sourceType)].join(' ').toLowerCase()
     return haystack.includes(q)
   })
 })
@@ -89,13 +145,8 @@ const getStageLabel = (stage: string) => STAGES.value.find(s => s.key === stage)
 const mapStatusToStage = (status: string | null): string => {
   if (!status) return STAGES.value[0]?.key ?? 'transfer_api'
   const trimmed = status.trim()
-  // Match by label (case-insensitive)
-  const exact = STAGES.value.find((s) => s.label.toLowerCase() === trimmed.toLowerCase())
-  if (exact) return exact.key
-  // Match by key
   const byKey = STAGES.value.find((s) => s.key === trimmed)
-  if (byKey) return byKey.key
-  return STAGES.value[0]?.key ?? 'transfer_api'
+  return byKey ? byKey.key : (STAGES.value[0]?.key ?? 'transfer_api')
 }
 
 const columns: TableColumn<TransferLead>[] = [
@@ -108,72 +159,34 @@ const columns: TableColumn<TransferLead>[] = [
 ]
 
 const loadTransfers = async () => {
+  const stageKeys = dbStages.value.map(s => s.key)
+  if (stageKeys.length === 0) return // wait for stages to load via watcher
+
   try {
     loading.value = true
-    
-    // Initialize auth first
     await auth.init()
-    
-    const profile = auth.state.value.profile
-    const isAdmin = profile?.role === 'admin'
-    const isSuperAdmin = profile?.role === 'super_admin'
-    const canSeeAll = isSuperAdmin || isAdmin || profile?.is_super_admin
-    const centerId = profile?.center_id ?? null
-    let leadVendor = profile?.lead_vendor ?? null
 
-    console.log('🔍 Transfer page - User profile:', {
-      role: profile?.role,
-      is_super_admin: profile?.is_super_admin,
-      center_id: centerId,
-      lead_vendor: leadVendor,
-      canSeeAll
-    })
+    const canSeeAll = auth.canSeeAll.value
+    const leadVendor = auth.resolvedLeadVendor.value
 
-    // If not admin/super_admin, get lead vendor from centers table if needed
-    if (!canSeeAll && !leadVendor && centerId) {
-      console.log('📞 Fetching lead vendor from centers table for center_id:', centerId)
-      const { data: center, error: centerError } = await supabase
-        .from('centers')
-        .select('lead_vendor')
-        .eq('id', centerId)
-        .maybeSingle()
-
-      if (centerError) {
-        console.error('❌ Error fetching center:', centerError)
-      } else {
-        leadVendor = (center?.lead_vendor as string | null) ?? null
-        console.log('✅ Lead vendor from center:', leadVendor)
-      }
-    }
-
-    // If not admin and no lead vendor found, show no records
     if (!canSeeAll && !leadVendor) {
-      console.log('⚠️ No lead vendor found and user is not admin')
       transfers.value = []
       return
     }
 
-    let query = supabase.from('daily_deal_flow').select('*')
+    let query = supabase.from('leads').select('*').in('status', stageKeys)
 
-    // Filter by lead vendor if user is not admin or super_admin
     if (!canSeeAll && leadVendor) {
-      console.log('🔐 Filtering by lead vendor:', leadVendor)
       query = query.eq('lead_vendor', leadVendor)
-    } else {
-      console.log('👑 Admin/Super Admin - showing all records')
     }
 
-    console.log('📡 Making Supabase query to daily_deal_flow...')
     const { data, error } = await query
 
     if (error) {
-      console.error('❌ Error loading transfers:', error)
       transfers.value = []
       return
     }
 
-    console.log('✅ Loaded transfers:', data?.length ?? 0, 'records')
-    
     const getString = (record: Record<string, unknown>, key: string) => {
       const value = record[key]
       if (typeof value === 'string') return value
@@ -207,18 +220,17 @@ const loadTransfers = async () => {
 
       return {
         id: getString(record, 'id'),
-        date: getString(record, 'date'),
-        clientName: getString(record, 'client_name') || getString(record, 'insured_name'),
-        phone: getString(record, 'client_phone_number') || getString(record, 'phone'),
+        date: getString(record, 'date') || getString(record, 'created_at'),
+        clientName: getString(record, 'customer_full_name') || getString(record, 'insured_name') || getString(record, 'client_name'),
+        phone: getString(record, 'phone') || getString(record, 'customer_phone') || getString(record, 'client_phone_number'),
         opportunityValue,
         stage: mapStatusToStage(getString(record, 'status')),
-        publisher: getString(record, 'publisher') || getString(record, 'lead_vendor')
+        state: resolvePipelineState(record),
+        sourceType: resolvePipelineSourceType(record),
+        publisher: getString(record, 'lead_vendor') || getString(record, 'publisher')
       }
     })
-
-    console.log('✅ Processed transfers:', transfers.value.length)
-  } catch (error) {
-    console.error('❌ Error in loadTransfers:', error)
+  } catch {
     transfers.value = []
   } finally {
     loading.value = false
@@ -232,6 +244,12 @@ const viewLead = (leadId: string) => {
   })
 }
 
+watch(dbStages, (newStages) => {
+  if (newStages.length > 0) {
+    void loadTransfers()
+  }
+})
+
 onMounted(() => {
   loadTransfers()
 })
@@ -240,21 +258,9 @@ onMounted(() => {
 <template>
   <UDashboardPanel id="transfers">
     <template #header>
-      <UDashboardNavbar title="Transfer Portal - Volume">
+      <UDashboardNavbar title="Transfer Pipeline">
         <template #leading>
           <UDashboardSidebarCollapse />
-        </template>
-
-        <template #right>
-          <UButton
-            color="neutral"
-            variant="outline"
-            icon="i-lucide-refresh-cw"
-            :loading="loading"
-            @click="handleRefresh"
-          >
-            Refresh
-          </UButton>
         </template>
       </UDashboardNavbar>
     </template>
@@ -299,16 +305,25 @@ onMounted(() => {
               v-model="query"
               class="max-w-md"
               icon="i-lucide-search"
-              placeholder="Search transfers..."
+              placeholder="Search by name, phone, publisher..."
             />
 
-            <USelect
-              v-model="selectedStage"
-              :items="[{ label: 'All Stages', value: 'all' }, ...STAGES.map(s => ({ label: s.label, value: s.key }))]"
-              class="w-56"
-              value-key="value"
-              label-key="label"
-            />
+            <UButton
+              color="neutral"
+              :variant="filtersOpen || activeFilterCount > 0 ? 'solid' : 'outline'"
+              icon="i-lucide-sliders-horizontal"
+              @click="filtersOpen = !filtersOpen"
+            >
+              Filters
+              <UBadge
+                v-if="activeFilterCount > 0"
+                variant="subtle"
+                color="neutral"
+                size="xs"
+                class="ml-2"
+                :label="String(activeFilterCount)"
+              />
+            </UButton>
           </div>
 
           <div class="flex items-center gap-3">
@@ -328,8 +343,90 @@ onMounted(() => {
             </div>
 
             <UBadge variant="subtle" :label="`${filteredLeads.length} transfers`" />
+
+            <UButton
+              color="neutral"
+              variant="outline"
+              icon="i-lucide-refresh-cw"
+              :loading="loading"
+              @click="handleRefresh"
+            >
+              Refresh
+            </UButton>
           </div>
         </div>
+
+        <UCard
+          v-if="filtersOpen"
+          class="mt-4 border-primary/20"
+          :ui="{ body: 'p-4 sm:p-5' }"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <UIcon name="i-lucide-sliders-horizontal" class="size-5 text-muted" />
+              <div class="text-lg font-semibold">Filters</div>
+            </div>
+
+            <UButton
+              icon="i-lucide-x"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              @click="filtersOpen = false"
+            />
+          </div>
+
+          <div class="mt-4 grid gap-4 lg:grid-cols-4">
+            <UFormField label="Date Range">
+              <USelect
+                v-model="selectedDateRange"
+                :items="PIPELINE_DATE_RANGE_OPTIONS"
+                value-key="value"
+                label-key="label"
+              />
+            </UFormField>
+
+            <UFormField label="Stage">
+              <USelect
+                v-model="selectedStage"
+                :items="stageOptions"
+                value-key="value"
+                label-key="label"
+              />
+            </UFormField>
+
+            <UFormField label="Source Type">
+              <USelect
+                v-model="selectedSourceType"
+                :items="sourceTypeOptions"
+                value-key="value"
+                label-key="label"
+              />
+            </UFormField>
+
+            <UFormField label="State">
+              <USelectMenu
+                v-model="selectedStates"
+                :items="stateOptions"
+                value-key="value"
+                label-key="label"
+                multiple
+                placeholder="All States"
+                :search-input="{ placeholder: 'Search states...' }"
+              />
+            </UFormField>
+          </div>
+
+          <div v-if="selectedDateRange === 'custom'" class="mt-4 grid gap-4 sm:grid-cols-2">
+            <UFormField label="Start Date">
+              <UInput v-model="customStartDate" type="date" />
+            </UFormField>
+
+            <UFormField label="End Date">
+              <UInput v-model="customEndDate" type="date" />
+            </UFormField>
+          </div>
+        </UCard>
 
         <div v-if="viewMode === 'kanban'" class="no-scrollbar mt-4 flex min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
           <div
@@ -342,7 +439,31 @@ onMounted(() => {
               class="flex h-full w-[26rem] shrink-0 flex-col rounded-lg border border-default bg-elevated/20"
             >
               <div class="flex items-center justify-between border-b border-default px-3 py-2">
-                <div class="text-sm font-semibold">{{ stage.label }}</div>
+                <div class="flex min-w-0 items-center gap-1.5">
+                  <div class="truncate text-sm font-semibold">{{ stage.label }}</div>
+                  <UPopover
+                    mode="hover"
+                    arrow
+                    :open-delay="100"
+                    :close-delay="120"
+                    :content="{ side: 'top', align: 'start', sideOffset: 8 }"
+                  >
+                    <UButton
+                      icon="i-lucide-circle-help"
+                      color="neutral"
+                      variant="ghost"
+                      size="xs"
+                      class="shrink-0"
+                      :ui="{ base: 'rounded-full' }"
+                    />
+                    <template #content>
+                      <div class="max-w-72 p-3">
+                        <div class="text-sm font-semibold text-highlighted">{{ stage.label }}</div>
+                        <p class="mt-1 text-xs leading-5 text-muted">{{ stage.description }}</p>
+                      </div>
+                    </template>
+                  </UPopover>
+                </div>
                 <UBadge
                   variant="subtle"
                   :label="String(leadsByStage.get(stage.key)?.length ?? 0)"

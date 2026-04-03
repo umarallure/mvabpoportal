@@ -34,16 +34,9 @@ const links = computed(() => [[{
     open.value = false
   }
 }, {
-  label: 'Transfers',
+  label: 'Transfer Pipeline',
   icon: 'i-lucide-arrow-right-left',
   to: '/transfers',
-  onSelect: () => {
-    open.value = false
-  }
-}, {
-  label: 'Retainers',
-  icon: 'i-lucide-briefcase',
-  to: '/retainers',
   onSelect: () => {
     open.value = false
   }
@@ -57,7 +50,7 @@ const links = computed(() => [[{
 //   }
 // },
 ...([] as NavigationMenuItem[]), {
-  label: 'Submission Portal',
+  label: 'Submission Pipeline',
   icon: 'i-lucide-layout-dashboard',
   to: '/submission-portal',
   onSelect: () => {

@@ -1,10 +1,12 @@
-import { ref, readonly } from 'vue'
+import { computed, ref, readonly } from 'vue'
 import { createSharedComposable } from '@vueuse/core'
 import type { Session, User } from '@supabase/supabase-js'
 
 import { supabase } from '../lib/supabase'
 
-export type AppRole = 'super_admin' | 'admin' | 'lawyer' | 'agent'
+const AUTH_CONTEXT_STORAGE_KEY = 'ap-auth-context-v1'
+
+export type AppRole = 'super_admin' | 'admin' | 'lawyer' | 'agent' | 'accounts'
 
 export type AppUserProfile = {
   user_id: string
@@ -13,7 +15,14 @@ export type AppUserProfile = {
   role: AppRole | null
   center_id: string | null
   is_super_admin: boolean | null
+  account_status: string | null
+} | null
+
+export type AppCenterContext = {
+  id: string
+  center_name: string | null
   lead_vendor: string | null
+  contact_email: string | null
 } | null
 
 type AuthState = {
@@ -22,6 +31,36 @@ type AuthState = {
   user: User | null
   session: Session | null
   profile: AppUserProfile
+  centerContext: AppCenterContext
+}
+
+type CachedAuthContext = {
+  user_id: string
+  profile: NonNullable<AppUserProfile>
+  centerContext: AppCenterContext
+}
+
+const normalizeString = (value: unknown) => {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed || null
+}
+
+const readCachedContext = (): CachedAuthContext | null => {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const raw = window.localStorage.getItem(AUTH_CONTEXT_STORAGE_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as CachedAuthContext
+  } catch {
+    return null
+  }
+}
+
+const clearCachedContext = () => {
+  if (typeof window === 'undefined') return
+  window.localStorage.removeItem(AUTH_CONTEXT_STORAGE_KEY)
 }
 
 const _useAuth = () => {
@@ -30,13 +69,51 @@ const _useAuth = () => {
     loading: true,
     user: null,
     session: null,
-    profile: null
+    profile: null,
+    centerContext: null
   })
 
-  const loadProfile = async () => {
+  const persistContext = () => {
+    if (typeof window === 'undefined') return
+
+    if (!state.value.user || !state.value.profile) {
+      clearCachedContext()
+      return
+    }
+
+    const payload: CachedAuthContext = {
+      user_id: state.value.user.id,
+      profile: state.value.profile,
+      centerContext: state.value.centerContext
+    }
+
+    window.localStorage.setItem(AUTH_CONTEXT_STORAGE_KEY, JSON.stringify(payload))
+  }
+
+  const hydrateFromCache = (userId: string) => {
+    const cached = readCachedContext()
+    if (!cached || cached.user_id !== userId) return false
+
+    state.value.profile = cached.profile
+    state.value.centerContext = cached.centerContext
+    return true
+  }
+
+  const resetContext = () => {
+    state.value.profile = null
+    state.value.centerContext = null
+    clearCachedContext()
+  }
+
+  const loadContext = async (options: { preferCache?: boolean } = {}) => {
     if (!state.value.user) {
-      state.value.profile = null
+      resetContext()
       console.info('[auth] no user found, clearing profile')
+      return
+    }
+
+    if (options.preferCache && hydrateFromCache(state.value.user.id)) {
+      console.info('[auth] hydrated profile from local cache')
       return
     }
 
@@ -44,31 +121,59 @@ const _useAuth = () => {
 
     const { data, error } = await supabase
       .from('app_users')
-      .select('*')
+      .select('user_id,email,display_name,role,center_id,is_super_admin,account_status')
       .eq('user_id', state.value.user.id)
       .maybeSingle()
 
     if (error) {
       console.warn('[auth] failed to load profile', error.message)
-      state.value.profile = null
+      resetContext()
       return
     }
 
     if (!data) {
-      state.value.profile = null
+      resetContext()
       return
     }
 
-    const row = data as any
+    const row = data as Record<string, unknown>
     state.value.profile = {
       user_id: String(row.user_id),
       email: String(row.email ?? ''),
-      display_name: (row.display_name ?? null) as string | null,
+      display_name: normalizeString(row.display_name),
       role: (row.role ?? null) as AppRole | null,
-      center_id: (row.center_id ?? null) as string | null,
+      center_id: normalizeString(row.center_id),
       is_super_admin: (row.is_super_admin ?? null) as boolean | null,
-      lead_vendor: (row.lead_vendor ?? null) as string | null
+      account_status: normalizeString(row.account_status)
     }
+
+    const centerId = state.value.profile.center_id
+    if (centerId) {
+      const { data: center, error: centerError } = await supabase
+        .from('centers')
+        .select('id,center_name,lead_vendor,contact_email')
+        .eq('id', centerId)
+        .maybeSingle()
+
+      if (centerError) {
+        console.warn('[auth] failed to load center context', centerError.message)
+        state.value.centerContext = null
+      } else if (center) {
+        const centerRow = center as Record<string, unknown>
+        state.value.centerContext = {
+          id: String(centerRow.id),
+          center_name: normalizeString(centerRow.center_name),
+          lead_vendor: normalizeString(centerRow.lead_vendor),
+          contact_email: normalizeString(centerRow.contact_email)
+        }
+      } else {
+        state.value.centerContext = null
+      }
+    } else {
+      state.value.centerContext = null
+    }
+
+    persistContext()
     console.info('[auth] profile loaded', state.value.profile)
   }
 
@@ -81,15 +186,15 @@ const _useAuth = () => {
 
     state.value.session = data.session
     state.value.user = data.session?.user ?? null
-    await loadProfile()
+    await loadContext({ preferCache: true })
     state.value.ready = true
     state.value.loading = false
 
     supabase.auth.onAuthStateChange((_event, session) => {
       state.value.session = session
       state.value.user = session?.user ?? null
-      loadProfile().catch(() => {
-        state.value.profile = null
+      loadContext({ preferCache: true }).catch(() => {
+        resetContext()
       })
       state.value.ready = true
       state.value.loading = false
@@ -109,7 +214,7 @@ const _useAuth = () => {
 
     state.value.session = data.session
     state.value.user = data.user
-    await loadProfile()
+    await loadContext()
     state.value.ready = true
   }
 
@@ -120,13 +225,25 @@ const _useAuth = () => {
     if (error) throw error
     state.value.session = null
     state.value.user = null
-    state.value.profile = null
+    resetContext()
   }
+
+  const canSeeAll = computed(() => {
+    const role = state.value.profile?.role
+    return role === 'super_admin' || role === 'admin' || Boolean(state.value.profile?.is_super_admin)
+  })
+
+  const resolvedLeadVendor = computed(() => {
+    if (canSeeAll.value) return null
+    return normalizeString(state.value.centerContext?.lead_vendor)
+  })
 
   return {
     state: readonly(state),
     init,
-    refreshProfile: loadProfile,
+    canSeeAll,
+    resolvedLeadVendor,
+    refreshProfile: loadContext,
     signInWithPassword,
     signOut
   }

@@ -56,7 +56,7 @@ const handleSubmit = async () => {
 
     const isAdmin = auth.state.value.profile?.role === 'admin'
     const isSuperAdmin = auth.state.value.profile?.role === 'super_admin'
-    const hasCenter = Boolean(auth.state.value.profile?.center_id)
+    const hasCenter = Boolean(auth.state.value.centerContext?.id)
 
     if (!isSuperAdmin && !isAdmin && !hasCenter) {
       await auth.signOut()

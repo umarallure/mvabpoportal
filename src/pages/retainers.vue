@@ -204,20 +204,8 @@ const load = async () => {
 
     const isAdmin = auth.state.value.profile?.role === 'admin'
     const isSuperAdmin = auth.state.value.profile?.role === 'super_admin'
-    const canSeeAll = isSuperAdmin || isAdmin
-    const centerId = auth.state.value.profile?.center_id ?? null
-    let leadVendor = auth.state.value.profile?.lead_vendor ?? null
-
-    if (!canSeeAll && !leadVendor && centerId) {
-      const { data: center, error: centerError } = await supabase
-        .from('centers')
-        .select('lead_vendor')
-        .eq('id', centerId)
-        .maybeSingle()
-
-      if (centerError) throw centerError
-      leadVendor = (center?.lead_vendor as string | null) ?? null
-    }
+    const canSeeAll = auth.canSeeAll.value
+    const leadVendor = auth.resolvedLeadVendor.value
 
     if (!canSeeAll && !leadVendor) {
       rows.value = []

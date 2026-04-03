@@ -33,29 +33,6 @@ const RETAINER_STATUSES = [
   'Retainer Paid'
 ]
 
-const resolveLeadVendor = async (): Promise<string | null> => {
-  await auth.init()
-  const profile = auth.state.value.profile
-  if (!profile) return null
-
-  const role = profile.role
-  const isAdmin = role === 'admin' || role === 'super_admin'
-  if (isAdmin) return null
-
-  if (profile.lead_vendor) return profile.lead_vendor
-
-  if (profile.center_id) {
-    const { data: center } = await supabase
-      .from('centers')
-      .select('lead_vendor')
-      .eq('id', profile.center_id)
-      .maybeSingle()
-    return (center?.lead_vendor as string | null) ?? null
-  }
-
-  return '__none__'
-}
-
 const fetchChartData = async () => {
   const intervalFn = ({
     daily: eachDayOfInterval,
@@ -67,9 +44,11 @@ const fetchChartData = async () => {
   const buckets = dates.map(date => ({ date, amount: 0 }))
 
   try {
-    const leadVendor = await resolveLeadVendor()
+    await auth.init()
+    const leadVendor = auth.resolvedLeadVendor.value
+    const hasAccess = auth.canSeeAll.value || Boolean(auth.state.value.centerContext?.id)
 
-    if (leadVendor === '__none__') {
+    if (!hasAccess) {
       data.value = buckets
       return
     }
