@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, shallowRef } from 'vue'
+import { shallowRef } from 'vue'
 import { sub } from 'date-fns'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import { useDashboard } from '../composables/useDashboard'
@@ -21,7 +21,7 @@ const range = shallowRef<Range>({
   start: sub(new Date(), { days: 14 }),
   end: new Date()
 })
-const period = ref<Period>('daily')
+const period: Period = 'daily'
 </script>
 
 <template>
@@ -55,8 +55,6 @@ const period = ref<Period>('daily')
       <UDashboardToolbar>
         <template #left>
           <HomeDateRangePicker v-model="range" class="-ms-1" />
-
-          <HomePeriodSelect v-model="period" :range="range" />
         </template>
       </UDashboardToolbar>
     </template>
