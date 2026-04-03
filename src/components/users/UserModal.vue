@@ -135,14 +135,27 @@ const handleUpdateOpen = (value: boolean) => {
         </UFormField>
 
         <UFormField label="Role">
-          <USelect v-model="role" :items="roleOptions" value-key="value" label-key="label" />
+          <USelect
+            v-model="role"
+            :items="roleOptions"
+            value-key="value"
+            label-key="label"
+          />
         </UFormField>
 
         <div class="flex justify-end gap-2">
-          <UButton color="neutral" variant="ghost" :disabled="props.loading" @click="handleClose">
+          <UButton
+            color="neutral"
+            variant="ghost"
+            :disabled="props.loading"
+            @click="handleClose"
+          >
             Cancel
           </UButton>
-          <UButton :disabled="props.loading || !canSubmit()" @click="handleSubmit">
+          <UButton
+            :disabled="props.loading || !canSubmit()"
+            @click="handleSubmit"
+          >
             {{ isEditMode ? 'Save' : 'Create' }}
           </UButton>
         </div>

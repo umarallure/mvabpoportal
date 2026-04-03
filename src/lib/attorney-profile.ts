@@ -42,13 +42,17 @@ export interface AttorneyProfileData {
   avg_time_to_close?: string | null
 }
 
+export type AttorneyProfileRow = AttorneyProfileData & {
+  user_id: string
+}
+
 /**
  * Save or update attorney profile using Supabase client
  */
 export async function saveAttorneyProfile(
   userId: string,
   data: Partial<AttorneyProfileData>
-) {
+): Promise<AttorneyProfileRow> {
   const { data: profile, error } = await supabase
     .from('attorney_profiles')
     .upsert({
@@ -64,7 +68,7 @@ export async function saveAttorneyProfile(
     throw new Error(error.message || 'Failed to save attorney profile')
   }
 
-  return profile
+  return profile as AttorneyProfileRow
 }
 
 /**
@@ -74,7 +78,7 @@ export async function saveAttorneyProfile(
 export async function patchAttorneyProfile(
   userId: string,
   data: Partial<AttorneyProfileData>
-) {
+): Promise<AttorneyProfileRow> {
   const { data: profile, error } = await supabase
     .from('attorney_profiles')
     .update(data)
@@ -86,13 +90,13 @@ export async function patchAttorneyProfile(
     throw new Error(error.message || 'Failed to update attorney profile')
   }
 
-  return profile
+  return profile as AttorneyProfileRow
 }
 
 /**
  * Get attorney profile for current user
  */
-export async function getAttorneyProfile(userId: string) {
+export async function getAttorneyProfile(userId: string): Promise<AttorneyProfileRow | null> {
   const { data: profile, error } = await supabase
     .from('attorney_profiles')
     .select('*')
@@ -103,7 +107,7 @@ export async function getAttorneyProfile(userId: string) {
     throw new Error(error.message || 'Failed to fetch attorney profile')
   }
 
-  return profile
+  return profile as AttorneyProfileRow | null
 }
 
 /**
@@ -112,7 +116,7 @@ export async function getAttorneyProfile(userId: string) {
 export async function updateAvailabilityStatus(
   userId: string,
   status: 'accepting' | 'at_capacity' | 'on_leave'
-) {
+): Promise<AttorneyProfileRow> {
   const { data: profile, error } = await supabase
     .from('attorney_profiles')
     .update({ availability_status: status })
@@ -124,5 +128,5 @@ export async function updateAvailabilityStatus(
     throw new Error(error.message || 'Failed to update availability status')
   }
 
-  return profile
+  return profile as AttorneyProfileRow
 }
