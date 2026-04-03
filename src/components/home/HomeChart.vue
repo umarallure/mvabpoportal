@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { computed, useTemplateRef, ref, watch } from 'vue'
-import { eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval, format, startOfWeek, startOfMonth } from 'date-fns'
-import { VisXYContainer, VisLine, VisAxis, VisArea, VisCrosshair, VisTooltip } from '@unovis/vue'
-import { useElementSize } from '@vueuse/core'
+import { computed, ref, watch } from 'vue'
+import { eachDayOfInterval, eachMonthOfInterval, eachWeekOfInterval, format, startOfMonth, startOfWeek } from 'date-fns'
+import { useRoute } from 'vue-router'
 import type { Period, Range } from '../../types'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../composables/useAuth'
-
-const cardRef = useTemplateRef<HTMLElement | null>('cardRef')
+import AnalyticsTrendCard from '../dashboard/AnalyticsTrendCard.vue'
+import type { AnalyticsTrendPoint } from '../dashboard/AnalyticsTrendCard.vue'
+import { buildDashboardMockTrend, resolveDashboardMockSettings } from '../../lib/dashboard-mocks'
 
 const props = defineProps<{
   period: Period
@@ -15,21 +15,21 @@ const props = defineProps<{
 }>()
 
 const auth = useAuth()
+const route = useRoute()
 
 type DataRecord = {
   date: Date
   amount: number
 }
 
-const { width } = useElementSize(cardRef)
-
 const data = ref<DataRecord[]>([])
+const isLoading = ref(false)
 
 const RETAINER_STATUSES = [
   'Pending Approval',
   'Retainer Signed',
   'Retainer Signed Pending',
-  'Retainer Signed – Payable',
+  'Retainer Signed - Payable',
   'Retainer Paid'
 ]
 
@@ -43,13 +43,21 @@ const fetchChartData = async () => {
   const dates = intervalFn(props.range)
   const buckets = dates.map(date => ({ date, amount: 0 }))
 
+  isLoading.value = true
+  data.value = buckets
+
   try {
+    const mockSettings = resolveDashboardMockSettings(route.query)
+    if (mockSettings.enabled) {
+      data.value = buildDashboardMockTrend(props.period, props.range, mockSettings.scenario)
+      return
+    }
+
     await auth.init()
     const leadVendor = auth.resolvedLeadVendor.value
     const hasAccess = auth.canSeeAll.value || Boolean(auth.state.value.centerContext?.id)
 
     if (!hasAccess) {
-      data.value = buckets
       return
     }
 
@@ -71,124 +79,103 @@ const fetchChartData = async () => {
 
     if (error) {
       console.warn('Failed to fetch chart data', error)
-      data.value = buckets
       return
     }
 
-    const bucketKey = (d: Date): string => {
-      if (props.period === 'monthly') return format(startOfMonth(d), 'yyyy-MM-dd')
-      if (props.period === 'weekly') return format(startOfWeek(d), 'yyyy-MM-dd')
-      return format(d, 'yyyy-MM-dd')
+    const bucketKey = (date: Date): string => {
+      if (props.period === 'monthly') return format(startOfMonth(date), 'yyyy-MM-dd')
+      if (props.period === 'weekly') return format(startOfWeek(date), 'yyyy-MM-dd')
+      return format(date, 'yyyy-MM-dd')
     }
 
     const countMap = new Map<string, number>()
-    buckets.forEach(b => countMap.set(bucketKey(b.date), 0))
+    buckets.forEach(bucket => countMap.set(bucketKey(bucket.date), 0))
 
-    ;(rows ?? []).forEach(r => {
-      if (!r.date) return
-      const rowDate = new Date(r.date + 'T00:00:00')
+    ;(rows ?? []).forEach((row) => {
+      if (!row.date) return
+      const rowDate = new Date(`${row.date}T00:00:00`)
       const key = bucketKey(rowDate)
-      if (countMap.has(key)) {
-        countMap.set(key, (countMap.get(key) ?? 0) + 1)
-      }
+      if (!countMap.has(key)) return
+      countMap.set(key, (countMap.get(key) ?? 0) + 1)
     })
 
-    data.value = buckets.map(b => ({
-      date: b.date,
-      amount: countMap.get(bucketKey(b.date)) ?? 0
+    data.value = buckets.map(bucket => ({
+      date: bucket.date,
+      amount: countMap.get(bucketKey(bucket.date)) ?? 0
     }))
-  } catch (e) {
-    console.warn('Chart data error', e)
+  } catch (error) {
+    console.warn('Chart data error', error)
     data.value = buckets
+  } finally {
+    isLoading.value = false
   }
 }
 
-watch([() => props.period, () => props.range], () => {
+watch([() => props.period, () => props.range, () => route.fullPath], () => {
   fetchChartData()
 }, { immediate: true })
 
-const x = (_: DataRecord, i: number) => i
-const y = (d: DataRecord) => d.amount
+const growth = computed(() => {
+  const latestIndex = data.value.length - 1
+  const previousIndex = data.value.length - 2
+  const current = latestIndex >= 0 ? data.value[latestIndex]?.amount ?? 0 : 0
+  const previous = previousIndex >= 0 ? data.value[previousIndex]?.amount ?? 0 : 0
 
-const total = computed(() => data.value.reduce((acc: number, { amount }) => acc + amount, 0))
+  if (previous === 0 && current > 0) return 100
+  if (previous === 0 && current === 0) return 0
+  return Math.round(((current - previous) / previous) * 100)
+})
 
-const formatDate = (date: Date): string => {
-  return ({
-    daily: format(date, 'd MMM'),
-    weekly: format(date, 'd MMM'),
-    monthly: format(date, 'MMM yyy')
-  })[props.period]
+const formatDate = (date: Date): string => ({
+  daily: format(date, 'd MMM'),
+  weekly: format(date, 'd MMM'),
+  monthly: format(date, 'MMM yyyy')
+}[props.period])
+
+const subtitle = computed(() =>
+  `${props.period.charAt(0).toUpperCase()}${props.period.slice(1)} range: ${format(props.range.start, 'd MMM')} to ${format(props.range.end, 'd MMM')}`
+)
+
+const growthLabel = computed(() => ({
+  daily: 'vs previous day',
+  weekly: 'vs previous week',
+  monthly: 'vs last month'
+}[props.period]))
+
+const chartPoints = computed<AnalyticsTrendPoint[]>(() => data.value.map((record) => ({
+  key: record.date.toISOString(),
+  label: formatDate(record.date),
+  shortLabel: formatDate(record.date),
+  value: record.amount,
+  count: record.amount,
+  summary: `${record.amount} ${record.amount === 1 ? 'retainer' : 'retainers'}`,
+  emptyLabel: 'No data yet'
+})))
+
+const summaryPoints = computed(() => chartPoints.value.slice(-6))
+
+const tooltipFormatter = (point: AnalyticsTrendPoint) => {
+  if (point.value === 0) return `${point.label}: No data yet`
+  return `${point.label}: ${point.value} retainer${point.value === 1 ? '' : 's'}`
 }
 
-const xTicks = (i: number) => {
-  if (i === 0 || i === data.value.length - 1 || !data.value[i]) {
-    return ''
-  }
-
-  return formatDate(data.value[i].date)
-}
-
-const template = (d: DataRecord) => `${formatDate(d.date)}: ${d.amount} retainer${d.amount !== 1 ? 's' : ''}`
+const countFormatter = (count: number) => `${count} ${count === 1 ? 'retainer' : 'retainers'}`
 </script>
 
 <template>
-  <UCard ref="cardRef" :ui="{ root: 'overflow-visible', body: '!px-0 !pt-0 !pb-3' }">
-    <template #header>
-      <div>
-        <p class="text-xs text-muted uppercase mb-1.5">
-          Retainers
-        </p>
-        <p class="text-3xl text-highlighted font-semibold">
-          {{ total }}
-        </p>
-      </div>
-    </template>
-
-    <VisXYContainer
-      :data="data"
-      :padding="{ top: 40 }"
-      class="h-96"
-      :width="width"
-    >
-      <VisLine
-        :x="x"
-        :y="y"
-        color="var(--ui-primary)"
-      />
-      <VisArea
-        :x="x"
-        :y="y"
-        color="var(--ui-primary)"
-        :opacity="0.1"
-      />
-
-      <VisAxis
-        type="x"
-        :x="x"
-        :tick-format="xTicks"
-      />
-
-      <VisCrosshair
-        color="var(--ui-primary)"
-        :template="template"
-      />
-
-      <VisTooltip />
-    </VisXYContainer>
-  </UCard>
+  <AnalyticsTrendCard
+    title="Retainers Trend"
+    :subtitle="subtitle"
+    icon="i-lucide-bar-chart"
+    accent="var(--dashboard-accent-primary)"
+    compact
+    :chart-min-height="420"
+    :loading="isLoading"
+    :points="chartPoints"
+    :summary-points="summaryPoints"
+    :growth="growth"
+    :growth-label="growthLabel"
+    :count-formatter="countFormatter"
+    :tooltip-formatter="tooltipFormatter"
+  />
 </template>
-
-<style scoped>
-.unovis-xy-container {
-  --vis-crosshair-line-stroke-color: var(--ui-primary);
-  --vis-crosshair-circle-stroke-color: var(--ui-bg);
-
-  --vis-axis-grid-color: var(--ui-border);
-  --vis-axis-tick-color: var(--ui-border);
-  --vis-axis-tick-label-color: var(--ui-text-dimmed);
-
-  --vis-tooltip-background-color: var(--ui-bg);
-  --vis-tooltip-border-color: var(--ui-border);
-  --vis-tooltip-text-color: var(--ui-text-highlighted);
-}
-</style>
