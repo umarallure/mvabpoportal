@@ -1,6 +1,6 @@
 import { ref, readonly, computed, watch } from 'vue'
 import { createSharedComposable } from '@vueuse/core'
-import { getAttorneyProfile, patchAttorneyProfile, saveAttorneyProfile, type AttorneyProfileData } from '../lib/attorney-profile'
+import { getAttorneyProfile, patchAttorneyProfile, saveAttorneyProfile, type AttorneyProfileData, type AttorneyProfileRow } from '../lib/attorney-profile'
 
 export interface AttorneyProfileState {
   // Tab 1: General Information
@@ -93,7 +93,7 @@ const _useAttorneyProfile = () => {
     return out
   }
 
-  const mapDatabaseToState = (dbProfile: any): AttorneyProfileState => {
+  const mapDatabaseToState = (dbProfile: AttorneyProfileRow): AttorneyProfileState => {
     return {
       profilePhoto: dbProfile.profile_photo_url || '',
       fullName: dbProfile.full_name || '',
@@ -224,8 +224,12 @@ const _useAttorneyProfile = () => {
   const commitEditing = async (userId: string, fields?: Array<keyof AttorneyProfileState>) => {
     const selected = fields ?? []
     const partial: Partial<AttorneyProfileState> = {}
+    const assignDraftField = <K extends keyof AttorneyProfileState>(key: K) => {
+      partial[key] = draft.value[key]
+    }
+
     for (const key of selected) {
-      ;(partial as any)[key] = (draft.value as any)[key]
+      assignDraftField(key)
     }
 
     loading.value = true

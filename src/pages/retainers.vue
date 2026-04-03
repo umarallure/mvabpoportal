@@ -19,6 +19,15 @@ type DailyDealFlow = {
   created_at: string | null
 }
 
+type CenterLeadVendorRow = {
+  lead_vendor: string | null
+}
+
+type AttorneyNameRow = {
+  user_id: string | null
+  full_name: string | null
+}
+
 const router = useRouter()
 const auth = useAuth()
 
@@ -190,10 +199,11 @@ const load = async () => {
 
       if (centersError) throw centersError
 
-      const vendors = [...new Set((centers ?? [])
-        .map((c: any) => c?.lead_vendor)
-        .filter((v: any) => typeof v === 'string' && v.trim().length)
-        .map((v: string) => v.trim())
+      const centerRows = (centers ?? []) as CenterLeadVendorRow[]
+      const vendors = [...new Set(centerRows
+        .map((center) => center.lead_vendor)
+        .filter((vendor): vendor is string => typeof vendor === 'string' && vendor.trim().length > 0)
+        .map((vendor) => vendor.trim())
       )].sort((a, b) => a.localeCompare(b))
 
       leadVendors.value = vendors
@@ -247,8 +257,11 @@ const load = async () => {
 
       if (attorneysError) throw attorneysError
 
+      const attorneyRows = (attorneys ?? []) as AttorneyNameRow[]
       const attorneyNameByUserId = new Map(
-        (attorneys ?? []).map((a: any) => [String(a.user_id), String(a.full_name ?? '').trim()])
+        attorneyRows
+          .filter((attorney): attorney is { user_id: string; full_name: string | null } => Boolean(attorney.user_id))
+          .map((attorney) => [attorney.user_id, String(attorney.full_name ?? '').trim()] as const)
       )
 
       dealFlows.forEach((flow) => {

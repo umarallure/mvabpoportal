@@ -18,7 +18,12 @@ const handleUpdateOpen = (value: boolean) => {
 </script>
 
 <template>
-  <UModal :open="props.open" title="Delete user" :dismissible="false" @update:open="handleUpdateOpen">
+  <UModal
+    :open="props.open"
+    title="Delete user"
+    :dismissible="false"
+    @update:open="handleUpdateOpen"
+  >
     <template #body>
       <div class="space-y-4">
         <p class="text-sm text-white/80">
@@ -34,10 +39,19 @@ const handleUpdateOpen = (value: boolean) => {
         />
 
         <div class="flex justify-end gap-2">
-          <UButton color="neutral" variant="ghost" :disabled="props.loading" @click="() => emit('update:open', false)">
+          <UButton
+            color="neutral"
+            variant="ghost"
+            :disabled="props.loading"
+            @click="() => emit('update:open', false)"
+          >
             Cancel
           </UButton>
-          <UButton color="error" :disabled="props.loading" @click="emit('confirm')">
+          <UButton
+            color="error"
+            :disabled="props.loading"
+            @click="emit('confirm')"
+          >
             Delete
           </UButton>
         </div>
