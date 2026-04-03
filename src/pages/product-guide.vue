@@ -48,12 +48,12 @@ const steps: GuideStep[] = [
   },
   {
     id: 2,
-    title: 'Transfers',
+    title: 'Transfer Pipeline',
     description: 'Manage lead transfers across pipeline stages and track progress in real time.',
     icon: 'i-lucide-arrow-right-left',
     vimeoId: '1163430559',
     duration: '00:08',
-    resourceLabel: 'Transfers User Manual',
+    resourceLabel: 'Transfer Pipeline User Manual',
     resourceUrl: '/resources/Unlimited-Insurance-Agent-Onboarding-and-Interview-Flow.pdf'
   },
   {
@@ -68,12 +68,12 @@ const steps: GuideStep[] = [
   },
   {
     id: 4,
-    title: 'Submission Portal',
+    title: 'Submission Pipeline',
     description: 'Monitor your submission pipeline from intake through case completion using Kanban stages.',
     icon: 'i-lucide-layout-dashboard',
     vimeoId: '1163430559',
     duration: '00:08',
-    resourceLabel: 'Submission Portal Guide',
+    resourceLabel: 'Submission Pipeline Guide',
     resourceUrl: '/resources/Unlimited-Insurance-Agent-Onboarding-and-Interview-Flow.pdf'
   },
   {

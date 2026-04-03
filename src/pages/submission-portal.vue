@@ -2,94 +2,48 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import {
+  ALL_FILTER_VALUE,
+  formatSourceTypeLabel,
+  matchesPipelineDateRange,
+  PIPELINE_DATE_RANGE_OPTIONS,
+  resolvePipelineSourceType,
+  resolvePipelineState,
+  type PipelineDateRange
+} from '../lib/pipeline-filters'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../composables/useAuth'
+import { getSubmissionStageDescription } from '../lib/pipeline-stage-descriptions'
 import { usePipelineStages } from '../composables/usePipelineStages'
 
-const { stages: dbStages } = usePipelineStages('submission_portal')
+const { stages: dbStages } = usePipelineStages('submission_portal', { publisherPortalView: true })
 
-// --- Stage/reason parsing helpers ---
-const REASON_SEPARATOR = ' - '
-
-function parseStageLabel(label: string): { parent: string; reason: string | null } {
-  const idx = label.indexOf(REASON_SEPARATOR)
-  if (idx === -1) return { parent: label, reason: null }
-  return { parent: label.substring(0, idx), reason: label.substring(idx + REASON_SEPARATOR.length) }
-}
-
-function slugifyParent(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
-}
-
-interface ParentStage {
-  key: string
-  label: string
-  columnClass: string
-  headerClass: string
-  reasons: string[]
-}
-
-function deriveParentStagesFromDb(stages: { label: string; column_class: string | null; header_class: string | null }[]): ParentStage[] {
-  const map = new Map<string, ParentStage>()
-  for (const s of stages) {
-    const { parent, reason } = parseStageLabel(s.label)
-    const key = slugifyParent(parent)
-    if (!map.has(key)) {
-      map.set(key, {
-        key,
-        label: parent,
-        columnClass: s.column_class || '',
-        headerClass: s.header_class || '',
-        reasons: []
-      })
-    }
-    if (reason) map.get(key)!.reasons.push(reason)
-  }
-  return Array.from(map.values())
-}
-
-function buildStatusLabel(parentLabel: string, reason: string | null): string {
-  if (reason) return `${parentLabel}${REASON_SEPARATOR}${reason}`
-  return parentLabel
-}
-
-// --- Derived parent stages (kanban columns) ---
-const parentStages = computed(() => deriveParentStagesFromDb(dbStages.value))
-
-const STAGES = computed(() => parentStages.value.map((s) => ({ key: s.key, label: s.label })))
-
-const stageTheme = computed(() => {
-  const theme: Record<string, string> = {}
-  parentStages.value.forEach((s) => {
-    theme[s.key] = s.columnClass || ''
-  })
-  return theme
-})
+// --- Stage helpers ---
+const STAGES = computed(() => dbStages.value.map((s) => ({
+  key: s.key,
+  label: s.label,
+  description: getSubmissionStageDescription(s.key)
+})))
 
 const stageCardClass = (stageKey: string) => {
-  return stageTheme.value[stageKey] || ''
+  const stage = dbStages.value.find(s => s.key === stageKey)
+  return stage?.column_class || ''
 }
 
-const reasonsByParent = computed(() => {
-  const map: Record<string, string[]> = {}
-  parentStages.value.forEach((s) => {
-    if (s.reasons.length > 0) map[s.label] = s.reasons
-  })
-  return map
-})
-
-const buildAllowedStatuses = () => {
-  const fullLabels = dbStages.value.map((s) => s.label)
-  const parentLabels = parentStages.value.map((s) => s.label)
-  return Array.from(new Set([...fullLabels, ...parentLabels]))
-}
+const buildAllowedStatuses = () => dbStages.value.map(s => s.key)
 
 type SubmissionPortalRow = Record<string, unknown> & {
   id: string
   submission_id: string
   date?: string | null
+  // leads table uses customer_full_name; fall back to insured_name for legacy rows
+  customer_full_name?: string | null
   insured_name?: string | null
+  state?: string | null
   lead_vendor?: string | null
+  // leads table uses phone / customer_phone; fall back to client_phone_number
+  phone?: string | null
+  customer_phone?: string | null
   client_phone_number?: string | null
   buffer_agent?: string | null
   agent?: string | null
@@ -112,29 +66,11 @@ const asRecord = (value: unknown): Record<string, unknown> => {
   return {}
 }
 
-const getString = (record: Record<string, unknown>, key: string) => {
-  const value = record[key]
-  if (typeof value === 'string') return value
-  if (value == null) return null
-  return String(value)
-}
-
-const getBool = (record: Record<string, unknown>, key: string) => Boolean(record[key])
-
 const deriveStageKey = (row: SubmissionPortalRow): string => {
   const status = String(row.status || '').trim()
-  if (!status) return parentStages.value[0]?.key ?? ''
-  // Find matching DB stage label, then derive parent key
-  const matched = dbStages.value.find((s) => s.label === status)
-  if (matched) {
-    const { parent } = parseStageLabel(matched.label)
-    return slugifyParent(parent)
-  }
-  // Fallback: try parsing status directly
-  const { parent } = parseStageLabel(status)
-  const parentKey = slugifyParent(parent)
-  if (parentStages.value.some((s) => s.key === parentKey)) return parentKey
-  return parentStages.value[0]?.key ?? ''
+  if (!status) return STAGES.value[0]?.key ?? ''
+  const matched = dbStages.value.find((s) => s.key === status)
+  return matched ? matched.key : (STAGES.value[0]?.key ?? '')
 }
 
 const auth = useAuth()
@@ -213,65 +149,21 @@ const fetchNoteCounts = async (currentRows: SubmissionPortalRow[] | null | undef
 }
 
 const searchTerm = ref('')
-const dateFilter = ref('')
-const statusFilter = ref('__ALL__')
-const leadVendorFilter = ref('__ALL__')
-const showDuplicates = ref(true)
+const filtersOpen = ref(false)
+const selectedDateRange = ref<PipelineDateRange>('all')
+const customStartDate = ref('')
+const customEndDate = ref('')
+const selectedStage = ref(ALL_FILTER_VALUE)
+const selectedSourceType = ref(ALL_FILTER_VALUE)
+const selectedStates = ref<string[]>([])
 
 const editOpen = ref(false)
 const editSaving = ref(false)
 const editRow = ref<SubmissionPortalRow | null>(null)
 const editStage = ref('')
-const editReason = ref('')
 const editNotes = ref('')
 
-const editAvailableReasons = computed(() => {
-  const parentLabel = String(editStage.value || '').trim()
-  return reasonsByParent.value[parentLabel] || []
-})
-
-const canSeeAll = computed(() => {
-  const role = auth.state.value.profile?.role
-  const isSuperAdmin = role === 'super_admin' || Boolean(auth.state.value.profile?.is_super_admin)
-  const isAdmin = role === 'admin'
-  return isSuperAdmin || isAdmin
-})
-
-const resolvedLeadVendor = ref<string | null>(null)
-
-const ensureResolvedLeadVendor = async () => {
-  resolvedLeadVendor.value = null
-
-  if (canSeeAll.value) return
-
-  const direct = String(auth.state.value.profile?.lead_vendor ?? '').trim()
-  if (direct) {
-    resolvedLeadVendor.value = direct
-    return
-  }
-
-  const centerId = String(auth.state.value.profile?.center_id ?? '').trim()
-  if (!centerId) return
-
-  try {
-    const { data: center, error } = await supabase
-      .from('centers')
-      .select('lead_vendor')
-      .eq('id', centerId)
-      .maybeSingle()
-
-    if (error) return
-    const vendor = String((center as { lead_vendor?: unknown } | null)?.lead_vendor ?? '').trim()
-    if (vendor) resolvedLeadVendor.value = vendor
-  } catch {
-    // ignore
-  }
-}
-
-const canSeeLeadVendorUi = computed(() => {
-  const role = auth.state.value.profile?.role
-  return role === 'super_admin' || role === 'admin'
-})
+const canSeeAll = auth.canSeeAll
 
 const authorName = computed(() => {
   const profile = auth.state.value.profile
@@ -292,35 +184,42 @@ const attorneyById = computed(() => {
   return map
 })
 
-const leadVendorOptions = computed(() => {
-  const set = new Set<string>()
-  rows.value.forEach((r) => {
-    const v = String(r.lead_vendor || '').trim()
-    if (v) set.add(v)
-  })
-  const values = Array.from(set).sort((a, b) => a.localeCompare(b))
-  return [{ label: 'All Vendors', value: '__ALL__' }, ...values.map((v) => ({ label: v, value: v }))]
+const stageFilterOptions = computed(() => [
+  { label: 'All Stages', value: ALL_FILTER_VALUE },
+  ...STAGES.value.map(stage => ({ label: stage.label, value: stage.key }))
+])
+
+const sourceTypeOptions = computed(() => {
+  const values = Array.from(new Set(rows.value.map(row => String(row.source_type || '').trim().toLowerCase()).filter(Boolean)))
+  return [
+    { label: 'All Sources', value: ALL_FILTER_VALUE },
+    ...values
+      .sort((a, b) => formatSourceTypeLabel(a).localeCompare(formatSourceTypeLabel(b)))
+      .map(value => ({ label: formatSourceTypeLabel(value), value }))
+  ]
 })
 
-const statusOptions = computed(() => {
-  const fullLabels = dbStages.value.map((s) => s.label)
-  return [{ label: 'All Statuses', value: '__ALL__' }, ...fullLabels.map((s) => ({ label: s, value: s }))]
+const stateOptions = computed(() => {
+  const values = Array.from(new Set(rows.value.map(row => String(row.state || '').trim()).filter(Boolean)))
+  return values
+    .sort((a, b) => a.localeCompare(b))
+    .map(value => ({ label: value, value }))
 })
 
-const removeDuplicates = (records: SubmissionPortalRow[]): SubmissionPortalRow[] => {
-  const seen = new Map<string, SubmissionPortalRow>()
-  records.forEach((record) => {
-    const key = `${String(record.insured_name || '')}|${String(record.client_phone_number || '')}|${String(record.lead_vendor || '')}`
-    if (!seen.has(key)) seen.set(key, record)
-  })
-  return Array.from(seen.values())
-}
+const activeFilterCount = computed(() => {
+  let count = 0
+  if (selectedDateRange.value !== 'all') count += 1
+  if (selectedStage.value !== ALL_FILTER_VALUE) count += 1
+  if (selectedSourceType.value !== ALL_FILTER_VALUE) count += 1
+  if (selectedStates.value.length > 0) count += 1
+  return count
+})
 
 const filteredRows = computed(() => {
   let data = rows.value.slice()
 
   if (!canSeeAll.value) {
-    const vendor = String(resolvedLeadVendor.value ?? '').trim()
+    const vendor = String(auth.resolvedLeadVendor.value ?? '').trim()
     if (vendor) {
       data = data.filter((r) => String(r.lead_vendor || '').trim() === vendor)
     } else {
@@ -328,16 +227,18 @@ const filteredRows = computed(() => {
     }
   }
 
-  if (dateFilter.value) {
-    data = data.filter((r) => String(r.date || '') === dateFilter.value)
+  data = data.filter((r) => matchesPipelineDateRange(String(r.date || ''), selectedDateRange.value, customStartDate.value, customEndDate.value))
+
+  if (selectedStage.value !== ALL_FILTER_VALUE) {
+    data = data.filter((r) => deriveStageKey(r) === selectedStage.value)
   }
 
-  if (statusFilter.value !== '__ALL__') {
-    data = data.filter((r) => String(r.status || '') === statusFilter.value)
+  if (selectedSourceType.value !== ALL_FILTER_VALUE) {
+    data = data.filter((r) => String(r.source_type || '').trim().toLowerCase() === selectedSourceType.value)
   }
 
-  if (leadVendorFilter.value !== '__ALL__') {
-    data = data.filter((r) => String(r.lead_vendor || '') === leadVendorFilter.value)
+  if (selectedStates.value.length > 0) {
+    data = data.filter((r) => selectedStates.value.includes(String(r.state || '').trim()))
   }
 
   const q = searchTerm.value.trim().toLowerCase()
@@ -354,14 +255,12 @@ const filteredRows = computed(() => {
         r.buffer_agent ?? '',
         r.licensed_agent_account ?? '',
         r.status ?? '',
+        r.state ?? '',
+        formatSourceTypeLabel(String(r.source_type || '')),
         attorneyName
       ].join(' ').toLowerCase()
       return haystack.includes(q)
     })
-  }
-
-  if (!showDuplicates.value) {
-    data = removeDuplicates(data)
   }
 
   return data
@@ -380,11 +279,7 @@ const leadsByStage = computed(() => {
 })
 
 const stageOptions = computed(() => {
-  return parentStages.value.map((s) => ({ label: s.label, value: s.label }))
-})
-
-const reasonOptions = computed(() => {
-  return editAvailableReasons.value.map((r) => ({ label: r, value: r }))
+  return dbStages.value.map((s) => ({ label: s.label, value: s.key }))
 })
 
 const fetchAttorneys = async () => {
@@ -406,99 +301,53 @@ const fetchAttorneys = async () => {
 }
 
 const fetchData = async (showRefreshToast = false) => {
+  const allowedKeys = buildAllowedStatuses()
+  if (allowedKeys.length === 0) return // wait for stages to load via watcher
+
   loading.value = rows.value.length === 0
   refreshing.value = true
 
   try {
     await auth.init()
-    await ensureResolvedLeadVendor()
 
-    const allowedStatuses = buildAllowedStatuses()
-
-    let transfersQuery = supabase
-      .from('daily_deal_flow')
+    let leadsQuery = supabase
+      .from('leads')
       .select('*')
-      .in('status', allowedStatuses)
-      .order('date', { ascending: false })
+      .in('status', allowedKeys)
       .order('created_at', { ascending: false })
 
     if (!canSeeAll.value) {
-      const vendor = String(resolvedLeadVendor.value ?? '').trim()
+      const vendor = String(auth.resolvedLeadVendor.value ?? '').trim()
       if (vendor) {
-        transfersQuery = transfersQuery.eq('lead_vendor', vendor)
+        leadsQuery = leadsQuery.eq('lead_vendor', vendor)
       }
     }
 
-    if (dateFilter.value) {
-      transfersQuery = transfersQuery.eq('date', dateFilter.value)
-    }
+    const { data: leadsData, error: leadsError } = await leadsQuery
 
-    const { data: transferData, error: transferError } = await transfersQuery
-
-    if (transferError) {
+    if (leadsError) {
       rows.value = []
       return
     }
 
-    const submissionIds = Array.from(
-      new Set(
-        ((transferData ?? []) as unknown as SubmissionPortalRow[])
-          .map((t) => String(t.submission_id || '').trim())
-          .filter(Boolean)
-      )
-    )
-
-    let callResultsBySubmissionId = new Map<string, Record<string, unknown>>()
-    if (submissionIds.length > 0) {
-      try {
-        const { data: callResultsData, error: callResultsError } = await supabase
-          .from('call_results')
-          .select('*')
-          .in('submission_id', submissionIds)
-
-        if (!callResultsError && Array.isArray(callResultsData)) {
-          callResultsBySubmissionId = new Map<string, Record<string, unknown>>()
-          callResultsData.forEach((row) => {
-            const record = asRecord(row)
-            const submissionId = String(record.submission_id ?? '').trim()
-            if (!submissionId) return
-            callResultsBySubmissionId.set(submissionId, record)
-          })
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    const merged = ((transferData ?? []) as unknown as SubmissionPortalRow[]).map((transfer) => {
-      const transferRecord = asRecord(transfer)
-      const submissionId = String(transfer.submission_id || '').trim()
-      const callResult = submissionId ? callResultsBySubmissionId.get(submissionId) : undefined
-
-      const isPendingApproval = String(transfer.status || '').trim() === 'Pending Approval'
-      const hasSubmissionData = Boolean(callResult) || isPendingApproval
-
-      const isCallback = getBool(transferRecord, 'from_callback') || getBool(transferRecord, 'is_callback')
-      const sourceType = (getString(transferRecord, 'source_type') ?? (isCallback ? 'callback' : 'zapier')) as string
-
-      if (callResult) {
-        return {
-          ...transfer,
-          ...callResult,
-          has_submission_data: hasSubmissionData,
-          source_type: sourceType
-        }
-      }
-
+    const normalized = ((leadsData ?? []) as unknown as SubmissionPortalRow[]).map((lead) => {
+      const record = asRecord(lead)
+      const sourceType = resolvePipelineSourceType(record)
+      const state = resolvePipelineState(record)
+      const submissionId = String(lead.submission_id || '').trim()
       return {
-        ...transfer,
-        has_submission_data: hasSubmissionData,
-        source_type: sourceType
+        ...lead,
+        insured_name: String(lead.customer_full_name || lead.insured_name || ''),
+        client_phone_number: String(lead.phone || lead.customer_phone || lead.client_phone_number || ''),
+        date: String(lead.date || (record.created_at as string) || ''),
+        has_submission_data: Boolean(submissionId),
+        source_type: sourceType,
+        state
       }
     })
 
-    rows.value = merged
-    await fetchNoteCounts(merged)
+    rows.value = normalized
+    await fetchNoteCounts(normalized)
 
     if (showRefreshToast) {
       try {
@@ -524,9 +373,7 @@ const handleView = (row: SubmissionPortalRow) => {
 
 const openEdit = (row: SubmissionPortalRow) => {
   editRow.value = row
-  const { parent, reason } = parseStageLabel(String(row.status || '').trim())
-  editStage.value = parent
-  editReason.value = reason || ''
+  editStage.value = String(row.status || '').trim()
   editNotes.value = ''
   editOpen.value = true
 }
@@ -534,26 +381,19 @@ const openEdit = (row: SubmissionPortalRow) => {
 const saveEdit = async () => {
   if (!editRow.value) return
 
-  const parentLabel = String(editStage.value || '').trim()
-  if (!parentLabel) return
-
-  // Build the full status: "Parent - Reason" or just "Parent"
-  const reasons = reasonsByParent.value[parentLabel]
-  const selectedReason = String(editReason.value || '').trim()
-  const nextStage = reasons && reasons.length > 0 && selectedReason
-    ? buildStatusLabel(parentLabel, selectedReason)
-    : parentLabel
+  const nextStage = String(editStage.value || '').trim()
+  if (!nextStage) return
 
   const rowId = editRow.value.id
 
   editSaving.value = true
   try {
-    const { error: flowError } = await supabase
-      .from('daily_deal_flow')
+    const { error: leadsError } = await supabase
+      .from('leads')
       .update({ status: nextStage, notes: editNotes.value })
       .eq('id', rowId)
 
-    if (flowError) throw flowError
+    if (leadsError) throw leadsError
 
     const trimmedNote = String(editNotes.value || '').trim()
     if (trimmedNote) {
@@ -594,10 +434,6 @@ const saveEdit = async () => {
   }
 }
 
-watch([dateFilter], () => {
-  void fetchData()
-})
-
 watch(dbStages, (newStages) => {
   if (newStages.length > 0) {
     void fetchData()
@@ -613,7 +449,7 @@ onMounted(async () => {
 <template>
   <UDashboardPanel id="submission-portal">
     <template #header>
-      <UDashboardNavbar title="Submission Portal">
+      <UDashboardNavbar title="Submission Pipeline">
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
@@ -631,35 +467,22 @@ onMounted(async () => {
               placeholder="Search by name, phone, vendor..."
             />
 
-            <USelect
-              v-if="canSeeLeadVendorUi"
-              v-model="leadVendorFilter"
-              class="w-56"
-              :items="leadVendorOptions"
-              value-key="value"
-              label-key="label"
-            />
-
-            <USelect
-              v-model="statusFilter"
-              class="w-64"
-              :items="statusOptions"
-              value-key="value"
-              label-key="label"
-            />
-
-            <UInput v-model="dateFilter" type="date" class="w-56" />
-
-            <USelect
-              v-model="showDuplicates"
-              class="w-56"
-              :items="[
-                { label: 'Show All Records', value: true },
-                { label: 'Remove Duplicates', value: false }
-              ]"
-              value-key="value"
-              label-key="label"
-            />
+            <UButton
+              color="neutral"
+              :variant="filtersOpen || activeFilterCount > 0 ? 'solid' : 'outline'"
+              icon="i-lucide-sliders-horizontal"
+              @click="filtersOpen = !filtersOpen"
+            >
+              Filters
+              <UBadge
+                v-if="activeFilterCount > 0"
+                variant="subtle"
+                color="neutral"
+                size="xs"
+                class="ml-2"
+                :label="String(activeFilterCount)"
+              />
+            </UButton>
           </div>
 
           <div class="flex items-center gap-3">
@@ -677,10 +500,82 @@ onMounted(async () => {
           </div>
         </div>
 
+        <UCard
+          v-if="filtersOpen"
+          class="border-primary/20"
+          :ui="{ body: 'p-4 sm:p-5' }"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <UIcon name="i-lucide-sliders-horizontal" class="size-5 text-muted" />
+              <div class="text-lg font-semibold">Filters</div>
+            </div>
+
+            <UButton
+              icon="i-lucide-x"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              @click="filtersOpen = false"
+            />
+          </div>
+
+          <div class="mt-4 grid gap-4 lg:grid-cols-4">
+            <UFormField label="Date Range">
+              <USelect
+                v-model="selectedDateRange"
+                :items="PIPELINE_DATE_RANGE_OPTIONS"
+                value-key="value"
+                label-key="label"
+              />
+            </UFormField>
+
+            <UFormField label="Stage">
+              <USelect
+                v-model="selectedStage"
+                :items="stageFilterOptions"
+                value-key="value"
+                label-key="label"
+              />
+            </UFormField>
+
+            <UFormField label="Source Type">
+              <USelect
+                v-model="selectedSourceType"
+                :items="sourceTypeOptions"
+                value-key="value"
+                label-key="label"
+              />
+            </UFormField>
+
+            <UFormField label="State">
+              <USelectMenu
+                v-model="selectedStates"
+                :items="stateOptions"
+                value-key="value"
+                label-key="label"
+                multiple
+                placeholder="All States"
+                :search-input="{ placeholder: 'Search states...' }"
+              />
+            </UFormField>
+          </div>
+
+          <div v-if="selectedDateRange === 'custom'" class="mt-4 grid gap-4 sm:grid-cols-2">
+            <UFormField label="Start Date">
+              <UInput v-model="customStartDate" type="date" />
+            </UFormField>
+
+            <UFormField label="End Date">
+              <UInput v-model="customEndDate" type="date" />
+            </UFormField>
+          </div>
+        </UCard>
+
         <div v-if="loading" class="flex flex-1 items-center justify-center text-sm text-muted">
           <div class="flex items-center gap-2">
             <UIcon name="i-lucide-loader-2" class="h-4 w-4 animate-spin" />
-            <span>Loading submission portal data</span>
+            <span>Loading submission pipeline data</span>
           </div>
         </div>
 
@@ -697,7 +592,31 @@ onMounted(async () => {
               :ui="{ body: '!p-0 !sm:p-0 min-h-0 flex-1 flex flex-col' }"
             >
               <div class="flex items-center justify-between border-b border-default px-3 py-2">
-                <div class="text-sm font-semibold">{{ stage.label }}</div>
+                <div class="flex min-w-0 items-center gap-1.5">
+                  <div class="truncate text-sm font-semibold">{{ stage.label }}</div>
+                  <UPopover
+                    mode="hover"
+                    arrow
+                    :open-delay="100"
+                    :close-delay="120"
+                    :content="{ side: 'top', align: 'start', sideOffset: 8 }"
+                  >
+                    <UButton
+                      icon="i-lucide-circle-help"
+                      color="neutral"
+                      variant="ghost"
+                      size="xs"
+                      class="shrink-0"
+                      :ui="{ base: 'rounded-full' }"
+                    />
+                    <template #content>
+                      <div class="max-w-72 p-3">
+                        <div class="text-sm font-semibold text-highlighted">{{ stage.label }}</div>
+                        <p class="mt-1 text-xs leading-5 text-muted">{{ stage.description }}</p>
+                      </div>
+                    </template>
+                  </UPopover>
+                </div>
                 <UBadge variant="subtle" :label="String(leadsByStage.get(stage.key)?.length ?? 0)" />
               </div>
 
@@ -746,17 +665,6 @@ onMounted(async () => {
                     <div class="text-xs text-muted">
                       {{ String(row.date || '') }}
                     </div>
-                  </div>
-
-                  <div
-                    v-if="parseStageLabel(String(row.status || '')).reason"
-                    class="mt-1.5"
-                  >
-                    <UBadge
-                      variant="outline"
-                      size="xs"
-                      :label="parseStageLabel(String(row.status || '')).reason!"
-                    />
                   </div>
 
                   <div class="mt-2 grid grid-cols-1 gap-1 text-xs text-muted">
@@ -811,17 +719,6 @@ onMounted(async () => {
                   :items="stageOptions"
                   value-key="value"
                   label-key="label"
-                  @update:model-value="editReason = ''"
-                />
-              </UFormField>
-
-              <UFormField v-if="editAvailableReasons.length > 0" label="Reason">
-                <USelect
-                  v-model="editReason"
-                  :items="reasonOptions"
-                  value-key="value"
-                  label-key="label"
-                  placeholder="Select reason..."
                 />
               </UFormField>
 

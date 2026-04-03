@@ -33,32 +33,11 @@ const stats = ref<Stat[]>([
   { title: 'Total Paid', icon: 'i-lucide-circle-dollar-sign', value: formatCurrency(0), variation: 0 }
 ])
 
-const resolveLeadVendor = async (): Promise<string | null> => {
-  await auth.init()
-  const profile = auth.state.value.profile
-  if (!profile) return null
-
-  const role = profile.role
-  const isAdmin = role === 'admin' || role === 'super_admin'
-  if (isAdmin) return null // null means "see all"
-
-  if (profile.lead_vendor) return profile.lead_vendor
-
-  if (profile.center_id) {
-    const { data: center } = await supabase
-      .from('centers')
-      .select('lead_vendor')
-      .eq('id', profile.center_id)
-      .maybeSingle()
-    return (center?.lead_vendor as string | null) ?? null
-  }
-
-  return '__none__'
-}
-
 const fetchStats = async () => {
   try {
-    const leadVendor = await resolveLeadVendor()
+    await auth.init()
+    const leadVendor = auth.resolvedLeadVendor.value
+    const hasAccess = auth.canSeeAll.value || Boolean(auth.state.value.centerContext?.id)
 
     const startDate = format(props.range.start, 'yyyy-MM-dd')
     const endDate = format(props.range.end, 'yyyy-MM-dd')
@@ -69,7 +48,7 @@ const fetchStats = async () => {
       .gte('date', startDate)
       .lte('date', endDate)
 
-    if (leadVendor === '__none__') {
+    if (!hasAccess) {
       stats.value = [
         { title: 'Total Transfers', icon: 'i-lucide-arrow-right-left', value: 0, variation: 0 },
         { title: 'Total Retainers', icon: 'i-lucide-briefcase', value: 0, variation: 0 },

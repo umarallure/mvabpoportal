@@ -6,13 +6,19 @@ export interface PipelineStage {
   pipeline: string
   key: string
   label: string
+  description?: string | null
   display_order: number
   column_class: string | null
   header_class: string | null
   is_active: boolean
+  publisher_portal_stage_view?: boolean | null
 }
 
-export function usePipelineStages(pipeline: string) {
+interface UsePipelineStagesOptions {
+  publisherPortalView?: boolean
+}
+
+export function usePipelineStages(pipeline: string, options: UsePipelineStagesOptions = {}) {
   const stages = ref<PipelineStage[]>([])
   const loading = ref(true)
   const error = ref<string | null>(null)
@@ -22,12 +28,29 @@ export function usePipelineStages(pipeline: string) {
     error.value = null
 
     try {
-      const { data, error: fetchError } = await supabase
-        .from('portal_stages')
-        .select('*')
-        .eq('pipeline', pipeline)
-        .eq('is_active', true)
-        .order('display_order', { ascending: true })
+      const runQuery = async (applyPublisherViewFilter: boolean) => {
+        let query = supabase
+          .from('portal_stages')
+          .select('*')
+          .eq('pipeline', pipeline)
+          .eq('is_active', true)
+
+        if (applyPublisherViewFilter) {
+          query = query.eq('publisher_portal_stage_view', true)
+        }
+
+        return query.order('display_order', { ascending: true })
+      }
+
+      let { data, error: fetchError } = await runQuery(Boolean(options.publisherPortalView))
+
+      if (
+        fetchError &&
+        options.publisherPortalView &&
+        /publisher_portal_stage_view/i.test(fetchError.message)
+      ) {
+        ;({ data, error: fetchError } = await runQuery(false))
+      }
 
       if (fetchError) {
         error.value = fetchError.message
