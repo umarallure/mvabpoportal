@@ -15,6 +15,7 @@ const router = createRouter({
     { path: '/get-started', component: () => import('./pages/get-started.vue') },
     { path: '/dashboard', component: () => import('./pages/dashboard.vue') },
     { path: '/inbox', component: () => import('./pages/inbox.vue') },
+    { path: '/product-offering', component: () => import('./pages/product-offering.vue') },
     { path: '/transfers', component: () => import('./pages/transfers.vue') },
     { path: '/retainers', component: () => import('./pages/retainers.vue') },
     { path: '/retainers/:id', component: () => import('./pages/retainers-details.vue') },
