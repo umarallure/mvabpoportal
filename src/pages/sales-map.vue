@@ -67,17 +67,35 @@ const US_STATES: UsState[] = [
 type StateData = {
   code: string
   name: string
-  status: 'green' | 'yellow' | 'red' | 'blocked'
-  volume: number
-  criteria: string
+  status: 'unblocked' | 'temporarily_blocked' | 'permanently_blocked'
+  capacity: 'low' | 'medium' | 'high' | null
+  attorneyCount: number
+  description: string
+  notes: string | null
 }
 
-type OrderRow = {
-  target_states?: string[] | null
-  status?: string | null
-  quota_total?: number | null
-  quota_filled?: number | null
-  expires_at?: string | null
+type SalesMapStateRow = {
+  state_code?: string | null
+  state_name?: string | null
+  availability_status?: string | null
+  notes?: string | null
+}
+
+type LawyerRequirementRow = {
+  attorney_id?: string | null
+  attorney_name?: string | null
+  states?: unknown
+  lawyer_type?: string | null
+}
+
+type AttorneyProfileRow = {
+  user_id?: string | null
+  full_name?: string | null
+  firm_name?: string | null
+  primary_email?: string | null
+  personal_email?: string | null
+  licensed_states?: string[] | null
+  account_type?: string | null
 }
 
 const loading = ref(false)
@@ -98,59 +116,75 @@ const tooltip = ref<TooltipState>({
   state: null
 })
 
-const toStatus = (volume: number): StateData['status'] => {
-  if (volume <= 0) return 'blocked'
-  if (volume === 1) return 'red'
-  if (volume === 2) return 'yellow'
-  return 'green'
+const US_STATE_CODES = new Set(US_STATES.map((state) => state.code))
+
+const descriptionForStatus = (status: StateData['status']) => {
+  if (status === 'permanently_blocked') return 'Temporarily blocked state'
+  if (status === 'temporarily_blocked') return 'Blocked state'
+  return 'Unblocked state'
 }
 
-const criteriaForStatus = (status: StateData['status']) => {
-  if (status === 'blocked') return 'No selling capacity'
-  if (status === 'green') return 'High selling capacity'
-  if (status === 'yellow') return 'Moderate selling capacity'
-  return 'Low selling capacity'
+const capacityForCount = (count: number): Exclude<StateData['capacity'], null> => {
+  if (count >= 3) return 'high'
+  if (count === 2) return 'medium'
+  return 'low'
+}
+
+const capacityLabel = (capacity: StateData['capacity']) => {
+  if (capacity === 'high') return 'High selling capacity'
+  if (capacity === 'medium') return 'Medium selling capacity'
+  if (capacity === 'low') return 'Low selling capacity'
+  return null
+}
+
+const normalize = (value: unknown) => String(value ?? '').trim().toLowerCase()
+
+const normalizeStateCode = (value: unknown) => String(value ?? '').trim().toUpperCase()
+
+const isTestLawyer = (...values: unknown[]) => values.some((value) => normalize(value).includes('test'))
+
+const toStateCodes = (value: unknown): string[] => {
+  const asArray = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? (() => {
+          try {
+            const parsed = JSON.parse(value)
+            return Array.isArray(parsed) ? parsed : value.split(',')
+          } catch {
+            return value.split(',')
+          }
+        })()
+      : []
+
+  return [...new Set(asArray
+    .map((item) => normalizeStateCode(item))
+    .filter((code) => US_STATE_CODES.has(code))
+  )]
 }
 
 const statesData = ref<StateData[]>(
   US_STATES.map((s) => ({
     code: s.code,
     name: s.name,
-    status: 'blocked',
-    volume: 0,
-    criteria: criteriaForStatus('blocked')
+    status: 'temporarily_blocked',
+    capacity: null,
+    attorneyCount: 0,
+    description: descriptionForStatus('temporarily_blocked'),
+    notes: null
   }))
 )
 
 const selectedStatus = ref('all')
 
-type OrdersFilter = 'all' | 'has_orders' | 'no_orders'
-const ordersFilter = ref<OrdersFilter>('all')
-
-const ordersFilterOptions = [
-  { value: 'all', label: 'All States' },
-  { value: 'has_orders', label: 'Has Selling Volume' },
-  { value: 'no_orders', label: 'No Selling Volume' }
-]
-
 const statusOptions = [
   { value: 'all', label: 'All States' },
-  { value: 'blocked', label: 'Blocked (No selling capacity)' },
-  { value: 'red', label: 'Low Selling Capacity' },
-  { value: 'green', label: 'High Selling Capacity' },
-  { value: 'yellow', label: 'Moderate Selling Capacity' }
+  { value: 'unblocked', label: 'Unblocked' },
+  { value: 'temporarily_blocked', label: 'Blocked' },
+  { value: 'permanently_blocked', label: 'Temporarily Blocked' }
 ]
 
 const filteredStates = ref(statesData.value)
-
-const selectedStateCode = ref<string | null>(null)
-
-watch([filteredStates], () => {
-  const code = selectedStateCode.value
-  if (!code) return
-  const stillVisible = filteredStates.value.some((s) => s.code === code)
-  if (!stillVisible) selectedStateCode.value = null
-})
 
 const filterStates = () => {
   let next = statesData.value
@@ -158,84 +192,110 @@ const filterStates = () => {
     next = next.filter(s => s.status === selectedStatus.value)
   }
 
-  if (ordersFilter.value === 'has_orders') {
-    next = next.filter(s => s.volume > 0)
-  } else if (ordersFilter.value === 'no_orders') {
-    next = next.filter(s => s.volume <= 0)
-  }
-
   filteredStates.value = next
-}
-
-const statusOverrideForState = (code: string): StateData['status'] | null => {
-  const normalized = String(code || '').trim().toUpperCase()
-  if (!normalized) return null
-
-  if (normalized === 'TX' || normalized === 'AZ' || normalized === 'NY') return 'green'
-  if (normalized === 'NV' || normalized === 'NM' || normalized === 'WA' || normalized === 'IL' || normalized === 'IN') return 'red'
-  if (normalized === 'GA' || normalized === 'WI' || normalized === 'NC') return 'yellow'
-  return null
 }
 
 const refreshCounts = async () => {
   loading.value = true
   try {
-    const supabaseUntyped = supabase as unknown as {
-      from: (
-        table: string
-      ) => {
-        select: (cols: string) => {
-          eq: (column: string, value: unknown) => {
-            order: (
-              column: string,
-              opts: { ascending: boolean }
-            ) => Promise<{ data: OrderRow[] | null; error: unknown }>
-          }
-        }
+    const [
+      { data: salesMapRows, error: salesMapError },
+      { data: lawyerRequirementRows, error: lawyerRequirementError },
+      { data: attorneyProfileRows, error: attorneyProfileError }
+    ] = await Promise.all([
+      supabase
+        .from('sales_map_states')
+        .select('state_code,state_name,availability_status,notes'),
+      supabase
+        .from('lawyer_requirements')
+        .select('attorney_id,attorney_name,states,lawyer_type')
+        .eq('lawyer_type', 'broker_lawyer'),
+      supabase
+        .from('attorney_profiles')
+        .select('user_id,full_name,firm_name,primary_email,personal_email,licensed_states,account_type')
+        .eq('account_type', 'internal_lawyer')
+    ])
+
+    if (salesMapError) {
+      throw salesMapError instanceof Error ? salesMapError : new Error(String(salesMapError))
+    }
+
+    if (lawyerRequirementError) {
+      throw lawyerRequirementError instanceof Error ? lawyerRequirementError : new Error(String(lawyerRequirementError))
+    }
+
+    if (attorneyProfileError) {
+      throw attorneyProfileError instanceof Error ? attorneyProfileError : new Error(String(attorneyProfileError))
+    }
+
+    const rows = (salesMapRows ?? []) as SalesMapStateRow[]
+    const mapByCode = new Map(
+      rows.map((row) => [
+        String(row.state_code || '').trim().toUpperCase(),
+        row
+      ] as const)
+    )
+
+    const attorneyCounts = new Map<string, Set<string>>()
+
+    const addAttorneyStates = (lawyerKey: string, stateCodes: string[]) => {
+      for (const code of stateCodes) {
+        const existing = attorneyCounts.get(code) ?? new Set<string>()
+        existing.add(lawyerKey)
+        attorneyCounts.set(code, existing)
       }
     }
 
-    const { data, error } = await supabaseUntyped
-      .from('orders')
-      .select('target_states,status,quota_total,quota_filled,expires_at')
-      .eq('status', 'OPEN')
-      .order('created_at', { ascending: false })
+    for (const row of (lawyerRequirementRows ?? []) as LawyerRequirementRow[]) {
+      const stateCodes = toStateCodes(row.states)
+      if (!stateCodes.length) continue
+      if (isTestLawyer(row.attorney_name)) continue
 
-    if (error) {
-      throw error instanceof Error ? error : new Error(String(error))
+      const attorneyId = String(row.attorney_id ?? '').trim()
+      const attorneyName = String(row.attorney_name ?? '').trim()
+      const lawyerKey = `broker:${attorneyId || attorneyName}`
+      if (!lawyerKey || lawyerKey === 'broker:') continue
+
+      addAttorneyStates(lawyerKey, stateCodes)
     }
 
-    const rows = (data ?? []) as OrderRow[]
-    const counts = new Map<string, number>()
-    const now = new Date()
+    for (const row of (attorneyProfileRows ?? []) as AttorneyProfileRow[]) {
+      const stateCodes = toStateCodes(row.licensed_states)
+      if (!stateCodes.length) continue
+      if (isTestLawyer(row.full_name, row.firm_name, row.primary_email, row.personal_email)) continue
 
-    for (const row of rows) {
-      if (row.expires_at) {
-        const exp = new Date(row.expires_at)
-        if (!Number.isNaN(exp.getTime()) && exp < now) continue
-      }
+      const userId = String(row.user_id ?? '').trim()
+      const fullName = String(row.full_name ?? '').trim()
+      const lawyerKey = `internal:${userId || fullName}`
+      if (!lawyerKey || lawyerKey === 'internal:') continue
 
-      const quotaTotal = Number(row.quota_total ?? 0)
-      const quotaFilled = Number(row.quota_filled ?? 0)
-      if (Number.isFinite(quotaTotal) && Number.isFinite(quotaFilled) && quotaTotal > 0 && quotaFilled >= quotaTotal) continue
-
-      const targets = Array.isArray(row.target_states) ? row.target_states : []
-      for (const state of targets) {
-        const code = String(state || '').trim().toUpperCase()
-        if (!code) continue
-        counts.set(code, (counts.get(code) ?? 0) + 1)
-      }
+      addAttorneyStates(lawyerKey, stateCodes)
     }
 
     statesData.value = US_STATES.map((s) => {
-      const volume = counts.get(s.code) ?? 0
-      const status = statusOverrideForState(s.code) ?? toStatus(volume)
+      const row = mapByCode.get(s.code)
+      const normalizedStatus = String(row?.availability_status || '').trim().toLowerCase()
+      const status: StateData['status'] = normalizedStatus === 'unblocked'
+        ? 'unblocked'
+        : normalizedStatus === 'permanently_blocked'
+          ? 'permanently_blocked'
+          : 'temporarily_blocked'
+
+      const attorneyCount = attorneyCounts.get(s.code)?.size ?? 0
+      const capacity = status === 'unblocked'
+        ? capacityForCount(attorneyCount)
+        : null
+
       return {
         code: s.code,
-        name: s.name,
+        name: String(row?.state_name || s.name),
         status,
-        volume,
-        criteria: criteriaForStatus(status)
+        capacity,
+        attorneyCount,
+        description: status === 'unblocked'
+          ? `${capacityLabel(capacity)}`
+          : descriptionForStatus(status),
+        notes: row?.notes ?? null
       }
     })
 
@@ -246,10 +306,14 @@ const refreshCounts = async () => {
 }
 
 const getStatusLabel = (status: string) => {
-  if (status === 'blocked') return 'Blocked state'
-  if (status === 'green') return 'High selling capacity'
-  if (status === 'yellow') return 'Moderate selling capacity'
-  return 'Low selling capacity'
+  if (status === 'permanently_blocked') return 'Temporarily blocked'
+  if (status === 'temporarily_blocked') return 'Blocked'
+  return 'Unblocked'
+}
+
+const getStateBadgeLabel = (state: StateData) => {
+  if (state.status !== 'unblocked') return getStatusLabel(state.status)
+  return capacityLabel(state.capacity) ?? 'Unblocked'
 }
 
 const stateByCode = computed(() => new Map(statesData.value.map(s => [s.code, s])))
@@ -257,55 +321,90 @@ const stateByCode = computed(() => new Map(statesData.value.map(s => [s.code, s]
 const MAP_PATH_SELECTOR = 'path[data-id], path[id]'
 
 const BLOCKED_PATTERN_ID = 'blocked-hatch'
+const PERMANENT_BLOCKED_PATTERN_ID = 'permanent-blocked-hatch'
 
-const ensureBlockedPattern = (svg: SVGSVGElement) => {
-  const existing = svg.querySelector(`#${BLOCKED_PATTERN_ID}`)
-  if (existing) return
-
+const ensurePatterns = (svg: SVGSVGElement) => {
   let defs = svg.querySelector('defs')
   if (!defs) {
     defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs')
     svg.insertBefore(defs, svg.firstChild)
   }
 
-  const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern')
-  pattern.setAttribute('id', BLOCKED_PATTERN_ID)
-  pattern.setAttribute('patternUnits', 'userSpaceOnUse')
-  pattern.setAttribute('width', '10')
-  pattern.setAttribute('height', '10')
-  pattern.setAttribute('patternTransform', 'rotate(45)')
+  if (!svg.querySelector(`#${BLOCKED_PATTERN_ID}`)) {
+    const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern')
+    pattern.setAttribute('id', BLOCKED_PATTERN_ID)
+    pattern.setAttribute('patternUnits', 'userSpaceOnUse')
+    pattern.setAttribute('width', '10')
+    pattern.setAttribute('height', '10')
+    pattern.setAttribute('patternTransform', 'rotate(45)')
 
-  const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
-  bg.setAttribute('width', '10')
-  bg.setAttribute('height', '10')
-  bg.setAttribute('fill', '#f3f4f6')
+    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+    bg.setAttribute('width', '10')
+    bg.setAttribute('height', '10')
+    bg.setAttribute('fill', '#f8fafc')
 
-  const stripe = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
-  stripe.setAttribute('width', '2')
-  stripe.setAttribute('height', '10')
-  stripe.setAttribute('fill', '#111827')
+    const stripe = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+    stripe.setAttribute('width', '2')
+    stripe.setAttribute('height', '10')
+    stripe.setAttribute('fill', '#111827')
 
-  pattern.appendChild(bg)
-  pattern.appendChild(stripe)
-  defs.appendChild(pattern)
+    pattern.appendChild(bg)
+    pattern.appendChild(stripe)
+    defs.appendChild(pattern)
+  }
+
+  if (!svg.querySelector(`#${PERMANENT_BLOCKED_PATTERN_ID}`)) {
+    const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern')
+    pattern.setAttribute('id', PERMANENT_BLOCKED_PATTERN_ID)
+    pattern.setAttribute('patternUnits', 'userSpaceOnUse')
+    pattern.setAttribute('width', '12')
+    pattern.setAttribute('height', '12')
+    pattern.setAttribute('patternTransform', 'rotate(45)')
+
+    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+    bg.setAttribute('width', '12')
+    bg.setAttribute('height', '12')
+    bg.setAttribute('fill', '#fff7ed')
+
+    const stripe = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+    stripe.setAttribute('width', '3')
+    stripe.setAttribute('height', '12')
+    stripe.setAttribute('fill', '#f97316')
+
+    pattern.appendChild(bg)
+    pattern.appendChild(stripe)
+    defs.appendChild(pattern)
+  }
 }
 
 const mapFill = (status: StateData['status'] | undefined) => {
-  if (status === 'green') return '#22c55e'
-  if (status === 'yellow') return '#eab308'
-  if (status === 'red') return '#ef4444'
-  if (status === 'blocked') return `url(#${BLOCKED_PATTERN_ID})`
+  if (status === 'unblocked') return '#e5e7eb'
+  if (status === 'permanently_blocked') return `url(#${PERMANENT_BLOCKED_PATTERN_ID})`
+  if (status === 'temporarily_blocked') return `url(#${BLOCKED_PATTERN_ID})`
   return '#e5e7eb'
+}
+
+const unblockedCapacityFill = (capacity: StateData['capacity']) => {
+  if (capacity === 'high') return '#22c55e'
+  if (capacity === 'medium') return '#eab308'
+  return '#ef4444'
 }
 
 const mapStroke = () => '#0b0b0b'
 
 const textColorForStatus = (status: StateData['status'] | undefined) => {
-  if (status === 'green') return '#ffffff'
-  if (status === 'red') return '#ffffff'
-  if (status === 'yellow') return '#111827'
-  if (status === 'blocked') return '#111827'
+  if (status === 'unblocked') return '#111827'
+  if (status === 'permanently_blocked') return '#111827'
+  if (status === 'temporarily_blocked') return '#111827'
   return '#111827'
+}
+
+const badgeColorForState = (state: StateData) => {
+  if (state.status === 'permanently_blocked') return 'warning'
+  if (state.status === 'temporarily_blocked') return 'neutral'
+  if (state.capacity === 'high') return 'success'
+  if (state.capacity === 'medium') return 'warning'
+  return 'error'
 }
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v))
@@ -347,8 +446,12 @@ const applyStateLabels = () => {
     const fontSize = clamp(Math.min(bbox.width, bbox.height) / 3, 6, 14)
     const fill = textColorForStatus(state?.status)
 
-    const outlineStroke = state?.status === 'blocked' ? '#f9fafb' : 'rgba(0,0,0,0.35)'
-    const outlineWidth = state?.status === 'blocked' ? '3' : '1'
+    const outlineStroke = state?.status === 'temporarily_blocked' || state?.status === 'permanently_blocked'
+      ? '#f9fafb'
+      : 'rgba(0,0,0,0.2)'
+    const outlineWidth = state?.status === 'temporarily_blocked' || state?.status === 'permanently_blocked'
+      ? '3'
+      : '1'
 
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text')
     text.textContent = code
@@ -375,7 +478,7 @@ const applyMapColors = () => {
   const svg = root.querySelector('svg')
   if (!svg) return
 
-  ensureBlockedPattern(svg as SVGSVGElement)
+  ensurePatterns(svg as SVGSVGElement)
 
   const visibleSet = new Set(filteredStates.value.map(s => s.code))
   const paths = svg.querySelectorAll(MAP_PATH_SELECTOR)
@@ -386,7 +489,9 @@ const applyMapColors = () => {
     const state = stateByCode.value.get(code)
     const isVisible = selectedStatus.value === 'all' ? true : visibleSet.has(code)
 
-    const fill = mapFill(isVisible ? state?.status : undefined)
+    const fill = isVisible && state?.status === 'unblocked'
+      ? unblockedCapacityFill(state.capacity)
+      : mapFill(isVisible ? state?.status : undefined)
     const stroke = mapStroke()
 
     // Some SVGs include inline `style="fill:..."` which overrides `fill="..."`.
@@ -501,11 +606,6 @@ onUnmounted(() => {
 watch([selectedStatus, filteredStates], () => {
   applyMapColors()
 })
-
-watch([ordersFilter], () => {
-  filterStates()
-  applyMapColors()
-})
 </script>
 
 <template>
@@ -535,29 +635,36 @@ watch([ordersFilter], () => {
         <div>
           <UCard>
             <div class="space-y-3">
-              <h3 class="font-semibold">Sales Capacity Legend</h3>
+              <h3 class="font-semibold">Sales Map Legend</h3>
               <div class="text-sm text-muted">
-                Colors represent selling capacity based on selling volume in each state.
+                Unblocked states are colored by attorney coverage capacity, while blocked states keep their blocked visuals.
               </div>
-              <div class="grid gap-3 sm:grid-cols-4">
+              <div class="grid gap-3 sm:grid-cols-5">
+                <div class="flex items-center gap-2">
+                  <div class="size-4 rounded-full bg-red-500" />
+                  <span class="text-sm">Low Capacity</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <div class="size-4 rounded-full bg-yellow-500" />
+                  <span class="text-sm">Medium Capacity</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <div class="size-4 rounded-full bg-green-500" />
+                  <span class="text-sm">High Capacity</span>
+                </div>
                 <div class="flex items-center gap-2">
                   <div
                     class="size-4 rounded-full border border-default"
                     style="background-color:#f3f4f6;background-image:repeating-linear-gradient(45deg,#111827 0,#111827 2px,transparent 2px,transparent 6px);"
                   />
-                  <span class="text-sm">Blocked - No selling capacity</span>
+                  <span class="text-sm">Blocked</span>
                 </div>
                 <div class="flex items-center gap-2">
-                  <div class="size-4 rounded-full bg-red-500" />
-                  <span class="text-sm">Red - Low selling capacity</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <div class="size-4 rounded-full bg-yellow-500" />
-                  <span class="text-sm">Yellow - Moderate selling capacity</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <div class="size-4 rounded-full bg-green-500" />
-                  <span class="text-sm">Green - High selling capacity</span>
+                  <div
+                    class="size-4 rounded-full border border-default"
+                    style="background-color:#fff7ed;background-image:repeating-linear-gradient(45deg,#f97316 0,#f97316 3px,transparent 3px,transparent 8px);"
+                  />
+                  <span class="text-sm">Temporarily Blocked</span>
                 </div>
               </div>
             </div>
@@ -574,15 +681,6 @@ watch([ordersFilter], () => {
               label-key="label"
               @change="filterStates"
             />
-
-            <USelect
-              v-model="ordersFilter"
-              class="w-56"
-              :items="ordersFilterOptions"
-              value-key="value"
-              label-key="label"
-              @change="filterStates"
-            />
           </div>
 
           <UBadge variant="subtle" :label="`${filteredStates.length} states`" />
@@ -592,8 +690,7 @@ watch([ordersFilter], () => {
           <div class="relative">
             <div
               ref="mapRoot"
-              class="w-full overflow-auto rounded-lg bg-white"
-              style="max-height: 520px;"
+              class="w-full rounded-lg bg-white"
             />
 
             <div
@@ -604,13 +701,15 @@ watch([ordersFilter], () => {
               <div class="text-sm font-semibold">{{ tooltip.state.name }} ({{ tooltip.state.code }})</div>
               <div class="mt-1 flex items-center gap-2">
                 <UBadge
-                  :color="tooltip.state.status === 'green' ? 'success' : tooltip.state.status === 'yellow' ? 'warning' : tooltip.state.status === 'red' ? 'error' : 'neutral'"
+                  :color="badgeColorForState(tooltip.state)"
                   variant="subtle"
-                  :label="getStatusLabel(tooltip.state.status)"
+                  :label="getStateBadgeLabel(tooltip.state)"
                   size="xs"
                 />
               </div>
-              <div class="mt-1 text-xs text-muted">{{ tooltip.state.criteria }}</div>
+              <div class="mt-1 text-xs text-muted">
+                {{ tooltip.state.notes || tooltip.state.description }}
+              </div>
             </div>
           </div>
         </UCard>
