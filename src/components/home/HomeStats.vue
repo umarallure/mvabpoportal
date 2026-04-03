@@ -12,26 +12,66 @@ const props = defineProps<{
 
 const auth = useAuth()
 
-function formatCurrency(value: number): string {
-  return value.toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0
-  })
+type DashboardStatRow = {
+  id: string
+  call_result: string | null
+  status: string | null
+  submitted_attorney: string | null
+  submitted_attorney_status: string | null
 }
 
-const RETAINER_SIGNED_STATUSES = [
-  'Retainer Signed',
-  'Retainer Signed Pending',
-  'Retainer Signed – Payable'
+const EMPTY_STATS: Stat[] = [
+  { title: 'Total Inbound BPO Transfers', icon: 'i-lucide-arrow-right-left', value: 0, variation: 0 },
+  { title: 'Qualified Inbound', icon: 'i-lucide-badge-check', value: 0, variation: 0 },
+  { title: 'Not Qualified Inbound', icon: 'i-lucide-circle-x', value: 0, variation: 0 },
+  { title: 'No Coverage (Inbound)', icon: 'i-lucide-shield-x', value: 0, variation: 0 },
+  { title: 'Submitted to Attorney (Inbound)', icon: 'i-lucide-send', value: 0, variation: 0 },
+  { title: 'Approved Attorney (Inbound)', icon: 'i-lucide-scale', value: 0, variation: 0 },
+    { title: 'Denied Attorney (Inbound)', icon: 'i-lucide-badge-x', value: 0, variation: 0 }
 ]
 
-const stats = ref<Stat[]>([
-  { title: 'Total Transfers', icon: 'i-lucide-arrow-right-left', value: 0, variation: 0 },
-  { title: 'Total Retainers', icon: 'i-lucide-briefcase', value: 0, variation: 0 },
-  { title: 'Conversions', icon: 'i-lucide-chart-pie', value: 0, variation: 0 },
-  { title: 'Total Paid', icon: 'i-lucide-circle-dollar-sign', value: formatCurrency(0), variation: 0 }
-])
+const stats = ref<Stat[]>([...EMPTY_STATS])
+
+const normalize = (value: string | null | undefined) => String(value ?? '').trim().toLowerCase()
+
+const includesNormalized = (value: string | null | undefined, needle: string) => normalize(value).includes(needle)
+
+const buildStats = (rows: DashboardStatRow[]): Stat[] => {
+  const totalInbound = rows.length
+
+  const qualifiedInbound = rows.filter((row) => {
+    const callResult = normalize(row.call_result)
+    const status = normalize(row.status)
+    return callResult === 'qualified' || (status.includes('qualified') && !status.includes('not_qualified'))
+  }).length
+
+  const notQualifiedInbound = rows.filter((row) => {
+    const callResult = normalize(row.call_result)
+    return callResult === 'not qualified' || includesNormalized(row.status, 'not_qualified')
+  }).length
+
+  const noCoverageInbound = rows.filter((row) => normalize(row.submitted_attorney_status) === 'nocoverage').length
+
+  const submittedToAttorneyInbound = rows.filter((row) => {
+    const submittedAttorney = String(row.submitted_attorney ?? '').trim()
+    const attorneyStatus = normalize(row.submitted_attorney_status)
+    return Boolean(submittedAttorney) && attorneyStatus !== 'nocoverage'
+  }).length
+
+  const approvedAttorneyInbound = rows.filter((row) => normalize(row.submitted_attorney_status) === 'approved').length
+
+  const deniedAttorneyInbound = rows.filter((row) => normalize(row.submitted_attorney_status) === 'denied').length
+
+  return [
+    { title: 'Total Inbound BPO Transfers', icon: 'i-lucide-arrow-right-left', value: totalInbound, variation: 0 },
+    { title: 'Qualified Inbound', icon: 'i-lucide-badge-check', value: qualifiedInbound, variation: 0 },
+    { title: 'Not Qualified Inbound', icon: 'i-lucide-circle-x', value: notQualifiedInbound, variation: 0 },
+    { title: 'No Coverage (Inbound)', icon: 'i-lucide-shield-x', value: noCoverageInbound, variation: 0 },
+    { title: 'Submitted to Attorney (Inbound)', icon: 'i-lucide-send', value: submittedToAttorneyInbound, variation: 0 },
+    { title: 'Approved Attorney (Inbound)', icon: 'i-lucide-scale', value: approvedAttorneyInbound, variation: 0 },
+    { title: 'Denied Attorney (Inbound)', icon: 'i-lucide-badge-x', value: deniedAttorneyInbound, variation: 0 }
+  ]
+}
 
 const fetchStats = async () => {
   try {
@@ -44,17 +84,12 @@ const fetchStats = async () => {
 
     let query = supabase
       .from('daily_deal_flow')
-      .select('id, status, date')
+      .select('id, call_result, status, submitted_attorney, submitted_attorney_status, date')
       .gte('date', startDate)
       .lte('date', endDate)
 
     if (!hasAccess) {
-      stats.value = [
-        { title: 'Total Transfers', icon: 'i-lucide-arrow-right-left', value: 0, variation: 0 },
-        { title: 'Total Retainers', icon: 'i-lucide-briefcase', value: 0, variation: 0 },
-        { title: 'Conversions', icon: 'i-lucide-chart-pie', value: 0, variation: 0 },
-        { title: 'Total Paid', icon: 'i-lucide-circle-dollar-sign', value: formatCurrency(0), variation: 0 }
-      ]
+      stats.value = [...EMPTY_STATS]
       return
     }
 
@@ -69,18 +104,7 @@ const fetchStats = async () => {
       return
     }
 
-    const allRows = rows ?? []
-    const totalTransfers = allRows.length
-    const totalRetainers = allRows.filter(r => r.status === 'Pending Approval').length
-    const conversions = allRows.filter(r => RETAINER_SIGNED_STATUSES.includes(r.status ?? '')).length
-    const totalPaid = conversions * 1500
-
-    stats.value = [
-      { title: 'Total Transfers', icon: 'i-lucide-arrow-right-left', value: totalTransfers, variation: 0 },
-      { title: 'Total Retainers', icon: 'i-lucide-briefcase', value: totalRetainers, variation: 0 },
-      { title: 'Conversions', icon: 'i-lucide-chart-pie', value: conversions, variation: 0 },
-      { title: 'Total Paid', icon: 'i-lucide-circle-dollar-sign', value: formatCurrency(totalPaid), variation: 0 }
-    ]
+    stats.value = buildStats((rows ?? []) as DashboardStatRow[])
   } catch (e) {
     console.warn('Dashboard stats error', e)
   }

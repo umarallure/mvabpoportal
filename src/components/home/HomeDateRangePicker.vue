@@ -9,14 +9,22 @@ const df = new DateFormatter('en-US', {
 
 const selected = defineModel<Range>({ required: true })
 
+type PresetRange = {
+  label: string
+  mode: 'today' | 'yesterday' | 'days' | 'months' | 'years'
+  amount?: number
+}
+
 const ranges = [
-  { label: 'Last 7 days', days: 7 },
-  { label: 'Last 14 days', days: 14 },
-  { label: 'Last 30 days', days: 30 },
-  { label: 'Last 3 months', months: 3 },
-  { label: 'Last 6 months', months: 6 },
-  { label: 'Last year', years: 1 }
-]
+  { label: 'Today', mode: 'today' },
+  { label: 'Yesterday', mode: 'yesterday' },
+  { label: 'Last 7 days', mode: 'days', amount: 6 },
+  { label: 'Last 14 days', mode: 'days', amount: 13 },
+  { label: 'Last 30 days', mode: 'days', amount: 29 },
+  { label: 'Last 3 months', mode: 'months', amount: 3 },
+  { label: 'Last 6 months', mode: 'months', amount: 6 },
+  { label: 'Last year', mode: 'years', amount: 1 }
+] satisfies PresetRange[]
 
 const toCalendarDate = (date: Date) => {
   return new CalendarDate(
@@ -24,6 +32,40 @@ const toCalendarDate = (date: Date) => {
     date.getMonth() + 1,
     date.getDate()
   )
+}
+
+const resolvePresetRange = (range: PresetRange) => {
+  const currentDate = today(getLocalTimeZone())
+
+  if (range.mode === 'today') {
+    return {
+      start: currentDate,
+      end: currentDate
+    }
+  }
+
+  if (range.mode === 'yesterday') {
+    const yesterday = currentDate.subtract({ days: 1 })
+    return {
+      start: yesterday,
+      end: yesterday
+    }
+  }
+
+  let startDate = currentDate.copy()
+
+  if (range.mode === 'days') {
+    startDate = startDate.subtract({ days: range.amount ?? 0 })
+  } else if (range.mode === 'months') {
+    startDate = startDate.subtract({ months: range.amount ?? 0 })
+  } else if (range.mode === 'years') {
+    startDate = startDate.subtract({ years: range.amount ?? 0 })
+  }
+
+  return {
+    start: startDate,
+    end: currentDate
+  }
 }
 
 const calendarRange = computed({
@@ -39,41 +81,23 @@ const calendarRange = computed({
   }
 })
 
-const isRangeSelected = (range: { days?: number, months?: number, years?: number }) => {
+const isRangeSelected = (range: PresetRange) => {
   if (!selected.value.start || !selected.value.end) return false
 
-  const currentDate = today(getLocalTimeZone())
-  let startDate = currentDate.copy()
-
-  if (range.days) {
-    startDate = startDate.subtract({ days: range.days })
-  } else if (range.months) {
-    startDate = startDate.subtract({ months: range.months })
-  } else if (range.years) {
-    startDate = startDate.subtract({ years: range.years })
-  }
+  const resolved = resolvePresetRange(range)
 
   const selectedStart = toCalendarDate(selected.value.start)
   const selectedEnd = toCalendarDate(selected.value.end)
 
-  return selectedStart.compare(startDate) === 0 && selectedEnd.compare(currentDate) === 0
+  return selectedStart.compare(resolved.start) === 0 && selectedEnd.compare(resolved.end) === 0
 }
 
-const selectRange = (range: { days?: number, months?: number, years?: number }) => {
-  const endDate = today(getLocalTimeZone())
-  let startDate = endDate.copy()
-
-  if (range.days) {
-    startDate = startDate.subtract({ days: range.days })
-  } else if (range.months) {
-    startDate = startDate.subtract({ months: range.months })
-  } else if (range.years) {
-    startDate = startDate.subtract({ years: range.years })
-  }
+const selectRange = (range: PresetRange) => {
+  const resolved = resolvePresetRange(range)
 
   selected.value = {
-    start: startDate.toDate(getLocalTimeZone()),
-    end: endDate.toDate(getLocalTimeZone())
+    start: resolved.start.toDate(getLocalTimeZone()),
+    end: resolved.end.toDate(getLocalTimeZone())
   }
 }
 </script>
