@@ -158,12 +158,15 @@ const columns: TableColumn<TransferLead>[] = [
   { accessorKey: 'publisher', header: 'Publisher' }
 ]
 
+const loadError = ref('')
+
 const loadTransfers = async () => {
   const stageKeys = dbStages.value.map(s => s.key)
-  if (stageKeys.length === 0) return // wait for stages to load via watcher
+  if (stageKeys.length === 0) return
 
   try {
     loading.value = true
+    loadError.value = ''
     await auth.init()
 
     const canSeeAll = auth.canSeeAll.value
@@ -183,6 +186,7 @@ const loadTransfers = async () => {
     const { data, error } = await query
 
     if (error) {
+      loadError.value = error.message || 'Failed to load transfers'
       transfers.value = []
       return
     }
@@ -230,7 +234,8 @@ const loadTransfers = async () => {
         publisher: getString(record, 'lead_vendor') || getString(record, 'publisher')
       }
     })
-  } catch {
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : 'Failed to load transfers'
     transfers.value = []
   } finally {
     loading.value = false
@@ -252,7 +257,159 @@ watch(dbStages, (newStages) => {
 
 onMounted(() => {
   loadTransfers()
+  setTimeout(() => { boardReady.value = true }, 800)
 })
+
+/* ═══════════════════════════════════════════════════════════
+   UI ENHANCEMENTS — stage colors, DnD, animations, helpers
+   ═══════════════════════════════════════════════════════════ */
+
+const STAGE_COLORS = [
+  { accent: '#3b82f6', rgb: '59,130,246' },
+  { accent: '#f59e0b', rgb: '245,158,11' },
+  { accent: '#22c55e', rgb: '34,197,94' },
+  { accent: '#ef4444', rgb: '239,68,68' },
+  { accent: '#ae4010', rgb: '174,64,16' },
+  { accent: '#8b5cf6', rgb: '139,92,246' },
+  { accent: '#06b6d4', rgb: '6,182,212' },
+  { accent: '#ec4899', rgb: '236,72,153' },
+  { accent: '#14b8a6', rgb: '20,184,166' },
+]
+
+const STAGE_ICON_MAP: Record<string, string> = {
+  transfer_api: 'i-lucide-zap',
+  incomplete_transfer: 'i-lucide-alert-circle',
+  returned_to_center_dq: 'i-lucide-undo-2',
+  previously_sold_bpo: 'i-lucide-badge-check',
+  needs_bpo_callback: 'i-lucide-phone-call',
+  pending_information: 'i-lucide-info',
+  pending_approval: 'i-lucide-file-check',
+  document_signed_api: 'i-lucide-file-signature',
+  application_withdrawn: 'i-lucide-x-circle',
+}
+
+const getStageColor = (_key: string, index: number) => STAGE_COLORS[index % STAGE_COLORS.length]
+const getStageIcon = (key: string, index: number) => STAGE_ICON_MAP[key] || ['i-lucide-circle-dot', 'i-lucide-clock', 'i-lucide-check-circle', 'i-lucide-alert-triangle', 'i-lucide-flame', 'i-lucide-star', 'i-lucide-shield-check', 'i-lucide-heart', 'i-lucide-zap'][index % 9]
+
+const summaryCards = computed(() => [
+  { label: 'Total Transfers', value: String(totalTransfersCount.value), icon: 'i-lucide-arrow-right-left', accent: '#ae4010', light: '#e8763c', rgb: '174,64,16', delay: 0 },
+  { label: 'Total Volume', value: formatMoney(totalVolume.value), icon: 'i-lucide-trending-up', accent: '#3b82f6', light: '#60a5fa', rgb: '59,130,246', delay: 60 },
+  { label: 'Avg Volume', value: formatMoney(avgVolume.value), icon: 'i-lucide-bar-chart-3', accent: '#22c55e', light: '#4ade80', rgb: '34,197,94', delay: 120 },
+])
+
+const hasActiveFilters = computed(() => activeFilterCount.value > 0 || query.value.trim() !== '')
+
+const resetFilters = () => {
+  query.value = ''
+  selectedStage.value = ALL_FILTER_VALUE
+  selectedSourceType.value = ALL_FILTER_VALUE
+  selectedStates.value = []
+  selectedDateRange.value = 'all'
+  customStartDate.value = ''
+  customEndDate.value = ''
+  page.value = 1
+}
+
+const customDateLabel = computed(() => {
+  if (customStartDate.value && customEndDate.value) {
+    return `${fmtShort(customStartDate.value)} – ${fmtShort(customEndDate.value)}`
+  }
+  if (customStartDate.value) return `From ${fmtShort(customStartDate.value)}`
+  if (customEndDate.value) return `Until ${fmtShort(customEndDate.value)}`
+  return 'Pick dates'
+})
+
+const fmtShort = (d: string) => {
+  try { return new Date(d + 'T00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }
+  catch { return d }
+}
+
+const fmtDate = (d: string) => {
+  if (!d) return '—'
+  try { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
+  catch { return d }
+}
+
+const boardReady = ref(false)
+
+// ── Drag & Drop ──
+
+const draggedLead = ref<TransferLead | null>(null)
+const dragOverStage = ref('')
+
+const onDragStart = (e: DragEvent, lead: TransferLead) => {
+  if (!e.dataTransfer) return
+  draggedLead.value = lead
+  e.dataTransfer.effectAllowed = 'move'
+  e.dataTransfer.setData('text/plain', lead.id)
+
+  const target = e.currentTarget as HTMLElement
+  const ghost = target.cloneNode(true) as HTMLElement
+  Object.assign(ghost.style, {
+    position: 'absolute', top: '-9999px', left: '-9999px',
+    width: target.offsetWidth + 'px',
+    transform: 'rotate(2deg) scale(1.04)', opacity: '0.92',
+    boxShadow: '0 12px 32px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.12)',
+    borderRadius: '10px', pointerEvents: 'none',
+  })
+  document.body.appendChild(ghost)
+  e.dataTransfer.setDragImage(ghost, target.offsetWidth / 2, 20)
+  setTimeout(() => { if (document.body.contains(ghost)) document.body.removeChild(ghost) }, 0)
+
+  requestAnimationFrame(() => {
+    target.style.opacity = '0.4'
+    target.style.transform = 'scale(0.97)'
+  })
+}
+
+const onDragEnd = (e: DragEvent) => {
+  const target = e.currentTarget as HTMLElement
+  target.style.opacity = ''
+  target.style.transform = ''
+  draggedLead.value = null
+  dragOverStage.value = ''
+}
+
+const onColumnDragOver = (e: DragEvent, stageKey: string) => {
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  dragOverStage.value = stageKey
+}
+
+const onColumnDragLeave = (e: DragEvent, stageKey: string) => {
+  const related = e.relatedTarget as HTMLElement | null
+  const current = e.currentTarget as HTMLElement
+  if (related && current.contains(related)) return
+  if (dragOverStage.value === stageKey) dragOverStage.value = ''
+}
+
+const onColumnDrop = async (e: DragEvent, stageKey: string) => {
+  e.preventDefault()
+  dragOverStage.value = ''
+  if (!draggedLead.value) return
+
+  const lead = draggedLead.value
+  if (lead.stage === stageKey) return
+
+  const oldStage = lead.stage
+  const idx = transfers.value.findIndex(t => t.id === lead.id)
+  if (idx !== -1) transfers.value[idx] = { ...transfers.value[idx], stage: stageKey }
+
+  try {
+    const { error } = await supabase.from('leads').update({ status: stageKey }).eq('id', lead.id)
+    if (error) throw error
+    try { const toast = useToast(); toast.add({ title: 'Moved', description: `Moved to ${getStageLabel(stageKey)}` }) } catch { /* */ }
+  } catch {
+    if (idx !== -1) transfers.value[idx] = { ...transfers.value[idx], stage: oldStage }
+    try { const toast = useToast(); toast.add({ title: 'Error', description: 'Failed to move transfer', color: 'error' }) } catch { /* */ }
+  }
+}
+
+const showingStart = computed(() => Math.min((page.value - 1) * PAGE_SIZE + 1, filteredLeads.value.length))
+const showingEnd = computed(() => Math.min(page.value * PAGE_SIZE, filteredLeads.value.length))
+
+// Keep columns reference to avoid unused-import lint warnings
+void columns
 </script>
 
 <template>
@@ -266,299 +423,581 @@ onMounted(() => {
     </template>
 
     <template #body>
-      <div class="flex h-full min-h-0 flex-col">
-        <div class="mb-4 grid gap-4 sm:grid-cols-3">
-          <UCard>
-            <div class="flex items-center justify-between">
+      <div class="ap-page flex h-full min-h-0 flex-col" style="gap: 20px;">
+        <!-- ═══ SUMMARY CARDS ═══ -->
+        <div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          <div
+            v-for="card in summaryCards"
+            :key="card.label"
+            class="ap-summary-card dashboard-fade-up group"
+            :style="{
+              '--dashboard-enter-delay': card.delay + 'ms',
+              '--card-accent': card.accent,
+              '--card-light': card.light,
+              '--card-rgb': card.rgb,
+              borderLeftColor: card.accent,
+            }"
+          >
+            <div class="flex items-center justify-between px-5 py-4">
               <div>
-                <p class="text-sm text-muted">Total Transfers</p>
-                <p class="text-2xl font-semibold">{{ totalTransfersCount }}</p>
+                <div class="ap-card-label">
+                  {{ card.label }}
+                </div>
+                <div class="ap-card-value">
+                  {{ card.value }}
+                </div>
               </div>
-              <UIcon name="i-lucide-arrow-right-left" class="size-8 text-primary" />
-            </div>
-          </UCard>
-
-          <UCard>
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm text-muted">Total Volume</p>
-                <p class="text-2xl font-semibold">{{ formatMoney(totalVolume) }}</p>
-              </div>
-              <UIcon name="i-lucide-trending-up" class="size-8 text-primary" />
-            </div>
-          </UCard>
-
-          <UCard>
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm text-muted">Avg Volume</p>
-                <p class="text-2xl font-semibold">{{ formatMoney(avgVolume) }}</p>
-              </div>
-              <UIcon name="i-lucide-bar-chart" class="size-8 text-primary" />
-            </div>
-          </UCard>
-        </div>
-
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="flex flex-wrap items-center gap-3">
-            <UInput
-              v-model="query"
-              class="max-w-md"
-              icon="i-lucide-search"
-              placeholder="Search by name, phone, publisher..."
-            />
-
-            <UButton
-              color="neutral"
-              :variant="filtersOpen || activeFilterCount > 0 ? 'solid' : 'outline'"
-              icon="i-lucide-sliders-horizontal"
-              @click="filtersOpen = !filtersOpen"
-            >
-              Filters
-              <UBadge
-                v-if="activeFilterCount > 0"
-                variant="subtle"
-                color="neutral"
-                size="xs"
-                class="ml-2"
-                :label="String(activeFilterCount)"
-              />
-            </UButton>
-          </div>
-
-          <div class="flex items-center gap-3">
-            <div class="inline-flex rounded-lg border border-default bg-white p-0.5 dark:bg-elevated/20">
-              <button
-                v-for="mode in ['kanban', 'list']"
-                :key="mode"
-                type="button"
-                class="rounded-md px-3 py-1.5 text-sm font-medium transition"
-                :class="viewMode === mode
-                  ? 'bg-primary text-white shadow-sm'
-                  : 'text-muted hover:bg-muted/50'"
-                @click="viewMode = mode as ViewMode"
+              <div
+                class="flex size-10 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105"
+                :style="{ background: `rgba(${card.rgb}, 0.12)` }"
               >
-                {{ mode === 'kanban' ? 'Kanban View' : 'List View' }}
-              </button>
+                <UIcon :name="card.icon" class="size-5" :style="{ color: card.light }" />
+              </div>
             </div>
-
-            <UBadge variant="subtle" :label="`${filteredLeads.length} transfers`" />
-
-            <UButton
-              color="neutral"
-              variant="outline"
-              icon="i-lucide-refresh-cw"
-              :loading="loading"
-              @click="handleRefresh"
-            >
-              Refresh
-            </UButton>
           </div>
         </div>
 
-        <UCard
-          v-if="filtersOpen"
-          class="mt-4 border-primary/20"
-          :ui="{ body: 'p-4 sm:p-5' }"
+        <!-- ═══ TOOLBAR CARD ═══ -->
+        <div
+          class="dashboard-surface-card dashboard-fade-up"
+          :style="{ '--dashboard-enter-delay': '180ms', '--dashboard-surface-glow': 'transparent' }"
         >
-          <div class="flex items-start justify-between gap-3">
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-sliders-horizontal" class="size-5 text-muted" />
-              <div class="text-lg font-semibold">Filters</div>
-            </div>
+          <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+            <!-- Left side -->
+            <div class="flex flex-wrap items-center gap-3">
+              <UInput
+                v-model="query"
+                class="ap-search-input"
+                icon="i-lucide-search"
+                size="sm"
+                placeholder="Search by name, phone, publisher..."
+              />
 
-            <UButton
-              icon="i-lucide-x"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              @click="filtersOpen = false"
-            />
-          </div>
-
-          <div class="mt-4 grid gap-4 lg:grid-cols-4">
-            <UFormField label="Date Range">
               <USelect
+                v-if="selectedDateRange !== 'custom'"
                 v-model="selectedDateRange"
                 :items="PIPELINE_DATE_RANGE_OPTIONS"
                 value-key="value"
                 label-key="label"
+                size="sm"
+                class="w-36"
               />
-            </UFormField>
 
-            <UFormField label="Stage">
-              <USelect
-                v-model="selectedStage"
-                :items="stageOptions"
-                value-key="value"
-                label-key="label"
-              />
-            </UFormField>
-
-            <UFormField label="Source Type">
-              <USelect
-                v-model="selectedSourceType"
-                :items="sourceTypeOptions"
-                value-key="value"
-                label-key="label"
-              />
-            </UFormField>
-
-            <UFormField label="State">
-              <USelectMenu
-                v-model="selectedStates"
-                :items="stateOptions"
-                value-key="value"
-                label-key="label"
-                multiple
-                placeholder="All States"
-                :search-input="{ placeholder: 'Search states...' }"
-              />
-            </UFormField>
-          </div>
-
-          <div v-if="selectedDateRange === 'custom'" class="mt-4 grid gap-4 sm:grid-cols-2">
-            <UFormField label="Start Date">
-              <UInput v-model="customStartDate" type="date" />
-            </UFormField>
-
-            <UFormField label="End Date">
-              <UInput v-model="customEndDate" type="date" />
-            </UFormField>
-          </div>
-        </UCard>
-
-        <div v-if="viewMode === 'kanban'" class="no-scrollbar mt-4 flex min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
-          <div
-            class="flex h-full min-h-0 items-stretch gap-3 pr-2"
-            :style="{ minWidth: `${STAGES.length * 18}rem` }"
-          >
-            <div
-              v-for="stage in STAGES"
-              :key="stage.key"
-              class="flex h-full w-[26rem] shrink-0 flex-col rounded-lg border border-default bg-elevated/20"
-            >
-              <div class="flex items-center justify-between border-b border-default px-3 py-2">
-                <div class="flex min-w-0 items-center gap-1.5">
-                  <div class="truncate text-sm font-semibold">{{ stage.label }}</div>
-                  <UPopover
-                    mode="hover"
-                    arrow
-                    :open-delay="100"
-                    :close-delay="120"
-                    :content="{ side: 'top', align: 'start', sideOffset: 8 }"
-                  >
-                    <UButton
-                      icon="i-lucide-circle-help"
-                      color="neutral"
-                      variant="ghost"
-                      size="xs"
-                      class="shrink-0"
-                      :ui="{ base: 'rounded-full' }"
-                    />
-                    <template #content>
-                      <div class="max-w-72 p-3">
-                        <div class="text-sm font-semibold text-highlighted">{{ stage.label }}</div>
-                        <p class="mt-1 text-xs leading-5 text-muted">{{ stage.description }}</p>
+              <UPopover v-else :ui="{ content: 'rounded-xl border border-[var(--dashboard-surface-border)] shadow-2xl backdrop-blur-xl bg-[var(--dashboard-surface)]' }">
+                <UButton variant="outline" color="neutral" size="sm">
+                  <UIcon name="i-lucide-calendar-range" class="size-4" />
+                  <span class="text-xs">{{ customDateLabel }}</span>
+                </UButton>
+                <template #content>
+                  <div class="flex min-w-[380px]">
+                    <div class="space-y-1 border-r border-[var(--dashboard-divider)] p-3">
+                      <div class="mb-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--dashboard-text-soft)]">
+                        Quick ranges
                       </div>
-                    </template>
-                  </UPopover>
-                </div>
-                <UBadge
-                  variant="subtle"
-                  :label="String(leadsByStage.get(stage.key)?.length ?? 0)"
-                />
+                      <button
+                        v-for="preset in [
+                          { label: 'Today', value: 'today' as PipelineDateRange },
+                          { label: 'This Week', value: 'this_week' as PipelineDateRange },
+                          { label: 'Last Week', value: 'last_week' as PipelineDateRange },
+                          { label: 'This Month', value: 'this_month' as PipelineDateRange },
+                          { label: 'All Time', value: 'all' as PipelineDateRange },
+                        ]"
+                        :key="preset.value"
+                        class="block w-full rounded-lg px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--ap-accent-soft)]"
+                        :style="{ color: 'var(--dashboard-text-secondary)' }"
+                        @click="selectedDateRange = preset.value; customStartDate = ''; customEndDate = ''"
+                      >
+                        {{ preset.label }}
+                      </button>
+                    </div>
+                    <div class="space-y-3 p-4">
+                      <div>
+                        <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--dashboard-text-soft)]">
+                          Start
+                        </div>
+                        <UInput v-model="customStartDate" type="date" size="sm" />
+                      </div>
+                      <div>
+                        <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--dashboard-text-soft)]">
+                          End
+                        </div>
+                        <UInput v-model="customEndDate" type="date" size="sm" />
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </UPopover>
+            </div>
+
+            <!-- Right side -->
+            <div class="flex items-center gap-3">
+              <span class="text-xs tabular-nums text-[var(--dashboard-text-muted)]">
+                {{ filteredLeads.length }} total
+              </span>
+
+              <UButton
+                color="neutral"
+                :variant="filtersOpen ? 'soft' : 'outline'"
+                size="sm"
+                :icon="filtersOpen ? 'i-lucide-panel-top-close' : 'i-lucide-sliders-horizontal'"
+                @click="filtersOpen = !filtersOpen"
+              >
+                {{ filtersOpen ? 'Hide Filters' : 'Filters' }}
+                <span
+                  v-if="activeFilterCount > 0"
+                  class="ml-1.5 flex size-4.5 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                  :style="{ background: 'var(--ap-accent)' }"
+                >
+                  {{ activeFilterCount }}
+                </span>
+              </UButton>
+
+              <UButton
+                v-if="hasActiveFilters"
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                icon="i-lucide-rotate-ccw"
+                @click="resetFilters"
+              >
+                Reset all
+              </UButton>
+
+              <!-- View Toggle -->
+              <div class="ap-segment-control">
+                <button
+                  v-for="mode in (['kanban', 'list'] as const)"
+                  :key="mode"
+                  type="button"
+                  class="ap-segment-btn"
+                  :class="{ 'is-active': viewMode === mode }"
+                  @click="viewMode = mode"
+                >
+                  <UIcon
+                    :name="mode === 'kanban' ? 'i-lucide-columns-3' : 'i-lucide-list'"
+                    class="size-3.5"
+                  />
+                  {{ mode === 'kanban' ? 'Board' : 'List' }}
+                </button>
               </div>
 
-              <div class="flex-1 space-y-2 overflow-y-auto p-2">
-                <UCard
-                  v-for="lead in (leadsByStage.get(stage.key) ?? [])"
-                  :key="lead.id"
-                  class="w-full"
-                  :ui="{ body: '!p-2 sm:!p-2' }"
-                >
-                  <div class="flex items-start justify-between gap-2">
-                    <div class="min-w-0 flex-1">
-                      <div class="truncate text-sm font-semibold">{{ lead.clientName }}</div>
-                      <div class="mt-0.5 text-xs text-muted">{{ lead.phone }}</div>
+              <UButton
+                color="neutral"
+                variant="outline"
+                size="sm"
+                icon="i-lucide-refresh-cw"
+                :loading="loading"
+                @click="handleRefresh"
+              />
+            </div>
+          </div>
+
+          <!-- ═══ EXPANDABLE FILTER AREA ═══ -->
+          <div class="ap-filter-collapse" :class="{ 'is-open': filtersOpen }">
+            <div class="ap-filter-inner">
+              <div class="border-t border-[var(--dashboard-divider)] px-5 py-4">
+                <div class="grid gap-4 lg:grid-cols-4">
+                  <div>
+                    <div class="ap-filter-label">
+                      Date Range
                     </div>
-                    <div class="shrink-0">
-                      <UButton
-                        icon="i-lucide-eye"
-                        color="neutral"
-                        variant="ghost"
-                        size="xs"
-                        @click="viewLead(lead.id)"
+                    <USelect
+                      v-model="selectedDateRange"
+                      :items="PIPELINE_DATE_RANGE_OPTIONS"
+                      value-key="value"
+                      label-key="label"
+                      size="sm"
+                    />
+                  </div>
+                  <div v-if="selectedDateRange === 'custom'" class="lg:col-span-2">
+                    <div class="ap-filter-label">
+                      Custom Range
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <UInput
+                        v-model="customStartDate"
+                        type="date"
+                        size="sm"
+                        class="flex-1"
+                      />
+                      <span class="text-xs text-[var(--dashboard-text-soft)]">to</span>
+                      <UInput
+                        v-model="customEndDate"
+                        type="date"
+                        size="sm"
+                        class="flex-1"
                       />
                     </div>
                   </div>
-
-                  <div class="mt-2 flex items-center justify-between gap-2">
-                    <UBadge variant="subtle" :label="lead.publisher" size="xs" />
-                    <div class="text-xs text-muted">{{ lead.date }}</div>
+                  <div v-if="selectedDateRange !== 'custom'">
+                    <div class="ap-filter-label">
+                      Stage
+                    </div>
+                    <USelect
+                      v-model="selectedStage"
+                      :items="stageOptions"
+                      value-key="value"
+                      label-key="label"
+                      size="sm"
+                    />
                   </div>
-                </UCard>
-
-                <div
-                  v-if="(leadsByStage.get(stage.key)?.length ?? 0) === 0"
-                  class="rounded-md border border-dashed border-default px-3 py-6 text-center text-xs text-muted"
-                >
-                  No leads
+                  <div>
+                    <div class="ap-filter-label">
+                      Source Type
+                    </div>
+                    <USelect
+                      v-model="selectedSourceType"
+                      :items="sourceTypeOptions"
+                      value-key="value"
+                      label-key="label"
+                      size="sm"
+                    />
+                  </div>
+                  <div>
+                    <div class="ap-filter-label">
+                      State
+                    </div>
+                    <USelectMenu
+                      v-model="selectedStates"
+                      :items="stateOptions"
+                      value-key="value"
+                      label-key="label"
+                      multiple
+                      placeholder="All States"
+                      size="sm"
+                      :search-input="{ placeholder: 'Search states...' }"
+                    />
+                  </div>
+                  <div v-if="selectedDateRange === 'custom'">
+                    <div class="ap-filter-label">
+                      Stage
+                    </div>
+                    <USelect
+                      v-model="selectedStage"
+                      :items="stageOptions"
+                      value-key="value"
+                      label-key="label"
+                      size="sm"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div v-else class="mt-4 flex-1">
-          <UCard class="flex min-h-0 flex-1 flex-col" :ui="{ body: 'p-0 min-h-0 flex-1 flex flex-col' }">
-            <div class="min-h-0 flex-1 overflow-auto">
-              <UTable
-                :loading="loading"
-                :data="pagedRows"
-                :columns="columns"
-                :ui="{
-                  base: 'w-full',
-                  thead: '[&>tr]:bg-elevated/50',
-                  tbody: '[&>tr]:hover:bg-muted/50',
-                  th: 'px-4 py-3 text-left',
-                  td: 'px-4 py-3'
+        <!-- ═══ ERROR STATE ═══ -->
+        <div
+          v-if="loadError && !loading"
+          class="dashboard-surface-card dashboard-fade-up flex items-center gap-3 border-l-4 px-5 py-4"
+          :style="{ borderLeftColor: '#ef4444', '--dashboard-enter-delay': '240ms' }"
+        >
+          <div class="flex size-9 items-center justify-center rounded-lg" style="background: rgba(239,68,68,0.1);">
+            <UIcon name="i-lucide-triangle-alert" class="size-4.5" style="color: #ef4444;" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="text-sm font-semibold" style="color: var(--dashboard-text-primary);">
+              Unable to load transfers
+            </div>
+            <div class="mt-0.5 truncate text-xs" style="color: var(--dashboard-text-muted);">
+              {{ loadError }}
+            </div>
+          </div>
+          <UButton
+            color="neutral"
+            variant="outline"
+            size="xs"
+            @click="handleRefresh"
+          >
+            Retry
+          </UButton>
+        </div>
+
+        <!-- ═══ LOADING STATE ═══ -->
+        <div
+          v-if="loading"
+          class="flex flex-1 items-center justify-center"
+        >
+          <div class="flex flex-col items-center gap-3">
+            <UIcon
+              name="i-lucide-loader-2"
+              class="size-8 animate-spin"
+              style="color: var(--ap-accent);"
+            />
+            <span class="text-sm" style="color: var(--dashboard-text-muted);">Loading transfers...</span>
+          </div>
+        </div>
+
+        <!-- ═══ EMPTY STATE ═══ -->
+        <div
+          v-else-if="!loading && filteredLeads.length === 0 && !loadError"
+          class="flex flex-1 items-center justify-center"
+        >
+          <div class="flex flex-col items-center gap-3 text-center">
+            <div
+              class="flex size-14 items-center justify-center rounded-2xl"
+              style="background: var(--ap-accent-soft);"
+            >
+              <UIcon name="i-lucide-arrow-right-left" class="size-7" style="color: var(--ap-accent);" />
+            </div>
+            <div class="text-sm font-semibold" style="color: var(--dashboard-text-primary);">
+              No transfers yet
+            </div>
+            <div class="max-w-xs text-xs" style="color: var(--dashboard-text-muted);">
+              Transfers will appear here once leads enter the transfer pipeline.
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ KANBAN BOARD ═══ -->
+        <div
+          v-else-if="viewMode === 'kanban' && !loading"
+          class="dashboard-fade-up min-h-0 flex-1"
+          :class="boardReady ? 'overflow-hidden' : 'overflow-hidden'"
+          :style="{ '--dashboard-enter-delay': '280ms' }"
+        >
+          <div class="ap-board-scroll flex h-full min-h-0 items-stretch gap-4 pb-2 pr-2">
+            <!-- Column per stage -->
+            <div
+              v-for="(stage, stageIdx) in STAGES"
+              :key="stage.key"
+              class="ap-column flex h-full shrink-0 flex-col"
+              :class="{ 'ap-column-dragover': dragOverStage === stage.key && draggedLead?.stage !== stage.key }"
+              :style="{
+                '--ap-col-accent': getStageColor(stage.key, stageIdx).accent,
+                '--ap-col-accent-rgb': getStageColor(stage.key, stageIdx).rgb,
+                minWidth: '280px',
+                width: STAGES.length <= 4 ? `${100 / STAGES.length}%` : '320px',
+              }"
+              @dragover="onColumnDragOver($event, stage.key)"
+              @dragleave="onColumnDragLeave($event, stage.key)"
+              @drop="onColumnDrop($event, stage.key)"
+            >
+              <!-- Column Header -->
+              <div
+                class="ap-column-header flex items-center gap-2.5 rounded-t-xl border-b border-[var(--dashboard-divider)] px-3.5 py-2.5"
+                :style="{
+                  background: `rgba(${getStageColor(stage.key, stageIdx).rgb}, 0.06)`,
                 }"
               >
-                <template #stage-cell="{ row }">
-                  <UBadge variant="subtle" :label="getStageLabel(row.original.stage)" />
-                </template>
-
-                <template #opportunityValue-cell="{ row }">
-                  <div class="font-semibold">{{ formatMoney(row.original.opportunityValue) }}</div>
-                </template>
-              </UTable>
-            </div>
-
-            <div class="flex flex-wrap items-center justify-between gap-3 border-t border-default px-4 py-3">
-              <UButton
-                color="neutral"
-                variant="outline"
-                :disabled="page <= 1"
-                @click="page = Math.max(1, page - 1)"
-              >
-                Previous
-              </UButton>
-
-              <div class="text-sm text-muted">
-                Page {{ page }} of {{ pageCount }}
+                <div
+                  class="flex size-7 items-center justify-center rounded-lg"
+                  :style="{ background: `rgba(${getStageColor(stage.key, stageIdx).rgb}, 0.15)` }"
+                >
+                  <UIcon
+                    :name="getStageIcon(stage.key, stageIdx)"
+                    class="size-3.5"
+                    :style="{ color: getStageColor(stage.key, stageIdx).accent }"
+                  />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-1.5">
+                    <span class="truncate text-[13px] font-semibold" style="color: var(--dashboard-text-primary);">
+                      {{ stage.label }}
+                    </span>
+                    <UPopover
+                      mode="hover"
+                      arrow
+                      :open-delay="100"
+                      :close-delay="120"
+                      :content="{ side: 'top', align: 'start', sideOffset: 8 }"
+                    >
+                      <button type="button" class="shrink-0 rounded-full p-0.5 opacity-40 transition-opacity hover:opacity-80" tabindex="-1">
+                        <UIcon name="i-lucide-circle-help" class="size-3.5" />
+                      </button>
+                      <template #content>
+                        <div class="max-w-72 p-3">
+                          <div class="text-sm font-semibold" style="color: var(--dashboard-text-primary);">
+                            {{ stage.label }}
+                          </div>
+                          <p class="mt-1 text-xs leading-5" style="color: var(--dashboard-text-muted);">
+                            {{ stage.description }}
+                          </p>
+                        </div>
+                      </template>
+                    </UPopover>
+                  </div>
+                </div>
+                <span
+                  class="flex size-5.5 items-center justify-center rounded-md text-[11px] font-bold tabular-nums"
+                  :style="{
+                    background: `rgba(${getStageColor(stage.key, stageIdx).rgb}, 0.12)`,
+                    color: getStageColor(stage.key, stageIdx).accent,
+                  }"
+                >
+                  {{ leadsByStage.get(stage.key)?.length ?? 0 }}
+                </span>
               </div>
 
-              <UButton
-                color="neutral"
-                variant="outline"
-                :disabled="page >= pageCount"
-                @click="page = Math.min(pageCount, page + 1)"
-              >
-                Next
-              </UButton>
+              <!-- Cards Area -->
+              <div class="ap-scroll flex-1 space-y-2 overflow-y-auto p-2">
+                <div
+                  v-for="lead in (leadsByStage.get(stage.key) ?? [])"
+                  :key="lead.id"
+                  class="ap-kanban-card"
+                  draggable="true"
+                  tabindex="0"
+                  @dragstart="onDragStart($event, lead)"
+                  @dragend="onDragEnd"
+                  @keydown.enter="viewLead(lead.id)"
+                >
+                  <!-- Top row: name + CTA -->
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0 flex-1">
+                      <div class="ap-card-title truncate text-[13px] font-semibold" style="color: var(--dashboard-text-primary);">
+                        {{ lead.clientName || '—' }}
+                      </div>
+                      <div class="mt-0.5 text-[11px]" style="color: var(--dashboard-text-muted);">
+                        {{ lead.phone || '—' }}
+                      </div>
+                    </div>
+                    <button
+                      class="ap-card-cta flex size-6 shrink-0 items-center justify-center rounded-md transition-all duration-200"
+                      :style="{ background: `rgba(${getStageColor(stage.key, stageIdx).rgb}, 0.1)` }"
+                      tabindex="-1"
+                      @click.stop="viewLead(lead.id)"
+                    >
+                      <UIcon name="i-lucide-eye" class="size-3" :style="{ color: getStageColor(stage.key, stageIdx).accent }" />
+                    </button>
+                  </div>
+
+                  <!-- Middle row: publisher + date -->
+                  <div class="mt-2.5 flex items-center justify-between gap-2">
+                    <span
+                      class="max-w-[60%] truncate rounded-md px-1.5 py-0.5 text-[10px] font-medium"
+                      :style="{
+                        background: `rgba(${getStageColor(stage.key, stageIdx).rgb}, 0.08)`,
+                        color: getStageColor(stage.key, stageIdx).accent,
+                      }"
+                    >
+                      {{ lead.publisher || '—' }}
+                    </span>
+                    <span class="text-[10px] tabular-nums" style="color: var(--dashboard-text-soft);">
+                      {{ fmtDate(lead.date) }}
+                    </span>
+                  </div>
+
+                  <!-- Bottom row: volume + state -->
+                  <div class="mt-2 flex items-center justify-between gap-2">
+                    <span
+                      v-if="lead.opportunityValue"
+                      class="text-xs font-semibold tabular-nums"
+                      style="color: var(--dashboard-text-primary);"
+                    >
+                      {{ formatMoney(lead.opportunityValue) }}
+                    </span>
+                    <span v-else />
+                    <span
+                      v-if="lead.state"
+                      class="text-[10px]"
+                      style="color: var(--dashboard-text-soft);"
+                    >
+                      {{ lead.state }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Empty column -->
+                <div
+                  v-if="(leadsByStage.get(stage.key)?.length ?? 0) === 0"
+                  class="ap-empty-column"
+                >
+                  <UIcon name="i-lucide-inbox" class="mx-auto mb-1.5 size-5 opacity-40" />
+                  <div>No transfers in this stage</div>
+                </div>
+              </div>
             </div>
-          </UCard>
+          </div>
+        </div>
+
+        <!-- ═══ LIST VIEW ═══ -->
+        <div
+          v-else-if="viewMode === 'list' && !loading"
+          class="dashboard-fade-up min-h-0 flex-1 flex flex-col"
+          :style="{ '--dashboard-enter-delay': '280ms' }"
+        >
+          <div class="dashboard-surface-card flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div class="ap-scroll min-h-0 flex-1 overflow-auto">
+              <table class="ap-table w-full">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Client</th>
+                    <th>Phone</th>
+                    <th>Stage</th>
+                    <th class="text-right">
+                      Volume
+                    </th>
+                    <th>Publisher</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="lead in pagedRows"
+                    :key="lead.id"
+                    class="ap-table-row"
+                    tabindex="0"
+                    @click="viewLead(lead.id)"
+                    @keydown.enter="viewLead(lead.id)"
+                  >
+                    <td class="tabular-nums">
+                      {{ fmtDate(lead.date) }}
+                    </td>
+                    <td class="font-medium" style="color: var(--dashboard-text-primary);">
+                      {{ lead.clientName || '—' }}
+                    </td>
+                    <td>{{ lead.phone || '—' }}</td>
+                    <td>
+                      <span
+                        class="ap-status-pill"
+                        :style="{
+                          '--pill-accent': getStageColor(lead.stage, STAGES.findIndex(s => s.key === lead.stage)).accent,
+                          '--pill-rgb': getStageColor(lead.stage, STAGES.findIndex(s => s.key === lead.stage)).rgb,
+                        }"
+                      >
+                        {{ getStageLabel(lead.stage) }}
+                      </span>
+                    </td>
+                    <td class="text-right font-semibold tabular-nums" style="color: var(--dashboard-text-primary);">
+                      {{ formatMoney(lead.opportunityValue) }}
+                    </td>
+                    <td>{{ lead.publisher || '—' }}</td>
+                  </tr>
+                  <tr v-if="pagedRows.length === 0">
+                    <td colspan="6" class="py-12 text-center text-sm" style="color: var(--dashboard-text-muted);">
+                      No transfers match your filters
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination Footer -->
+            <div class="ap-pagination-footer">
+              <span class="text-xs tabular-nums" style="color: var(--dashboard-text-muted);">
+                Showing {{ showingStart }}–{{ showingEnd }} of {{ filteredLeads.length }}
+              </span>
+              <div class="flex items-center gap-1.5">
+                <button
+                  class="ap-page-btn"
+                  :disabled="page <= 1"
+                  @click="page = Math.max(1, page - 1)"
+                >
+                  <UIcon name="i-lucide-chevron-left" class="size-3.5" />
+                  <span>Prev</span>
+                </button>
+                <span class="ap-page-pill">{{ page }}</span>
+                <button
+                  class="ap-page-btn"
+                  :disabled="page >= pageCount"
+                  @click="page = Math.min(pageCount, page + 1)"
+                >
+                  <span>Next</span>
+                  <UIcon name="i-lucide-chevron-right" class="size-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </template>
@@ -566,12 +1005,372 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+/* ═══════════════════════════════════════════════
+   SUMMARY CARDS
+   ═══════════════════════════════════════════════ */
+.ap-summary-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--dashboard-surface-border);
+  border-left: 3px solid var(--card-accent, var(--ap-accent));
+  border-radius: 1rem;
+  background: var(--dashboard-surface);
+  box-shadow: var(--dashboard-surface-shadow);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: box-shadow 300ms ease, transform 300ms ease;
 }
 
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
+.ap-summary-card:hover {
+  box-shadow: var(--dashboard-surface-shadow-hover);
+}
+
+.ap-card-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--card-light, var(--ap-accent));
+}
+
+.ap-card-value {
+  margin-top: 6px;
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--dashboard-text-primary);
+}
+
+/* ═══════════════════════════════════════════════
+   SEARCH INPUT
+   ═══════════════════════════════════════════════ */
+.ap-search-input {
+  max-width: 20rem;
+}
+
+/* ═══════════════════════════════════════════════
+   SEGMENT CONTROL (Board / List toggle)
+   ═══════════════════════════════════════════════ */
+.ap-segment-control {
+  display: inline-flex;
+  border-radius: 0.625rem;
+  border: 1px solid var(--dashboard-surface-border);
+  background: var(--dashboard-surface);
+  padding: 2px;
+  gap: 2px;
+}
+
+.ap-segment-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 0.5rem;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dashboard-text-muted);
+  transition: all 180ms ease;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+}
+
+.ap-segment-btn:hover:not(.is-active) {
+  background: rgba(var(--ap-col-accent-rgb, 174, 64, 16), 0.06);
+  color: var(--dashboard-text-secondary);
+}
+
+.ap-segment-btn.is-active {
+  background: var(--ap-accent);
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+/* ═══════════════════════════════════════════════
+   FILTER COLLAPSE ANIMATION
+   ═══════════════════════════════════════════════ */
+.ap-filter-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 350ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ap-filter-collapse.is-open {
+  grid-template-rows: 1fr;
+}
+
+.ap-filter-inner {
+  overflow: hidden;
+}
+
+.ap-filter-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--dashboard-text-soft);
+  margin-bottom: 6px;
+}
+
+/* ═══════════════════════════════════════════════
+   KANBAN BOARD
+   ═══════════════════════════════════════════════ */
+.ap-board-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--ap-col-accent-rgb, 128, 128, 128), 0.25) transparent;
+}
+
+.ap-board-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.ap-board-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ap-board-scroll::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.25);
+  border-radius: 4px;
+}
+
+/* ═══════════════════════════════════════════════
+   KANBAN COLUMN
+   ═══════════════════════════════════════════════ */
+.ap-column {
+  border-radius: 0.75rem;
+  border: 1px solid var(--dashboard-surface-border);
+  background: var(--dashboard-surface);
+  box-shadow: var(--dashboard-surface-shadow);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.ap-column-dragover {
+  border-color: rgba(var(--ap-col-accent-rgb), 0.45) !important;
+  border-style: dashed !important;
+  box-shadow: 0 0 0 2px rgba(var(--ap-col-accent-rgb), 0.10), var(--dashboard-surface-shadow);
+}
+
+/* ═══════════════════════════════════════════════
+   KANBAN CARDS
+   ═══════════════════════════════════════════════ */
+.ap-kanban-card {
+  min-height: 108px;
+  padding: 12px 14px;
+  border-radius: 0.5rem;
+  border: 1px solid var(--dashboard-surface-border);
+  background: var(--dashboard-surface);
+  cursor: grab;
+  transition: all 200ms ease;
+  position: relative;
+}
+
+.ap-kanban-card:hover {
+  border-color: rgba(var(--ap-col-accent-rgb), 0.24);
+  background: rgba(var(--ap-col-accent-rgb), 0.04);
+  box-shadow: 0 2px 8px rgba(var(--ap-col-accent-rgb), 0.08);
+}
+
+.ap-kanban-card:hover .ap-card-title {
+  color: var(--ap-col-accent) !important;
+}
+
+.ap-kanban-card:hover .ap-card-cta {
+  opacity: 1 !important;
+}
+
+.ap-kanban-card:focus-visible {
+  outline: 2px solid var(--ap-col-accent);
+  outline-offset: 1px;
+}
+
+.ap-card-cta {
+  opacity: 0;
+}
+
+.ap-kanban-card:active {
+  cursor: grabbing;
+}
+
+/* Dragging state applied via JS */
+.ap-kanban-card[style*="opacity: 0.4"] {
+  filter: grayscale(0.3);
+}
+
+/* ═══════════════════════════════════════════════
+   EMPTY COLUMN
+   ═══════════════════════════════════════════════ */
+.ap-empty-column {
+  border: 1px dashed var(--dashboard-surface-border-strong);
+  border-radius: 0.5rem;
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--dashboard-text-soft);
+}
+
+/* ═══════════════════════════════════════════════
+   SLIM SCROLLBARS (card areas)
+   ═══════════════════════════════════════════════ */
+.ap-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(128, 128, 128, 0.2) transparent;
+}
+
+.ap-scroll::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.ap-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ap-scroll::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.2);
+  border-radius: 4px;
+}
+
+.ap-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.35);
+}
+
+/* ═══════════════════════════════════════════════
+   LIST TABLE
+   ═══════════════════════════════════════════════ */
+.ap-table {
+  border-collapse: collapse;
+}
+
+.ap-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.ap-table th {
+  padding: 10px 16px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--dashboard-text-soft);
+  background: var(--dashboard-surface-strong);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--dashboard-divider);
+  white-space: nowrap;
+  text-align: left;
+}
+
+.ap-table td {
+  padding: 10px 16px;
+  font-size: 13px;
+  color: var(--dashboard-text-secondary);
+  border-bottom: 1px solid var(--dashboard-divider);
+  white-space: nowrap;
+}
+
+.ap-table-row {
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.ap-table-row:hover {
+  background: rgba(var(--ap-col-accent-rgb, 174, 64, 16), 0.04);
+}
+
+.ap-table-row:focus-visible {
+  outline: 2px solid var(--ap-accent);
+  outline-offset: -2px;
+}
+
+/* ═══════════════════════════════════════════════
+   STATUS PILL
+   ═══════════════════════════════════════════════ */
+.ap-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(var(--pill-rgb, 128, 128, 128), 0.12);
+  color: var(--pill-accent, var(--dashboard-text-secondary));
+  white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════
+   PAGINATION FOOTER
+   ═══════════════════════════════════════════════ */
+.ap-pagination-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-top: 1px solid var(--dashboard-divider);
+  background: var(--dashboard-surface-strong);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.ap-page-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 0.5rem;
+  border: 1px solid var(--dashboard-surface-border);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dashboard-text-secondary);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.ap-page-btn:hover:not(:disabled) {
+  background: rgba(var(--ap-col-accent-rgb, 174, 64, 16), 0.06);
+  border-color: var(--dashboard-surface-border-strong);
+}
+
+.ap-page-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.ap-page-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 0.5rem;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: var(--ap-accent-soft);
+  color: var(--ap-accent);
+}
+
+/* ═══════════════════════════════════════════════
+   REDUCED MOTION
+   ═══════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  .ap-filter-collapse {
+    transition: none;
+  }
+
+  .ap-kanban-card,
+  .ap-segment-btn,
+  .ap-table-row,
+  .ap-page-btn,
+  .ap-column {
+    transition: none !important;
+  }
 }
 </style>
