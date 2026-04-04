@@ -34,6 +34,13 @@ const links = computed(() => [[{
     open.value = false
   }
 }, {
+  label: 'Lead Intake',
+  icon: 'i-lucide-clipboard-pen',
+  to: '/lead-intake',
+  onSelect: () => {
+    open.value = false
+  }
+}, {
   label: 'Transfer Pipeline',
   icon: 'i-lucide-arrow-right-left',
   to: '/transfers',
@@ -60,13 +67,6 @@ const links = computed(() => [[{
   label: 'Sales Map',
   icon: 'i-lucide-map',
   to: '/sales-map',
-  onSelect: () => {
-    open.value = false
-  }
-}, {
-  label: 'Lead Intake',
-  icon: 'i-lucide-clipboard-pen',
-  to: '/lead-intake',
   onSelect: () => {
     open.value = false
   }

@@ -561,6 +561,27 @@ const unbindSvgEvents = () => {
   svg.removeEventListener('mousemove', handleMouseMove)
 }
 
+/* ── New UI helpers ── */
+
+const statsCards = computed(() => {
+  const all = statesData.value
+  return [
+    { label: 'Total', value: all.length, accent: '#ae4010', delay: 400 },
+    { label: 'Active', value: all.filter(s => s.status === 'unblocked').length, accent: '#3f6eb3', delay: 500 },
+    { label: 'Blocked', value: all.filter(s => s.status === 'temporarily_blocked').length, accent: '#9ca3af', delay: 600 }
+  ]
+})
+
+const activeCount = computed(() => filteredStates.value.length)
+const maxStates = US_STATES.length
+const isAtMax = computed(() => activeCount.value >= maxStates)
+
+const revealMap = () => {
+  if (!mapRoot.value) return
+  mapRoot.value.classList.remove('opacity-0')
+  mapRoot.value.classList.add('ap-blur-in')
+}
+
 onMounted(() => {
   const run = async () => {
     if (!mapRoot.value) return
@@ -580,6 +601,7 @@ onMounted(() => {
       bindSvgEvents()
       await refreshCounts()
       applyMapColors()
+      revealMap()
     } catch {
       const cached = (() => {
         try {
@@ -593,6 +615,7 @@ onMounted(() => {
       bindSvgEvents()
       await refreshCounts()
       applyMapColors()
+      revealMap()
     }
   }
 
@@ -611,7 +634,7 @@ watch([selectedStatus, filteredStates], () => {
 <template>
   <UDashboardPanel id="sales-map">
     <template #header>
-      <UDashboardNavbar title="USA States Sales Map">
+      <UDashboardNavbar title="Sales Map">
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
@@ -631,89 +654,162 @@ watch([selectedStatus, filteredStates], () => {
     </template>
 
     <template #body>
-      <div class="space-y-4">
-        <div>
-          <UCard>
-            <div class="space-y-3">
-              <h3 class="font-semibold">Sales Map Legend</h3>
-              <div class="text-sm text-muted">
-                Unblocked states are colored by attorney coverage capacity, while blocked states keep their blocked visuals.
-              </div>
-              <div class="grid gap-3 sm:grid-cols-5">
-                <div class="flex items-center gap-2">
-                  <div class="size-4 rounded-full bg-red-500" />
-                  <span class="text-sm">Low Capacity</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <div class="size-4 rounded-full bg-yellow-500" />
-                  <span class="text-sm">Medium Capacity</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <div class="size-4 rounded-full bg-green-500" />
-                  <span class="text-sm">High Capacity</span>
-                </div>
-                <div class="flex items-center gap-2">
+      <!-- Card shell -->
+      <div class="ap-fade-in ap-delay-2 rounded-2xl border border-black/[0.08] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-4 overflow-hidden">
+        <!-- Relative container for map + overlays -->
+        <div class="relative">
+          <!-- SVG Map -->
+          <div
+            ref="mapRoot"
+            class="ap-map-root w-full rounded-xl overflow-hidden opacity-0"
+            style="height: 520px"
+          />
+
+          <!-- Stats overlay — desktop only -->
+          <div class="absolute left-3 top-3 z-10 hidden md:block">
+            <div class="w-32 overflow-hidden rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-white/90 dark:bg-[#1a1a1a]/60 shadow-lg backdrop-blur-sm">
+              <div
+                v-for="(stat, i) in statsCards"
+                :key="stat.label"
+                class="ap-fade-in-left px-4 py-3"
+                :class="{ 'border-t border-black/[0.04] dark:border-white/[0.06]': i > 0 }"
+                :style="{ animationDelay: `${stat.delay}ms` }"
+              >
+                <div class="relative pl-3">
                   <div
-                    class="size-4 rounded-full border border-default"
-                    style="background-color:#f3f4f6;background-image:repeating-linear-gradient(45deg,#111827 0,#111827 2px,transparent 2px,transparent 6px);"
+                    class="absolute bottom-0.5 left-0 top-0.5 w-[3px] rounded-full"
+                    :style="{ backgroundColor: stat.accent }"
                   />
-                  <span class="text-sm">Blocked</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <div
-                    class="size-4 rounded-full border border-default"
-                    style="background-color:#fff7ed;background-image:repeating-linear-gradient(45deg,#f97316 0,#f97316 3px,transparent 3px,transparent 8px);"
-                  />
-                  <span class="text-sm">Temporarily Blocked</span>
+                  <div class="text-xs leading-tight text-gray-500 dark:text-gray-400">{{ stat.label }}</div>
+                  <div class="text-lg font-bold" :style="{ color: stat.accent }">{{ stat.value }}</div>
                 </div>
               </div>
             </div>
-          </UCard>
-        </div>
-
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <USelect
-              v-model="selectedStatus"
-              class="w-64"
-              :items="statusOptions"
-              value-key="value"
-              label-key="label"
-              @change="filterStates"
-            />
           </div>
 
-          <UBadge variant="subtle" :label="`${filteredStates.length} states`" />
-        </div>
+          <!-- Legend + Filter bar — floating bottom-center -->
+          <div class="absolute bottom-0 left-1/2 z-10 -translate-x-1/2 ap-fade-in ap-delay-4">
+            <div class="flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-x-2 gap-y-1.5 rounded-xl border border-black/[0.06] px-2.5 py-2 shadow-lg backdrop-blur-sm dark:border-white/[0.08] bg-white/90 dark:bg-[#1a1a1a]/60 md:max-w-none md:flex-nowrap md:gap-x-4 md:whitespace-nowrap md:px-4 md:py-2.5">
+              <!-- Legend items -->
+              <div class="flex flex-wrap items-center gap-2 md:flex-nowrap md:gap-3">
+                <div class="flex items-center gap-1.5">
+                  <div class="size-2.5 rounded-full bg-red-500" />
+                  <span class="text-[10px] text-gray-500 dark:text-gray-400">Low Capacity</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <div class="size-2.5 rounded-full bg-yellow-500" />
+                  <span class="text-[10px] text-gray-500 dark:text-gray-400">Medium Capacity</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <div class="size-2.5 rounded-full bg-green-500" />
+                  <span class="text-[10px] text-gray-500 dark:text-gray-400">High Capacity</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <div
+                    class="size-2.5 rounded-full"
+                    style="background: repeating-linear-gradient(45deg, #9ca3af 0 2px, #f3f4f6 2px 6px)"
+                  />
+                  <span class="text-[10px] text-gray-500 dark:text-gray-400">Blocked</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <div
+                    class="size-2.5 rounded-full"
+                    style="background: repeating-linear-gradient(45deg, #f97316 0 3px, #fff7ed 3px 7px)"
+                  />
+                  <span class="text-[10px] text-gray-500 dark:text-gray-400">Temporarily unavailable</span>
+                </div>
+              </div>
 
-        <UCard :ui="{ body: 'p-4' }">
-          <div class="relative">
-            <div
-              ref="mapRoot"
-              class="w-full rounded-lg bg-white"
-            />
+              <!-- Divider -->
+              <div class="hidden h-5 w-px bg-black/[0.08] dark:bg-white/[0.08] md:block" />
 
-            <div
-              v-if="tooltip.open && tooltip.state"
-              class="pointer-events-none absolute z-10 rounded-lg border border-default bg-elevated px-3 py-2 shadow-lg"
-              :style="{ left: `${tooltip.x}px`, top: `${tooltip.y}px` }"
-            >
-              <div class="text-sm font-semibold">{{ tooltip.state.name }} ({{ tooltip.state.code }})</div>
-              <div class="mt-1 flex items-center gap-2">
-                <UBadge
-                  :color="badgeColorForState(tooltip.state)"
-                  variant="subtle"
-                  :label="getStateBadgeLabel(tooltip.state)"
+              <!-- Controls -->
+              <div class="flex items-center gap-2">
+                <!-- State count badge -->
+                <div
+                  class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold"
+                  :class="isAtMax
+                    ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+                    : 'border-black/[0.06] dark:border-white/[0.08] bg-black/[0.04] dark:bg-white/[0.06] text-gray-500 dark:text-gray-400'"
+                >
+                  <UIcon :name="isAtMax ? 'i-lucide-alert-triangle' : 'i-lucide-map-pin'" class="size-[9px]" />
+                  {{ activeCount }}/{{ maxStates }}
+                </div>
+
+                <!-- Filter -->
+                <USelect
+                  v-model="selectedStatus"
                   size="xs"
+                  class="min-w-28 md:min-w-36"
+                  :items="statusOptions"
+                  value-key="value"
+                  label-key="label"
+                  @change="filterStates"
                 />
               </div>
-              <div class="mt-1 text-xs text-muted">
-                {{ tooltip.state.notes || tooltip.state.description }}
-              </div>
             </div>
           </div>
-        </UCard>
+
+          <!-- Tooltip -->
+          <div
+            v-if="tooltip.open && tooltip.state"
+            class="pointer-events-none absolute z-20 rounded-xl border border-black/[0.08] dark:border-white/[0.06] bg-white dark:bg-[#1a1a1a] px-4 py-3 shadow-xl"
+            :style="{ left: `${tooltip.x}px`, top: `${tooltip.y}px` }"
+          >
+            <div class="text-sm font-semibold">{{ tooltip.state.name }} ({{ tooltip.state.code }})</div>
+            <div class="mt-1.5 flex items-center gap-2">
+              <UBadge
+                :color="badgeColorForState(tooltip.state)"
+                variant="subtle"
+                :label="getStateBadgeLabel(tooltip.state)"
+                size="xs"
+              />
+            </div>
+            <div v-if="tooltip.state.attorneyCount > 0" class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+              {{ tooltip.state.attorneyCount }} attorney{{ tooltip.state.attorneyCount !== 1 ? 's' : '' }} covering
+            </div>
+            <div class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+              {{ tooltip.state.notes || tooltip.state.description }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Mobile stats row -->
+        <div class="mt-3 flex gap-2 md:hidden">
+          <div
+            v-for="stat in statsCards"
+            :key="stat.label"
+            class="ap-fade-in-left relative flex-1 overflow-hidden rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-white/90 dark:bg-[#1a1a1a]/60 px-3 py-2.5 pl-5 shadow-sm backdrop-blur-sm"
+            :style="{ animationDelay: `${stat.delay}ms` }"
+          >
+            <div
+              class="absolute bottom-0 left-0 top-0 w-1 rounded-r-full"
+              :style="{ backgroundColor: stat.accent }"
+            />
+            <div class="text-[10px] leading-tight text-gray-500 dark:text-gray-400">{{ stat.label }}</div>
+            <div class="text-base font-bold" :style="{ color: stat.accent }">{{ stat.value }}</div>
+          </div>
+        </div>
       </div>
     </template>
   </UDashboardPanel>
 </template>
+
+<style scoped>
+/* SVG responsive sizing */
+.ap-map-root :deep(svg) {
+  width: 100%;
+  height: 100%;
+}
+
+/* State path hover effect */
+.ap-map-root :deep(svg path[data-id]) {
+  transition: transform 0.2s ease, opacity 0.3s ease;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+.ap-map-root :deep(svg path[data-id]:hover) {
+  transform: scale(1.08);
+}
+</style>

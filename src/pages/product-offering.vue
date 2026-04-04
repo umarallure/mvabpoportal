@@ -1,11 +1,17 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 
 const tiltReady = ref(false)
 const isHovering = ref([false, false, false, false])
 const tiltTransform = ref(['', '', '', ''])
 const animDone = ref([false, false, false, false])
 const prefersReducedMotion = ref(false)
+
+const selectedCategory = ref('consumer')
+const categoryOptions = [
+  { value: 'consumer', label: 'Consumer' },
+  { value: 'commercial', label: 'Commercial' }
+]
 
 let tiltTimer: ReturnType<typeof setTimeout>
 
@@ -40,9 +46,10 @@ function onTiltLeave(i: number) {
   tiltTransform.value[i] = ''
 }
 
-const tiers = [
+const consumerTiers = [
   {
     name: 'Tier 1 - Transfer',
+    tierClass: 'tier-1',
     price: '$1,000',
     rows: [
       { icon: 'i-lucide-calendar-clock', label: 'Accident Occurred', value: '12+ Months Ago' },
@@ -53,6 +60,7 @@ const tiers = [
   },
   {
     name: 'Tier 2 - Bronze',
+    tierClass: 'tier-2',
     price: '$1,500',
     rows: [
       { icon: 'i-lucide-calendar-clock', label: 'Accident Occurred', value: '6-12 Months Ago' },
@@ -63,6 +71,7 @@ const tiers = [
   },
   {
     name: 'Tier 3 - Silver',
+    tierClass: 'tier-3',
     price: '$2,000',
     rows: [
       { icon: 'i-lucide-calendar-clock', label: 'Accident Occurred', value: '3-6 Months Ago' },
@@ -73,6 +82,7 @@ const tiers = [
   },
   {
     name: 'Tier 4 - Gold',
+    tierClass: 'tier-4',
     price: '$3,000',
     rows: [
       { icon: 'i-lucide-calendar-clock', label: 'Accident Occurred', value: '0-3 Months Ago' },
@@ -82,6 +92,30 @@ const tiers = [
     ]
   }
 ]
+
+const commercialTiers = [
+  {
+    name: 'Commercial',
+    tierClass: 'tier-commercial',
+    price: '$3,500',
+    rows: [
+      { icon: 'i-lucide-calendar-clock', label: 'Accident Occurred', value: '0-3 Months Ago' },
+      { icon: 'i-lucide-heart-pulse', label: 'Type of Injury', value: 'Moderate to Catastrophic' },
+      { icon: 'i-lucide-file-badge', label: 'Documentation', value: 'All Documentation Covered', subtext: 'Insurance, Proof of Medical Treatment, Police Report' },
+      { icon: 'i-lucide-scale', label: 'Liability', value: '100% Accepted', subtext: 'Or Very Strong Proof' }
+    ]
+  }
+]
+
+const activeTiers = computed(() =>
+  selectedCategory.value === 'consumer' ? consumerTiers : commercialTiers
+)
+
+watch(selectedCategory, () => {
+  animDone.value = [false, false, false, false]
+  tiltTransform.value = ['', '', '', '']
+  isHovering.value = [false, false, false, false]
+})
 </script>
 
 <template>
@@ -91,6 +125,7 @@ const tiers = [
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
+
       </UDashboardNavbar>
     </template>
 
@@ -98,9 +133,18 @@ const tiers = [
       <div class="po-page p-6 space-y-6">
         <!-- Intro -->
         <div :class="['po-intro', { 'po-fade-up': !prefersReducedMotion }]">
-          <h1 class="text-xl font-bold text-default">
-            Commissions &mdash; Pricing Per Case
-          </h1>
+          <div class="flex items-center justify-between gap-4">
+            <h1 class="text-xl font-bold text-default">
+              {{ selectedCategory === 'consumer' ? 'Consumer Cases' : 'Commercial Cases' }} &mdash; Commissions Per Case
+            </h1>
+            <USelect
+              v-model="selectedCategory"
+              :items="categoryOptions"
+              value-key="value"
+              label-key="label"
+              class="w-40"
+            />
+          </div>
           <p class="mt-1.5 text-sm text-muted max-w-2xl">
             Each tier reflects the commission value based on recency, liability strength,
             injury severity, and documentation quality.
@@ -108,14 +152,15 @@ const tiers = [
         </div>
 
         <!-- Tier card grid -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div :class="activeTiers.length > 1 ? 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4' : 'flex'">
           <div
-            v-for="(tier, i) in tiers"
+            v-for="(tier, i) in activeTiers"
             :key="tier.name"
             :class="[
               'po-tilt',
-              `tier-${i + 1}`,
-              { 'po-fade-up': !prefersReducedMotion && !animDone[i] }
+              tier.tierClass,
+              { 'po-fade-up': !prefersReducedMotion && !animDone[i] },
+              activeTiers.length === 1 ? 'w-full max-w-sm' : ''
             ]"
             :style="{
               animationDelay: !prefersReducedMotion && !animDone[i] ? `${200 + i * 100}ms` : undefined,
@@ -331,5 +376,23 @@ const tiers = [
 .dark .po-page .po-row:hover {
   background: rgba(255, 255, 255, 0.02);
 }
+
+/* ── Commercial tier (primary orange #ae4010) ──────────────────────── */
+.po-page .tier-commercial:hover .po-card { border-color: rgba(174, 64, 16, 0.40); }
+.dark .po-page .tier-commercial:hover .po-card { border-color: rgba(174, 64, 16, 0.50); }
+
+.po-page .tier-commercial .po-header { background: linear-gradient(to right, rgba(174,64,16,0.12), rgba(174,64,16,0.04), transparent); }
+.dark .po-page .tier-commercial .po-header { background: linear-gradient(to right, rgba(174,64,16,0.18), rgba(174,64,16,0.07), transparent); }
+
+.po-page .tier-commercial .po-strip { background: #ae4010; }
+.dark .po-page .tier-commercial .po-strip { background: #c4521a; }
+
+.po-page .tier-commercial .po-price { color: #ae4010; }
+.dark .po-page .tier-commercial .po-price { color: #e07040; }
+
+.po-page .tier-commercial .po-tier-label,
+.po-page .tier-commercial .po-row-icon { color: #ae4010; }
+.dark .po-page .tier-commercial .po-tier-label,
+.dark .po-page .tier-commercial .po-row-icon { color: #e07040; }
 
 </style>

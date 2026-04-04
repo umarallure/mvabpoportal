@@ -25,10 +25,21 @@ const STAGES = computed(() => dbStages.value.map((s) => ({
   description: getSubmissionStageDescription(s.key)
 })))
 
-const stageCardClass = (stageKey: string) => {
-  const stage = dbStages.value.find(s => s.key === stageKey)
-  return stage?.column_class || ''
-}
+/* UI helpers: palette for column accents (visual only) */
+const STAGE_COLORS = [
+  { accent: '#3b82f6', rgb: '59,130,246' },
+  { accent: '#f59e0b', rgb: '245,158,11' },
+  { accent: '#22c55e', rgb: '34,197,94' },
+  { accent: '#ef4444', rgb: '239,68,68' },
+  { accent: '#ae4010', rgb: '174,64,16' },
+  { accent: '#8b5cf6', rgb: '139,92,246' },
+  { accent: '#06b6d4', rgb: '6,182,212' },
+  { accent: '#ec4899', rgb: '236,72,153' },
+  { accent: '#14b8a6', rgb: '20,184,166' },
+]
+
+const getStageColor = (_key: string, index: number) => STAGE_COLORS[index % STAGE_COLORS.length]
+
 
 const buildAllowedStatuses = () => dbStages.value.map(s => s.key)
 
@@ -282,6 +293,8 @@ const stageOptions = computed(() => {
   return dbStages.value.map((s) => ({ label: s.label, value: s.key }))
 })
 
+
+
 const fetchAttorneys = async () => {
   try {
     const { data, error } = await supabase
@@ -447,7 +460,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <UDashboardPanel id="submission-portal">
+  <UDashboardPanel id="submission-portal" :ui="{ body: 'overflow-x-hidden' }">
     <template #header>
       <UDashboardNavbar title="Submission Pipeline">
         <template #leading>
@@ -457,120 +470,161 @@ onMounted(async () => {
     </template>
 
     <template #body>
-      <div class="flex h-full min-h-0 flex-col gap-4">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="flex flex-1 flex-wrap items-center gap-3">
-            <UInput
-              v-model="searchTerm"
-              class="max-w-md"
-              icon="i-lucide-search"
-              placeholder="Search by name, phone, vendor..."
-            />
-
-            <UButton
-              color="neutral"
-              :variant="filtersOpen || activeFilterCount > 0 ? 'solid' : 'outline'"
-              icon="i-lucide-sliders-horizontal"
-              @click="filtersOpen = !filtersOpen"
-            >
-              Filters
-              <UBadge
-                v-if="activeFilterCount > 0"
-                variant="subtle"
-                color="neutral"
-                size="xs"
-                class="ml-2"
-                :label="String(activeFilterCount)"
-              />
-            </UButton>
-          </div>
-
-          <div class="flex items-center gap-3">
-            <UBadge variant="subtle" :label="`${filteredRows.length} records`" />
-
-            <UButton
-              color="primary"
-              variant="solid"
-              icon="i-lucide-refresh-cw"
-              :loading="refreshing"
-              @click="fetchData(true)"
-            >
-              Refresh
-            </UButton>
-          </div>
-        </div>
-
-        <UCard
-          v-if="filtersOpen"
-          class="border-primary/20"
-          :ui="{ body: 'p-4 sm:p-5' }"
+      <div class="ap-page flex h-full min-h-0 flex-col gap-4">
+        <div
+          class="dashboard-surface-card dashboard-fade-up"
+          :style="{ '--dashboard-enter-delay': '180ms', '--dashboard-surface-glow': 'transparent' }"
         >
-          <div class="flex items-start justify-between gap-3">
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-sliders-horizontal" class="size-5 text-muted" />
-              <div class="text-lg font-semibold">Filters</div>
-            </div>
+          <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+            <div class="flex flex-wrap items-center gap-3">
+              <UInput
+                v-model="searchTerm"
+                class="ap-search-input"
+                icon="i-lucide-search"
+                size="sm"
+                placeholder="Search by name, phone, vendor..."
+              />
 
-            <UButton
-              icon="i-lucide-x"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              @click="filtersOpen = false"
-            />
-          </div>
-
-          <div class="mt-4 grid gap-4 lg:grid-cols-4">
-            <UFormField label="Date Range">
               <USelect
                 v-model="selectedDateRange"
                 :items="PIPELINE_DATE_RANGE_OPTIONS"
                 value-key="value"
                 label-key="label"
+                size="sm"
+                class="w-36"
               />
-            </UFormField>
+            </div>
 
-            <UFormField label="Stage">
-              <USelect
-                v-model="selectedStage"
-                :items="stageFilterOptions"
-                value-key="value"
-                label-key="label"
-              />
-            </UFormField>
+            <div class="flex items-center gap-3">
+              <span class="text-xs tabular-nums text-[var(--dashboard-text-muted)]">
+                {{ filteredRows.length }} total
+              </span>
 
-            <UFormField label="Source Type">
-              <USelect
-                v-model="selectedSourceType"
-                :items="sourceTypeOptions"
-                value-key="value"
-                label-key="label"
-              />
-            </UFormField>
+              <UButton
+                color="neutral"
+                :variant="filtersOpen ? 'soft' : 'outline'"
+                size="sm"
+                :icon="filtersOpen ? 'i-lucide-panel-top-close' : 'i-lucide-sliders-horizontal'"
+                @click="filtersOpen = !filtersOpen"
+              >
+                {{ filtersOpen ? 'Hide Filters' : 'Filters' }}
+                <span
+                  v-if="activeFilterCount > 0"
+                  class="ml-1.5 flex size-4.5 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                  :style="{ background: 'var(--ap-accent)' }"
+                >
+                  {{ activeFilterCount }}
+                </span>
+              </UButton>
 
-            <UFormField label="State">
-              <USelectMenu
-                v-model="selectedStates"
-                :items="stateOptions"
-                value-key="value"
-                label-key="label"
-                multiple
-                placeholder="All States"
-                :search-input="{ placeholder: 'Search states...' }"
+              <UButton
+                color="neutral"
+                variant="outline"
+                size="sm"
+                icon="i-lucide-refresh-cw"
+                :loading="refreshing"
+                @click="fetchData(true)"
               />
-            </UFormField>
+            </div>
           </div>
 
-          <div v-if="selectedDateRange === 'custom'" class="mt-4 grid gap-4 sm:grid-cols-2">
-            <UFormField label="Start Date">
-              <UInput v-model="customStartDate" type="date" />
-            </UFormField>
+          <div class="ap-filter-collapse" :class="{ 'is-open': filtersOpen }">
+            <div class="ap-filter-inner">
+              <div class="border-t border-[var(--dashboard-divider)] px-5 py-4">
+                <div class="grid gap-4 lg:grid-cols-4">
+                  <div>
+                    <div class="ap-filter-label">
+                      Date Range
+                    </div>
+                    <USelect
+                      v-model="selectedDateRange"
+                      :items="PIPELINE_DATE_RANGE_OPTIONS"
+                      value-key="value"
+                      label-key="label"
+                      size="sm"
+                    />
+                  </div>
 
-            <UFormField label="End Date">
-              <UInput v-model="customEndDate" type="date" />
-            </UFormField>
+                  <div v-if="selectedDateRange === 'custom'" class="lg:col-span-2">
+                    <div class="ap-filter-label">
+                      Custom Range
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <UInput
+                        v-model="customStartDate"
+                        type="date"
+                        size="sm"
+                        class="flex-1"
+                      />
+                      <span class="text-xs text-[var(--dashboard-text-soft)]">to</span>
+                      <UInput
+                        v-model="customEndDate"
+                        type="date"
+                        size="sm"
+                        class="flex-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div v-if="selectedDateRange !== 'custom'">
+                    <div class="ap-filter-label">
+                      Stage
+                    </div>
+                    <USelect
+                      v-model="selectedStage"
+                      :items="stageFilterOptions"
+                      value-key="value"
+                      label-key="label"
+                      size="sm"
+                    />
+                  </div>
+
+                  <div>
+                    <div class="ap-filter-label">
+                      Source Type
+                    </div>
+                    <USelect
+                      v-model="selectedSourceType"
+                      :items="sourceTypeOptions"
+                      value-key="value"
+                      label-key="label"
+                      size="sm"
+                    />
+                  </div>
+
+                  <div>
+                    <div class="ap-filter-label">
+                      State
+                    </div>
+                    <USelectMenu
+                      v-model="selectedStates"
+                      :items="stateOptions"
+                      value-key="value"
+                      label-key="label"
+                      multiple
+                      placeholder="All States"
+                      size="sm"
+                      :search-input="{ placeholder: 'Search states...' }"
+                    />
+                  </div>
+
+                  <div v-if="selectedDateRange === 'custom'">
+                    <div class="ap-filter-label">
+                      Stage
+                    </div>
+                    <USelect
+                      v-model="selectedStage"
+                      :items="stageFilterOptions"
+                      value-key="value"
+                      label-key="label"
+                      size="sm"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-        </UCard>
+        </div>
 
         <div v-if="loading" class="flex flex-1 items-center justify-center text-sm text-muted">
           <div class="flex items-center gap-2">
@@ -579,59 +633,78 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div v-else class="min-h-0 flex-1 overflow-auto p-2">
-          <div
-            class="flex h-full min-h-0 items-stretch gap-3 pr-2"
-            :style="{ minWidth: `${STAGES.length * 18}rem` }"
-          >
-            <UCard
-              v-for="stage in STAGES"
+        <div v-else class="dashboard-fade-up min-h-0 min-w-0 flex-1 overflow-hidden" :style="{ '--dashboard-enter-delay': '280ms' }">
+          <div class="ap-board-scroll flex h-full min-h-0 items-stretch gap-4 pb-2 pr-2">
+            <div
+              v-for="(stage, stageIdx) in STAGES"
               :key="stage.key"
-              class="flex min-h-[560px] w-[26rem] flex-col"
-              :class="stageCardClass(stage.key)"
-              :ui="{ body: '!p-0 !sm:p-0 min-h-0 flex-1 flex flex-col' }"
+              class="ap-column flex h-full shrink-0 flex-col"
+              :style="{
+                '--ap-col-accent': getStageColor(stage.key, stageIdx).accent,
+                '--ap-col-accent-rgb': getStageColor(stage.key, stageIdx).rgb,
+                minWidth: '280px',
+                width: STAGES.length <= 4 ? `${100 / STAGES.length}%` : '320px',
+              }"
             >
-              <div class="flex items-center justify-between border-b border-default px-3 py-2">
-                <div class="flex min-w-0 items-center gap-1.5">
-                  <div class="truncate text-sm font-semibold">{{ stage.label }}</div>
-                  <UPopover
-                    mode="hover"
-                    arrow
-                    :open-delay="100"
-                    :close-delay="120"
-                    :content="{ side: 'top', align: 'start', sideOffset: 8 }"
-                  >
-                    <UButton
-                      icon="i-lucide-circle-help"
-                      color="neutral"
-                      variant="ghost"
-                      size="xs"
-                      class="shrink-0"
-                      :ui="{ base: 'rounded-full' }"
-                    />
-                    <template #content>
-                      <div class="max-w-72 p-3">
-                        <div class="text-sm font-semibold text-highlighted">{{ stage.label }}</div>
-                        <p class="mt-1 text-xs leading-5 text-muted">{{ stage.description }}</p>
-                      </div>
-                    </template>
-                  </UPopover>
+              <div
+                class="ap-column-header flex items-center gap-2.5 rounded-t-xl border-b border-[var(--dashboard-divider)] px-3.5 py-2.5"
+                :style="{ background: `rgba(${getStageColor(stage.key, stageIdx).rgb}, 0.06)` }"
+              >
+                <div class="flex size-7 items-center justify-center rounded-lg" :style="{ background: `rgba(${getStageColor(stage.key, stageIdx).rgb}, 0.15)` }">
+                  <UIcon name="i-lucide-folder" class="size-3.5" :style="{ color: getStageColor(stage.key, stageIdx).accent }" />
                 </div>
-                <UBadge variant="subtle" :label="String(leadsByStage.get(stage.key)?.length ?? 0)" />
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-1.5">
+                    <span class="truncate text-[13px] font-semibold" style="color: var(--dashboard-text-primary);">{{ stage.label }}</span>
+                    <UPopover
+                      mode="hover"
+                      arrow
+                      :open-delay="100"
+                      :close-delay="120"
+                      :content="{ side: 'top', align: 'start', sideOffset: 8 }"
+                    >
+                      <button type="button" class="shrink-0 rounded-full p-0.5 opacity-40 transition-opacity hover:opacity-80" tabindex="-1">
+                        <UIcon name="i-lucide-circle-help" class="size-3.5" />
+                      </button>
+                      <template #content>
+                        <div class="max-w-72 p-3">
+                          <div class="text-sm font-semibold" style="color: var(--dashboard-text-primary);">
+                            {{ stage.label }}
+                          </div>
+                          <p class="mt-1 text-xs leading-5" style="color: var(--dashboard-text-muted);">
+                            {{ stage.description }}
+                          </p>
+                        </div>
+                      </template>
+                    </UPopover>
+                  </div>
+                </div>
+                <span
+                  class="flex size-5.5 items-center justify-center rounded-md text-[11px] font-bold tabular-nums"
+                  :style="{
+                    background: `rgba(${getStageColor(stage.key, stageIdx).rgb}, 0.12)`,
+                    color: getStageColor(stage.key, stageIdx).accent,
+                  }"
+                >
+                  {{ leadsByStage.get(stage.key)?.length ?? 0 }}
+                </span>
               </div>
 
-              <div class="min-h-0 flex-1 space-y-2 overflow-auto p-2">
-                <UCard
+              <div class="ap-scroll flex-1 space-y-2 overflow-y-auto p-2">
+                <div
                   v-for="row in (leadsByStage.get(stage.key) ?? [])"
                   :key="row.id"
-                  class="w-full cursor-pointer"
-                  :ui="{ body: '!p-2 sm:!p-2' }"
+                  class="ap-kanban-card"
+                  tabindex="0"
                   @click="handleView(row)"
+                  @keydown.enter="handleView(row)"
                 >
                   <div class="flex items-start justify-between gap-2">
                     <div class="min-w-0 flex-1">
-                      <div class="truncate text-sm font-semibold">{{ row.insured_name || '—' }}</div>
-                      <div class="mt-0.5 text-xs text-muted">
+                      <div class="ap-card-title truncate text-[13px] font-semibold" style="color: var(--dashboard-text-primary);">
+                        {{ row.insured_name || '—' }}
+                      </div>
+                      <div class="mt-0.5 text-[11px]" style="color: var(--dashboard-text-muted);">
                         <div class="flex items-center gap-2">
                           <span>{{ row.client_phone_number || '—' }}</span>
                           <div class="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px]">
@@ -642,14 +715,7 @@ onMounted(async () => {
                       </div>
                     </div>
 
-                    <div class="shrink-0 flex items-center gap-2">
-                      <UBadge
-                        v-if="row.has_submission_data === false"
-                        color="neutral"
-                        variant="subtle"
-                        label="Missing Log"
-                        size="xs"
-                      />
+                    <div class="ap-card-cta flex size-6 shrink-0 items-center justify-center rounded-md transition-all duration-200" :style="{ background: `rgba(${getStageColor(stage.key, stageIdx).rgb}, 0.1)` }" tabindex="-1">
                       <UButton
                         icon="i-lucide-pencil"
                         color="neutral"
@@ -662,12 +728,12 @@ onMounted(async () => {
 
                   <div class="mt-2 flex items-center justify-between gap-2">
                     <UBadge variant="subtle" :label="String(row.lead_vendor || '—')" size="xs" />
-                    <div class="text-xs text-muted">
+                    <div class="text-xs text-[var(--dashboard-text-soft)]">
                       {{ String(row.date || '') }}
                     </div>
                   </div>
 
-                  <div class="mt-2 grid grid-cols-1 gap-1 text-xs text-muted">
+                  <div class="mt-2 grid grid-cols-1 gap-1 text-xs text-[var(--dashboard-text-muted)]">
                     <div>
                       <span class="font-medium">Closer:</span>
                       {{ String(row.licensed_agent_account || row.agent || row.buffer_agent || '—') }}
@@ -677,13 +743,14 @@ onMounted(async () => {
                       {{ row.assigned_attorney_id ? (attorneyById.get(String(row.assigned_attorney_id)) || '—') : '—' }}
                     </div>
                   </div>
-                </UCard>
+                </div>
 
                 <div
                   v-if="(leadsByStage.get(stage.key)?.length ?? 0) === 0"
-                  class="rounded-md border border-dashed border-default px-3 py-6 text-center text-xs text-muted"
+                  class="ap-empty-column"
                 >
-                  No leads
+                  <UIcon name="i-lucide-inbox" class="mx-auto mb-1.5 size-5 opacity-40" />
+                  <div>No leads</div>
                 </div>
               </div>
 
@@ -696,7 +763,9 @@ onMounted(async () => {
                 >
                   Previous
                 </UButton>
-                <div class="text-xs text-muted">Page 1 of 1</div>
+                <div class="text-xs text-muted">
+                  Page 1 of 1
+                </div>
                 <UButton
                   color="neutral"
                   variant="outline"
@@ -706,7 +775,7 @@ onMounted(async () => {
                   Next
                 </UButton>
               </div>
-            </UCard>
+            </div>
           </div>
         </div>
 
@@ -752,3 +821,374 @@ onMounted(async () => {
     </template>
   </UDashboardPanel>
 </template>
+
+    <style scoped>
+    /* ═══════════════════════════════════════════════
+       SUMMARY CARDS
+       ═══════════════════════════════════════════════ */
+    .ap-summary-card {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--dashboard-surface-border);
+      border-left: 3px solid var(--card-accent, var(--ap-accent));
+      border-radius: 1rem;
+      background: var(--dashboard-surface);
+      box-shadow: var(--dashboard-surface-shadow);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      transition: box-shadow 300ms ease, transform 300ms ease;
+    }
+
+    .ap-summary-card:hover {
+      box-shadow: var(--dashboard-surface-shadow-hover);
+    }
+
+    .ap-card-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--card-light, var(--ap-accent));
+    }
+
+    .ap-card-value {
+      margin-top: 6px;
+      font-size: 24px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--dashboard-text-primary);
+    }
+
+    /* ═══════════════════════════════════════════════
+       SEARCH INPUT
+       ═══════════════════════════════════════════════ */
+    .ap-search-input {
+      max-width: 20rem;
+    }
+
+    /* ═══════════════════════════════════════════════
+       SEGMENT CONTROL (Board / List toggle)
+       ═══════════════════════════════════════════════ */
+    .ap-segment-control {
+      display: inline-flex;
+      border-radius: 0.625rem;
+      border: 1px solid var(--dashboard-surface-border);
+      background: var(--dashboard-surface);
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .ap-segment-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 12px;
+      border-radius: 0.5rem;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--dashboard-text-muted);
+      transition: all 180ms ease;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+    }
+
+    .ap-segment-btn:hover:not(.is-active) {
+      background: rgba(var(--ap-col-accent-rgb, 174, 64, 16), 0.06);
+      color: var(--dashboard-text-secondary);
+    }
+
+    .ap-segment-btn.is-active {
+      background: var(--ap-accent);
+      color: #fff;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    }
+
+    /* ═══════════════════════════════════════════════
+       FILTER COLLAPSE ANIMATION
+       ═══════════════════════════════════════════════ */
+    .ap-filter-collapse {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 350ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .ap-filter-collapse.is-open {
+      grid-template-rows: 1fr;
+    }
+
+    .ap-filter-inner {
+      overflow: hidden;
+    }
+
+    .ap-filter-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--dashboard-text-soft);
+      margin-bottom: 6px;
+    }
+
+    /* ═══════════════════════════════════════════════
+       KANBAN BOARD
+       ═══════════════════════════════════════════════ */
+    .ap-board-scroll {
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(var(--ap-col-accent-rgb, 128, 128, 128), 0.25) transparent;
+    }
+
+    .ap-board-scroll::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    .ap-board-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .ap-board-scroll::-webkit-scrollbar-thumb {
+      background: rgba(128, 128, 128, 0.25);
+      border-radius: 4px;
+    }
+
+    /* ═══════════════════════════════════════════════
+       KANBAN COLUMN
+       ═══════════════════════════════════════════════ */
+    .ap-column {
+      border-radius: 0.75rem;
+      border: 1px solid var(--dashboard-surface-border);
+      background: var(--dashboard-surface);
+      box-shadow: var(--dashboard-surface-shadow);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      transition: border-color 200ms ease, box-shadow 200ms ease;
+    }
+
+    .ap-column-dragover {
+      border-color: rgba(var(--ap-col-accent-rgb), 0.45) !important;
+      border-style: dashed !important;
+      box-shadow: 0 0 0 2px rgba(var(--ap-col-accent-rgb), 0.10), var(--dashboard-surface-shadow);
+    }
+
+    /* ═══════════════════════════════════════════════
+       KANBAN CARDS
+       ═══════════════════════════════════════════════ */
+    .ap-kanban-card {
+      min-height: 108px;
+      padding: 12px 14px;
+      border-radius: 0.5rem;
+      border: 1px solid var(--dashboard-surface-border);
+      background: var(--dashboard-surface);
+      cursor: grab;
+      transition: all 200ms ease;
+      position: relative;
+    }
+
+    .ap-kanban-card:hover {
+      border-color: rgba(var(--ap-col-accent-rgb), 0.24);
+      background: rgba(var(--ap-col-accent-rgb), 0.04);
+      box-shadow: 0 2px 8px rgba(var(--ap-col-accent-rgb), 0.08);
+    }
+
+    .ap-kanban-card:hover .ap-card-title {
+      color: var(--ap-col-accent) !important;
+    }
+
+    .ap-kanban-card:hover .ap-card-cta {
+      opacity: 1 !important;
+    }
+
+    .ap-kanban-card:focus-visible {
+      outline: 2px solid var(--ap-col-accent);
+      outline-offset: 1px;
+    }
+
+    .ap-card-cta {
+      opacity: 0;
+    }
+
+    .ap-kanban-card:active {
+      cursor: grabbing;
+    }
+
+    /* Dragging state applied via JS */
+    .ap-kanban-card[style*="opacity: 0.4"] {
+      filter: grayscale(0.3);
+    }
+
+    /* ═══════════════════════════════════════════════
+       EMPTY COLUMN
+       ═══════════════════════════════════════════════ */
+    .ap-empty-column {
+      border: 1px dashed var(--dashboard-surface-border-strong);
+      border-radius: 0.5rem;
+      padding: 24px 12px;
+      text-align: center;
+      font-size: 11px;
+      color: var(--dashboard-text-soft);
+    }
+
+    /* ═══════════════════════════════════════════════
+       SLIM SCROLLBARS (card areas)
+       ═══════════════════════════════════════════════ */
+    .ap-scroll {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(128, 128, 128, 0.2) transparent;
+    }
+
+    .ap-scroll::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+
+    .ap-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .ap-scroll::-webkit-scrollbar-thumb {
+      background: rgba(128, 128, 128, 0.2);
+      border-radius: 4px;
+    }
+
+    .ap-scroll::-webkit-scrollbar-thumb:hover {
+      background: rgba(128, 128, 128, 0.35);
+    }
+
+    /* ═══════════════════════════════════════════════
+       LIST TABLE
+       ═══════════════════════════════════════════════ */
+    .ap-table {
+      border-collapse: collapse;
+    }
+
+    .ap-table thead {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    .ap-table th {
+      padding: 10px 16px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--dashboard-text-soft);
+      background: var(--dashboard-surface-strong);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--dashboard-divider);
+      white-space: nowrap;
+      text-align: left;
+    }
+
+    .ap-table td {
+      padding: 10px 16px;
+      font-size: 13px;
+      color: var(--dashboard-text-secondary);
+      border-bottom: 1px solid var(--dashboard-divider);
+      white-space: nowrap;
+    }
+
+    .ap-table-row {
+      cursor: pointer;
+      transition: background 150ms ease;
+    }
+
+    .ap-table-row:hover {
+      background: rgba(var(--ap-col-accent-rgb, 174, 64, 16), 0.04);
+    }
+
+    .ap-table-row:focus-visible {
+      outline: 2px solid var(--ap-accent);
+      outline-offset: -2px;
+    }
+
+    /* ═══════════════════════════════════════════════
+       STATUS PILL
+       ═══════════════════════════════════════════════ */
+    .ap-status-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(var(--pill-rgb, 128, 128, 128), 0.12);
+      color: var(--pill-accent, var(--dashboard-text-secondary));
+      white-space: nowrap;
+    }
+
+    /* ═══════════════════════════════════════════════
+       PAGINATION FOOTER
+       ═══════════════════════════════════════════════ */
+    .ap-pagination-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      border-top: 1px solid var(--dashboard-divider);
+      background: var(--dashboard-surface-strong);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    .ap-page-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 0.5rem;
+      border: 1px solid var(--dashboard-surface-border);
+      background: transparent;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--dashboard-text-secondary);
+      cursor: pointer;
+      transition: all 150ms ease;
+    }
+
+    .ap-page-btn:hover:not(:disabled) {
+      background: rgba(var(--ap-col-accent-rgb, 174, 64, 16), 0.06);
+      border-color: var(--dashboard-surface-border-strong);
+    }
+
+    .ap-page-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    .ap-page-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 28px;
+      height: 28px;
+      padding: 0 8px;
+      border-radius: 0.5rem;
+      font-size: 12px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      background: var(--ap-accent-soft);
+      color: var(--ap-accent);
+    }
+
+    /* ═══════════════════════════════════════════════
+       REDUCED MOTION
+       ═══════════════════════════════════════════════ */
+    @media (prefers-reduced-motion: reduce) {
+      .ap-filter-collapse {
+        transition: none;
+      }
+
+      .ap-kanban-card,
+      .ap-segment-btn,
+      .ap-table-row,
+      .ap-page-btn,
+      .ap-column {
+        transition: none !important;
+      }
+    }
+    </style>

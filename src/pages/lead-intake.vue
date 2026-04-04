@@ -78,8 +78,6 @@ const verifyDNC = async () => {
       dncStatus.value = 'clean'
       form.phone_number = dncRawPhone.value
 
-      // Generate submission ID now (before the form is filled) and surface it in the URL.
-      // This ensures the same ID is used for tracking, saving, and the Slack notification.
       if (!submissionId.value) {
         submissionId.value = generateSubmissionId()
       }
@@ -94,32 +92,24 @@ const verifyDNC = async () => {
   }
 }
 
-// ── Submission ID ──────────────────────────────────────────────────────────────
-// Generated only after DNC verification passes, then reflected in the URL.
-// Format: 19-digit numeric string (timestamp ms × 10⁶ + 6 random digits)
-// matching the convention used in the existing leads table.
-
 const submissionId = ref<string>(
   typeof route.query.sid === 'string' ? route.query.sid : ''
 )
 
 const generateSubmissionId = (): string => {
-  const ts = Date.now().toString()                                          // 13 digits
-  const rand = Math.floor(Math.random() * 1_000_000).toString().padStart(6, '0') // 6 digits
-  return ts + rand                                                          // 19 digits total
+  const ts = Date.now().toString()
+  const rand = Math.floor(Math.random() * 1_000_000).toString().padStart(6, '0')
+  return ts + rand
 }
 
-// ── Form State ─────────────────────────────────────────────────────────────────
-
 const form = reactive({
-  // Accident information
   accident_last_12_months: null as boolean | null,
   accident_date: '',
   prior_attorney_involved: null as boolean | null,
   prior_attorney_details: '',
   other_party_admit_fault: null as boolean | null,
   police_attended: null as boolean | null,
-  police_report_ref: '',         
+  police_report_ref: '',
   acc_street: '',
   acc_street2: '',
   acc_city: '',
@@ -127,22 +117,19 @@ const form = reactive({
   acc_zip: '',
   accident_scenario: '',
 
-  // Medical information
   received_medical_treatment: null as boolean | null,
   medical_attention: '',
   injuries: '',
 
-  // Insurance & vehicle
   insured: null as boolean | null,
   vehicle_registration: '',
   insurance_company: '',
   third_party_vehicle_registration: '',
   passengers_count: '' as number | '',
 
-  // Customer personal info
   first_name: '',
   last_name: '',
-  phone_number: '',             
+  phone_number: '',
   date_of_birth: '',
   email: '',
   street_address: '',
@@ -151,22 +138,16 @@ const form = reactive({
   state: '',
   zip_code: '',
 
-  // Lead tracking
   source_url: '',
   trustedform_cert_url: '',
   ip_address: '',
 
-  // Documents (has_* = "yes"|"no"|null, file = File object)
   has_medical_proof: null as boolean | null,
   has_insurance_docs: null as boolean | null,
   has_police_report: null as boolean | null,
 
-  // Additional
   additional_notes: ''
 })
-
-// ── Document files — multi-file per category, staged locally, uploaded on submit ──
-// Nothing hits storage until the lead is successfully saved, preventing orphaned files.
 
 type IntakeDocCategory = 'medical_report' | 'insurance_document' | 'police_report'
 
@@ -197,7 +178,6 @@ const docFiles = ref<Record<IntakeDocCategory, File[]>>({
   police_report:       []
 })
 
-// One input element ref per category
 const docInputEl = ref<Record<IntakeDocCategory, HTMLInputElement | null>>({
   medical_report:      null,
   insurance_document:  null,
@@ -205,7 +185,7 @@ const docInputEl = ref<Record<IntakeDocCategory, HTMLInputElement | null>>({
 })
 
 const ALLOWED_DOC_TYPES = ['application/pdf', 'image/png', 'image/jpeg']
-const MAX_DOC_BYTES      = 10 * 1024 * 1024   // 10 MB
+const MAX_DOC_BYTES      = 10 * 1024 * 1024
 
 const onDocFilesSelected = (e: Event, category: IntakeDocCategory) => {
   const fileList = (e.target as HTMLInputElement).files
@@ -221,7 +201,6 @@ const onDocFilesSelected = (e: Event, category: IntakeDocCategory) => {
   const valid = incoming.filter(f => ALLOWED_DOC_TYPES.includes(f.type) && f.size <= MAX_DOC_BYTES)
   docFiles.value[category] = [...docFiles.value[category], ...valid]
 
-  // Reset so the same file can be re-selected after removal
   const el = docInputEl.value[category]
   if (el) el.value = ''
 }
@@ -235,8 +214,6 @@ const formatDocBytes = (bytes: number) => {
   if (bytes < 1024 * 1024)     return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
 }
-
-// ── US States ──────────────────────────────────────────────────────────────────
 
 const usStates = [
   { label: 'Alabama', value: 'AL' },
@@ -291,13 +268,7 @@ const usStates = [
   { label: 'Wyoming', value: 'WY' }
 ]
 
-// ── Computed helpers ───────────────────────────────────────────────────────────
-
 const formDisabled = computed(() => !dncVerified.value)
-
-// ── Upload helper — uploads every staged file for one category ────────────────
-// Returns the storage folder path (e.g. "{sid}/medical_report") so the
-// Documents tab can list files directly from storage. Returns null if no files.
 
 const uploadCategoryFiles = async (
   files: File[],
@@ -318,10 +289,8 @@ const uploadCategoryFiles = async (
     if (error) throw new Error(`Upload failed for "${file.name}": ${error.message}`)
   }
 
-  return `${sid}/${category}`   // folder path stored in the DB column
+  return `${sid}/${category}`
 }
-
-// ── Validation helpers ─────────────────────────────────────────────────────────
 
 const validate = (): string | null => {
   if (!dncVerified.value) return 'Please verify the phone number via DNC check first.'
@@ -342,8 +311,6 @@ const validate = (): string | null => {
   return null
 }
 
-// ── Submit ─────────────────────────────────────────────────────────────────────
-
 const submitting = ref(false)
 
 const onSubmit = async () => {
@@ -358,15 +325,12 @@ const onSubmit = async () => {
   try {
     const sid = submissionId.value
 
-    // Upload all staged documents on submit — nothing hits storage before this point,
-    // so no orphaned files if the form was abandoned.
     const [medicalProofUrl, insuranceDocUrl, policeReportUrl] = await Promise.all([
       uploadCategoryFiles(docFiles.value.medical_report,     'medical_report',     sid),
       uploadCategoryFiles(docFiles.value.insurance_document, 'insurance_document', sid),
       uploadCategoryFiles(docFiles.value.police_report,      'police_report',      sid)
     ])
 
-    // Build accident location string from address parts
     const accidentLocation = [
       form.acc_street,
       form.acc_street2,
@@ -375,7 +339,6 @@ const onSubmit = async () => {
       form.acc_zip
     ].filter(v => v.trim()).join(', ') || null
 
-    // Prepend police report ref to additional notes if provided
     let additionalNotes = form.additional_notes.trim() || null
     if (form.police_report_ref.trim()) {
       additionalNotes = `Police Report #: ${form.police_report_ref.trim()}${additionalNotes ? '\n\n' + additionalNotes : ''}`
@@ -383,20 +346,14 @@ const onSubmit = async () => {
 
     const payload = {
       submission_id: sid,
-
-      // Customer identity
       customer_full_name: `${form.first_name.trim()} ${form.last_name.trim()}`,
       phone_number: dncRawPhone.value.replace(/\D/g, ''),
       email: form.email.trim() || null,
       date_of_birth: form.date_of_birth || null,
-
-      // Customer address
       street_address: form.street_address.trim() || null,
       city: form.city.trim() || null,
       state: form.state || null,
       zip_code: form.zip_code.trim() || null,
-
-      // Accident
       accident_last_12_months: form.accident_last_12_months,
       accident_date: form.accident_date || null,
       prior_attorney_involved: form.prior_attorney_involved ?? false,
@@ -405,34 +362,22 @@ const onSubmit = async () => {
       police_attended: form.police_attended ?? false,
       accident_location: accidentLocation,
       accident_scenario: form.accident_scenario.trim() || null,
-
-      // Medical
       received_medical_treatment: form.received_medical_treatment ?? false,
       medical_attention: form.medical_attention.trim() || null,
       is_injured: form.injuries.trim() ? true : false,
       injuries: form.injuries.trim() || null,
-
-      // Insurance & vehicle
       insured: form.insured ?? false,
       vehicle_registration: form.vehicle_registration.trim() || null,
       insurance_company: form.insurance_company.trim() || null,
       third_party_vehicle_registration: form.third_party_vehicle_registration.trim() || null,
       passengers_count: form.passengers_count === '' ? null : Number(form.passengers_count),
-
-      // Lead tracking
       source_url: form.source_url.trim() || null,
       trustedform_cert_url: form.trustedform_cert_url.trim() || null,
       ip_address: form.ip_address.trim() || null,
-
-      // Documents
       medical_treatment_proof: medicalProofUrl,
       insurance_documents: insuranceDocUrl,
       police_report: policeReportUrl,
-
-      // Notes
       additional_notes: additionalNotes,
-
-      // Auto-populated
       user_id: auth.state.value.user?.id ?? null,
       lead_vendor: auth.state.value.centerContext?.lead_vendor ?? null,
       status: 'transfer_api'
@@ -441,7 +386,6 @@ const onSubmit = async () => {
     const { error } = await supabase.from('leads').insert(payload)
     if (error) throw new Error(error.message)
 
-    // ── Slack notification (fire-and-forget, does not block success flow) ────
     const edgeBase = String(import.meta.env.VITE_SUPABASE_FUNCTIONS_BASE ?? '').replace(/\/$/, '')
     const slackUrl = `${edgeBase}/functions/v1/lead-intake-notification`
 
@@ -490,713 +434,425 @@ onMounted(async () => {
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
-        <template #right>
-          <UBadge
-            :label="submissionId ? `ID: ${submissionId}` : 'Verify number to generate ID'"
-            :color="submissionId ? 'neutral' : 'warning'"
-            variant="soft"
-            class="font-mono text-xs hidden sm:flex"
-          />
-        </template>
       </UDashboardNavbar>
     </template>
 
     <template #body>
-      <div class="max-w-4xl mx-auto px-4 py-6 space-y-6 pb-12">
+      <div class="space-y-5 pb-8">
 
-        <!-- ── DNC Check ─────────────────────────────────────────────────── -->
-        <UPageCard variant="subtle">
-          <div class="space-y-4">
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-shield-check" class="text-primary-500 size-5" />
-              <h3 class="text-base font-semibold">
-                DNC Verification
-              </h3>
-              <UBadge label="Required first" color="error" variant="soft" size="sm" />
-            </div>
-            <p class="text-sm text-muted">
-              Enter the customer's phone number and verify it against the Do Not Call registry before proceeding with the intake form.
-            </p>
-
-            <div class="flex gap-3 items-start flex-wrap">
-              <UFormField name="dncPhone" label="Customer Phone Number" class="flex-1 min-w-60">
-                <UInput
-                  v-model="dncRawPhone"
-                  placeholder="(000) 000-0000"
-                  :disabled="dncVerified"
-                  class="w-full"
-                  @keyup.enter="verifyDNC"
-                />
-              </UFormField>
-              <div class="pt-6">
-                <UButton
-                  :label="dncVerified ? 'Verified' : 'Verify Number'"
-                  :icon="dncVerified ? 'i-lucide-check' : 'i-lucide-shield'"
-                  :color="dncVerified ? 'success' : 'primary'"
-                  :loading="dncChecking"
-                  :disabled="dncVerified || dncChecking || !dncRawPhone"
-                  @click="verifyDNC"
+        <!-- ═══ Row 1 · DNC Verification (centered, narrower, amber theme) ═ -->
+        <div class="mx-auto max-w-2xl">
+          <div class="ap-fade-in ap-delay-1 relative overflow-hidden rounded-xl border border-amber-500/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
+            <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-500/[0.04] via-transparent to-transparent" />
+            <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
+              <div class="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-amber-500/[0.08] to-transparent" />
+              <div class="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-amber-500 via-amber-500/60 to-transparent" />
+              <div class="relative flex items-center justify-between gap-3 px-5 py-3.5">
+                <div class="flex items-center gap-3">
+                  <div class="flex h-7 w-7 items-center justify-center rounded-lg border-[0.5px] border-amber-500/45 bg-amber-500/10">
+                    <UIcon name="i-lucide-phone" class="text-xs text-amber-500" />
+                  </div>
+                  <span class="text-[13px] font-semibold text-highlighted">DNC Verification</span>
+                  <UBadge label="Required first" color="error" variant="soft" size="sm" />
+                </div>
+                <UBadge
+                  :label="submissionId ? `ID: ${submissionId}` : 'Verify number to generate ID'"
+                  :color="submissionId ? 'neutral' : 'warning'"
+                  variant="soft"
+                  class="hidden font-mono text-xs sm:flex"
                 />
               </div>
             </div>
-
-            <!-- DNC Status Messages -->
-            <div
-              v-if="dncStatus === 'clean'"
-              class="flex items-center gap-2 rounded-lg bg-success-50 dark:bg-success-950 border border-success-200 dark:border-success-800 px-4 py-3"
-            >
-              <UIcon name="i-lucide-check-circle" class="text-success-600 dark:text-success-400 size-5 shrink-0" />
-              <p class="text-sm text-success-700 dark:text-success-300 font-medium">
-                Phone number verified — not on the DNC registry. You may now complete the intake form.
-              </p>
-            </div>
-
-            <div
-              v-if="dncStatus === 'blocked'"
-              class="flex items-center gap-2 rounded-lg bg-error-50 dark:bg-error-950 border border-error-200 dark:border-error-800 px-4 py-3"
-            >
-              <UIcon name="i-lucide-ban" class="text-error-600 dark:text-error-400 size-5 shrink-0" />
-              <p class="text-sm text-error-700 dark:text-error-300 font-medium">
-                This number is on the Do Not Call registry. This lead cannot be submitted.
-              </p>
+            <div class="relative space-y-4 p-5">
+              <p class="text-sm text-muted">Enter the customer's phone number and verify it against the Do Not Call registry before proceeding.</p>
+              <div class="flex flex-wrap items-end gap-3">
+                <div class="min-w-60 flex-1 space-y-1.5">
+                  <label class="text-xs font-medium text-highlighted">Customer Phone Number</label>
+                  <UInput v-model="dncRawPhone" placeholder="(000) 000-0000" :disabled="dncVerified" class="w-full" @keyup.enter="verifyDNC" />
+                </div>
+                <UButton :label="dncVerified ? 'Verified' : 'Verify Number'" :icon="dncVerified ? 'i-lucide-check' : 'i-lucide-shield-check'" :color="dncVerified ? 'success' : 'warning'" :loading="dncChecking" :disabled="dncVerified || dncChecking || !dncRawPhone" @click="verifyDNC" />
+              </div>
+              <div v-if="dncStatus === 'clean'" class="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-800 dark:bg-green-950">
+                <UIcon name="i-lucide-check-circle" class="size-5 shrink-0 text-green-600 dark:text-green-400" />
+                <p class="text-sm font-medium text-green-700 dark:text-green-300">Phone number verified — not on the DNC registry. You may now complete the intake form.</p>
+              </div>
+              <div v-if="dncStatus === 'blocked'" class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950">
+                <UIcon name="i-lucide-ban" class="size-5 shrink-0 text-red-600 dark:text-red-400" />
+                <p class="text-sm font-medium text-red-700 dark:text-red-300">This number is on the Do Not Call registry. This lead cannot be submitted.</p>
+              </div>
             </div>
           </div>
-        </UPageCard>
+        </div>
 
-        <!-- ── Rest of form (locked until DNC passes) ────────────────────── -->
-        <div
-          :class="formDisabled ? 'pointer-events-none select-none opacity-40' : ''"
-          class="space-y-6 transition-opacity duration-300"
-        >
+        <!-- ═══ Locked form area ═════════════════════════════════════════ -->
+        <div :class="formDisabled ? 'pointer-events-none select-none opacity-40' : ''" class="space-y-5 transition-opacity duration-300">
 
-          <!-- ── Section 1: Customer Personal Information ────────────── -->
-          <UPageCard variant="subtle">
-            <div class="space-y-6">
-              <h3 class="text-base font-semibold border-b border-default pb-3">
-                Customer Personal Information
-              </h3>
+          <!-- ═══ Row 2 · Customer Info + Accident Info (side by side) ═══ -->
+          <div class="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-[5fr_7fr]">
 
-              <!-- Name -->
-              <UFormField name="customer_name" label="Customer Name" required>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
-                  <UInput
-                    v-model="form.first_name"
-                    placeholder="First Name"
-                  />
-                  <UInput
-                    v-model="form.last_name"
-                    placeholder="Last Name"
-                  />
-                </div>
-              </UFormField>
-
-              <USeparator />
-
-              <!-- Date of birth -->
-              <UFormField name="date_of_birth" label="Date of Birth" required>
-                <UInput
-                  v-model="form.date_of_birth"
-                  type="date"
-                  class="w-full sm:max-w-xs"
-                />
-              </UFormField>
-
-              <USeparator />
-
-              <!-- Email -->
-              <UFormField name="email" label="Email" required>
-                <UInput
-                  v-model="form.email"
-                  type="email"
-                  placeholder="ex: myname@example.com"
-                  class="w-full sm:max-w-sm"
-                />
-                <template #description>
-                  Email is required. If there is no email, create one for the customer.
-                </template>
-              </UFormField>
-
-              <USeparator />
-
-              <!-- Customer address -->
-              <UFormField name="customer_address" label="Customer Address" required>
-                <div class="space-y-3 w-full">
-                  <UInput
-                    v-model="form.street_address"
-                    placeholder="Street Address"
-                    class="w-full"
-                  />
-                  <UInput
-                    v-model="form.street_address_2"
-                    placeholder="Street Address Line 2"
-                    class="w-full"
-                  />
-                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <UInput
-                      v-model="form.city"
-                      placeholder="City"
-                    />
-                    <USelect
-                      v-model="form.state"
-                      :items="usStates"
-                      placeholder="State"
-                      value-key="value"
-                    />
-                    <UInput
-                      v-model="form.zip_code"
-                      placeholder="Postal / Zip Code"
-                    />
+            <!-- Customer Personal Information (narrower) -->
+            <div class="ap-fade-in ap-delay-2 relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
+              <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
+              <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
+                <div class="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[var(--ap-accent)]/[0.08] to-transparent" />
+                <div class="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-[var(--ap-accent)] via-[var(--ap-accent)]/60 to-transparent" />
+                <div class="relative flex items-center gap-3 px-5 py-3.5">
+                  <div class="flex h-7 w-7 items-center justify-center rounded-lg border-[0.5px] border-[var(--ap-accent)]/45 bg-[var(--ap-accent)]/10">
+                    <UIcon name="i-lucide-user" class="text-xs text-[var(--ap-accent)]" />
                   </div>
-                </div>
-              </UFormField>
-            </div>
-          </UPageCard>
-
-          <!-- ── Section 2: Accident Information ──────────────────────── -->
-          <UPageCard variant="subtle">
-            <div class="space-y-6">
-              <h3 class="text-base font-semibold border-b border-default pb-3">
-                Accident Information
-              </h3>
-
-              <!-- Accident within 12 months -->
-              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <p class="text-sm font-medium">
-                    Accident within last 12 months? <span class="text-error-500">*</span>
-                  </p>
-                </div>
-                <div class="flex rounded-lg border border-default overflow-hidden w-fit shrink-0">
-                  <button
-                    type="button"
-                    class="px-5 py-2 text-sm font-medium transition-colors border-r border-default"
-                    :class="form.accident_last_12_months === true ? 'bg-primary-600 text-white' : 'hover:bg-muted text-muted'"
-                    @click="form.accident_last_12_months = true"
-                  >
-                    Yes
-                  </button>
-                  <button
-                    type="button"
-                    class="px-5 py-2 text-sm font-medium transition-colors"
-                    :class="form.accident_last_12_months === false ? 'bg-error-600 text-white' : 'hover:bg-muted text-muted'"
-                    @click="form.accident_last_12_months = false"
-                  >
-                    No
-                  </button>
+                  <span class="text-[13px] font-semibold text-highlighted">Customer Personal Information</span>
                 </div>
               </div>
-
-              <USeparator />
-
-              <!-- Date of accident -->
-              <UFormField name="accident_date" label="Date of Accident" required>
-                <UInput
-                  v-model="form.accident_date"
-                  type="date"
-                  class="w-full sm:max-w-xs"
-                />
-                <template #description>
-                  Select the exact date when the accident occurred (MM-DD-YYYY)
-                </template>
-              </UFormField>
-
-              <USeparator />
-
-              <!-- Prior attorney -->
-              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <p class="text-sm font-medium">
-                    Any Prior Attorney Involved? <span class="text-error-500">*</span>
-                  </p>
-                </div>
-                <div class="flex rounded-lg border border-default overflow-hidden w-fit shrink-0">
-                  <button
-                    type="button"
-                    class="px-5 py-2 text-sm font-medium transition-colors border-r border-default"
-                    :class="form.prior_attorney_involved === true ? 'bg-primary-600 text-white' : 'hover:bg-muted text-muted'"
-                    @click="form.prior_attorney_involved = true"
-                  >
-                    Yes
-                  </button>
-                  <button
-                    type="button"
-                    class="px-5 py-2 text-sm font-medium transition-colors"
-                    :class="form.prior_attorney_involved === false ? 'bg-error-600 text-white' : 'hover:bg-muted text-muted'"
-                    @click="form.prior_attorney_involved = false"
-                  >
-                    No
-                  </button>
-                </div>
-              </div>
-
-              <!-- Prior attorney details (conditional) -->
-              <UFormField
-                v-if="form.prior_attorney_involved === true"
-                name="prior_attorney_details"
-                label="Prior Attorney Involved — Details"
-                required
-              >
-                <UInput
-                  v-model="form.prior_attorney_details"
-                  placeholder="Provide the name of any attorney you previously worked with regarding this accident."
-                  class="w-full"
-                />
-              </UFormField>
-
-              <USeparator />
-
-              <!-- Other party admit fault -->
-              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <p class="text-sm font-medium">
-                    Did the Other Party Admit Fault at the Scene? <span class="text-error-500">*</span>
-                  </p>
-                </div>
-                <div class="flex rounded-lg border border-default overflow-hidden w-fit shrink-0">
-                  <button
-                    type="button"
-                    class="px-5 py-2 text-sm font-medium transition-colors border-r border-default"
-                    :class="form.other_party_admit_fault === true ? 'bg-primary-600 text-white' : 'hover:bg-muted text-muted'"
-                    @click="form.other_party_admit_fault = true"
-                  >
-                    Yes
-                  </button>
-                  <button
-                    type="button"
-                    class="px-5 py-2 text-sm font-medium transition-colors"
-                    :class="form.other_party_admit_fault === false ? 'bg-error-600 text-white' : 'hover:bg-muted text-muted'"
-                    @click="form.other_party_admit_fault = false"
-                  >
-                    No
-                  </button>
-                </div>
-              </div>
-
-              <USeparator />
-
-              <!-- Police attended -->
-              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <p class="text-sm font-medium">
-                    Did Police Attend the Accident? <span class="text-error-500">*</span>
-                  </p>
-                </div>
-                <div class="flex rounded-lg border border-default overflow-hidden w-fit shrink-0">
-                  <button
-                    type="button"
-                    class="px-5 py-2 text-sm font-medium transition-colors border-r border-default"
-                    :class="form.police_attended === true ? 'bg-primary-600 text-white' : 'hover:bg-muted text-muted'"
-                    @click="form.police_attended = true"
-                  >
-                    Yes
-                  </button>
-                  <button
-                    type="button"
-                    class="px-5 py-2 text-sm font-medium transition-colors"
-                    :class="form.police_attended === false ? 'bg-error-600 text-white' : 'hover:bg-muted text-muted'"
-                    @click="form.police_attended = false"
-                  >
-                    No
-                  </button>
-                </div>
-              </div>
-
-              <!-- Police report reference (conditional) -->
-              <UFormField
-                v-if="form.police_attended === true"
-                name="police_report_ref"
-                label="Police Report Reference Number"
-              >
-                <UInput
-                  v-model="form.police_report_ref"
-                  placeholder="e.g. RPT-2024-001234"
-                  class="w-full sm:max-w-sm"
-                />
-              </UFormField>
-
-              <USeparator />
-
-              <!-- Accident location -->
-              <UFormField name="accident_location" label="Exact Location of the Accident">
-                <div class="space-y-3 w-full">
-                  <UInput
-                    v-model="form.acc_street"
-                    placeholder="Street Address"
-                    class="w-full"
-                  />
-                  <UInput
-                    v-model="form.acc_street2"
-                    placeholder="Street Address Line 2"
-                    class="w-full"
-                  />
-                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <UInput
-                      v-model="form.acc_city"
-                      placeholder="City"
-                    />
-                    <USelect
-                      v-model="form.acc_state"
-                      :items="usStates"
-                      placeholder="State"
-                      value-key="value"
-                    />
-                    <UInput
-                      v-model="form.acc_zip"
-                      placeholder="Zip Code"
-                    />
-                  </div>
-                </div>
-              </UFormField>
-
-              <USeparator />
-
-              <!-- Accident scenario -->
-              <UFormField name="accident_scenario" label="Accident Scenario / How the Incident Happened" required>
-                <UTextarea
-                  v-model="form.accident_scenario"
-                  placeholder="Briefly describe how the accident occurred..."
-                  :rows="4"
-                  class="w-full"
-                />
-              </UFormField>
-            </div>
-          </UPageCard>
-
-          <!-- ── Section 3: Medical Information ───────────────────────── -->
-          <UPageCard variant="subtle">
-            <div class="space-y-6">
-              <h3 class="text-base font-semibold border-b border-default pb-3">
-                Medical Information
-              </h3>
-
-              <!-- Medical attention within 2 weeks -->
-              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <p class="text-sm font-medium">
-                    Medical Attention Within 2 Weeks? <span class="text-error-500">*</span>
-                  </p>
-                </div>
-                <div class="flex rounded-lg border border-default overflow-hidden w-fit shrink-0">
-                  <button
-                    type="button"
-                    class="px-5 py-2 text-sm font-medium transition-colors border-r border-default"
-                    :class="form.received_medical_treatment === true ? 'bg-primary-600 text-white' : 'hover:bg-muted text-muted'"
-                    @click="form.received_medical_treatment = true"
-                  >
-                    Yes
-                  </button>
-                  <button
-                    type="button"
-                    class="px-5 py-2 text-sm font-medium transition-colors"
-                    :class="form.received_medical_treatment === false ? 'bg-error-600 text-white' : 'hover:bg-muted text-muted'"
-                    @click="form.received_medical_treatment = false"
-                  >
-                    No
-                  </button>
-                </div>
-              </div>
-
-              <!-- Medical attention details (conditional) -->
-              <UFormField
-                v-if="form.received_medical_treatment === true"
-                name="medical_attention"
-                label="Medical Attention Received / Hospitals Attended"
-                required
-              >
-                <UTextarea
-                  v-model="form.medical_attention"
-                  placeholder="List any medical care you received and the hospitals or clinics you visited after the accident."
-                  :rows="3"
-                  class="w-full"
-                />
-              </UFormField>
-
-              <USeparator />
-
-              <!-- Customer injuries -->
-              <UFormField name="injuries" label="Customer Injuries / Areas Affected" required>
-                <UTextarea
-                  v-model="form.injuries"
-                  placeholder="Describe any injuries you suffered and which parts of the body were affected."
-                  :rows="3"
-                  class="w-full"
-                />
-              </UFormField>
-            </div>
-          </UPageCard>
-
-          <!-- ── Section 4: Insurance & Vehicle ───────────────────────── -->
-          <UPageCard variant="subtle">
-            <div class="space-y-6">
-              <h3 class="text-base font-semibold border-b border-default pb-3">
-                Insurance & Vehicle Information
-              </h3>
-
-              <!-- Is customer insured -->
-              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <p class="text-sm font-medium">
-                    Is Customer Insured? <span class="text-error-500">*</span>
-                  </p>
-                </div>
-                <div class="flex rounded-lg border border-default overflow-hidden w-fit shrink-0">
-                  <button
-                    type="button"
-                    class="px-5 py-2 text-sm font-medium transition-colors border-r border-default"
-                    :class="form.insured === true ? 'bg-primary-600 text-white' : 'hover:bg-muted text-muted'"
-                    @click="form.insured = true"
-                  >
-                    Yes
-                  </button>
-                  <button
-                    type="button"
-                    class="px-5 py-2 text-sm font-medium transition-colors"
-                    :class="form.insured === false ? 'bg-error-600 text-white' : 'hover:bg-muted text-muted'"
-                    @click="form.insured = false"
-                  >
-                    No
-                  </button>
-                </div>
-              </div>
-
-              <USeparator />
-
-              <!-- Vehicle registration -->
-              <UFormField name="vehicle_registration" label="Customer Vehicle Registration Number" required>
-                <UInput
-                  v-model="form.vehicle_registration"
-                  placeholder="Enter the registration or license plate number of your vehicle."
-                  class="w-full sm:max-w-sm"
-                />
-              </UFormField>
-
-              <USeparator />
-
-              <!-- Insurance company -->
-              <UFormField name="insurance_company" label="Customer Insurance Company Name" required>
-                <UInput
-                  v-model="form.insurance_company"
-                  placeholder="Provide the name of your auto insurance company."
-                  class="w-full sm:max-w-sm"
-                />
-              </UFormField>
-
-              <USeparator />
-
-              <!-- Third party vehicle -->
-              <UFormField name="third_party_vehicle_registration" label="Third Party Vehicle Registration Number" required>
-                <UInput
-                  v-model="form.third_party_vehicle_registration"
-                  placeholder="Enter the registration or license plate number of the other party's vehicle."
-                  class="w-full sm:max-w-sm"
-                />
-              </UFormField>
-
-              <USeparator />
-
-              <!-- Passengers count -->
-              <UFormField name="passengers_count" label="Number of Passengers in Your Vehicle">
-                <UInput
-                  v-model.number="form.passengers_count"
-                  type="number"
-                  placeholder="e.g. 2"
-                  min="0"
-                  class="w-32"
-                />
-                <template #description>
-                  Specify how many passengers were riding with you at the time of the accident.
-                </template>
-              </UFormField>
-            </div>
-          </UPageCard>
-
-          <!-- ── Section 5: Lead Tracking ──────────────────────────────── -->
-          <UPageCard variant="subtle">
-            <div class="space-y-6">
-              <h3 class="text-base font-semibold border-b border-default pb-3">
-                Lead Tracking
-              </h3>
-
-              <UFormField name="source_url" label="Source URL" required>
-                <UInput
-                  v-model="form.source_url"
-                  placeholder="Landing page URL where the lead was generated"
-                  class="w-full"
-                />
-              </UFormField>
-
-              <USeparator />
-
-              <UFormField name="trustedform_cert_url" label="TrustedForm Cert URL" required>
-                <UInput
-                  v-model="form.trustedform_cert_url"
-                  placeholder="TrustedForm certificate URL"
-                  class="w-full"
-                />
-              </UFormField>
-
-              <USeparator />
-
-              <UFormField name="ip_address" label="IP Address" required>
-                <UInput
-                  v-model="form.ip_address"
-                  placeholder="IP address of the user"
-                  class="w-full sm:max-w-sm"
-                />
-              </UFormField>
-            </div>
-          </UPageCard>
-
-          <!-- ── Section 6: Documents ──────────────────────────────────── -->
-          <!-- Files are staged in memory here; all uploads happen on submit  -->
-          <!-- so no orphaned files are left if the form is abandoned.        -->
-          <UPageCard variant="subtle">
-            <div class="space-y-6">
-              <h3 class="text-base font-semibold border-b border-default pb-3">
-                Supporting Documents
-              </h3>
-
-              <div
-                v-for="(cat, ci) in INTAKE_DOC_CATEGORIES"
-                :key="cat.key"
-              >
-                <USeparator v-if="ci > 0" class="mb-6" />
-
-                <div class="space-y-3">
-                  <!-- Yes / No toggle -->
-                  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div>
-                      <p class="text-sm font-medium">
-                        Does Customer have {{ cat.label }}?
-                        <span class="text-error-500">*</span>
-                      </p>
-                      <p class="text-xs text-muted mt-0.5">
-                        {{ cat.description }}
-                      </p>
+              <div class="relative flex-1 p-5">
+                <!-- Personal Details -->
+                <div class="space-y-4">
+                  <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-2">
+                      <label class="text-xs font-medium text-highlighted">First Name <span class="text-red-400/80">*</span></label>
+                      <UInput v-model="form.first_name" placeholder="Enter first name" class="w-full" />
                     </div>
-                    <div class="flex rounded-lg border border-default overflow-hidden w-fit shrink-0">
-                      <button
-                        type="button"
-                        class="px-5 py-2 text-sm font-medium transition-colors border-r border-default"
-                        :class="form[cat.formKey] === true ? 'bg-primary-600 text-white' : 'hover:bg-muted text-muted'"
-                        @click="form[cat.formKey] = true"
-                      >
-                        Yes
-                      </button>
-                      <button
-                        type="button"
-                        class="px-5 py-2 text-sm font-medium transition-colors"
-                        :class="form[cat.formKey] === false ? 'bg-error-600 text-white' : 'hover:bg-muted text-muted'"
-                        @click="form[cat.formKey] = false; docFiles[cat.key] = []"
-                      >
-                        No
-                      </button>
+                    <div class="space-y-2">
+                      <label class="text-xs font-medium text-highlighted">Last Name <span class="text-red-400/80">*</span></label>
+                      <UInput v-model="form.last_name" placeholder="Enter last name" class="w-full" />
                     </div>
                   </div>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-2">
+                      <label class="text-xs font-medium text-highlighted">Date of Birth <span class="text-red-400/80">*</span></label>
+                      <UInput v-model="form.date_of_birth" type="date" class="w-full" />
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-xs font-medium text-highlighted">Email <span class="text-red-400/80">*</span></label>
+                      <UInput v-model="form.email" type="email" placeholder="myname@example.com" class="w-full" />
+                      <p class="text-[11px] text-muted">If no email, create one for the customer.</p>
+                    </div>
+                  </div>
+                </div>
 
-                  <!-- Upload area — visible when Yes is selected -->
-                  <div v-if="form[cat.formKey] === true" class="space-y-3">
+                <div class="mt-1 space-y-4">
+                    <div class="space-y-2">
+                      <label class="text-xs font-medium text-highlighted">Street Address <span class="text-red-400/80">*</span></label>
+                      <UInput v-model="form.street_address" placeholder="Enter street address" class="w-full" />
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-xs font-medium text-highlighted">Street Address Line 2</label>
+                      <UInput v-model="form.street_address_2" placeholder="Apt, Suite, Unit, etc." class="w-full" />
+                    </div>
+                    <div class="grid grid-cols-3 items-end gap-3">
+                      <div class="space-y-2">
+                        <label class="text-xs font-medium text-highlighted">City <span class="text-red-400/80">*</span></label>
+                        <UInput v-model="form.city" placeholder="City" class="w-full" />
+                      </div>
+                      <div class="space-y-2">
+                        <label class="text-xs font-medium text-highlighted">State <span class="text-red-400/80">*</span></label>
+                        <USelect v-model="form.state" :items="usStates" placeholder="State" value-key="value" class="w-full" />
+                      </div>
+                      <div class="space-y-2">
+                        <label class="text-xs font-medium text-highlighted">Zip <span class="text-red-400/80">*</span></label>
+                        <UInput v-model="form.zip_code" placeholder="Zip Code" class="w-full" />
+                      </div>
+                    </div>
+                  </div>
+              </div>
+            </div>
 
-                    <!-- Drop zone -->
-                    <div
-                      class="border-2 border-dashed border-default rounded-lg p-5 text-center cursor-pointer hover:border-primary-400 transition-colors"
-                      @click="docInputEl[cat.key]?.click()"
-                    >
-                      <input
-                        :ref="el => { docInputEl[cat.key] = el as HTMLInputElement | null }"
-                        type="file"
-                        multiple
-                        class="hidden"
-                        accept=".pdf,.jpg,.jpeg,.png"
-                        @change="onDocFilesSelected($event, cat.key)"
-                      >
-                      <UIcon name="i-lucide-upload" class="mx-auto mb-2 text-muted size-6" />
-                      <p class="text-sm text-muted">
-                        Browse Files · Drag and drop files here
-                      </p>
-                      <p class="text-xs text-dimmed mt-1">
-                        PDF, JPG, PNG · max 10 MB each · multiple files allowed
-                      </p>
+            <!-- Accident Information -->
+            <div class="ap-fade-in ap-delay-2 relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
+              <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
+              <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
+                <div class="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[var(--ap-accent)]/[0.08] to-transparent" />
+                <div class="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-[var(--ap-accent)] via-[var(--ap-accent)]/60 to-transparent" />
+                <div class="relative flex items-center gap-3 px-5 py-3.5">
+                  <div class="flex h-7 w-7 items-center justify-center rounded-lg border-[0.5px] border-[var(--ap-accent)]/45 bg-[var(--ap-accent)]/10">
+                    <UIcon name="i-lucide-alert-triangle" class="text-xs text-[var(--ap-accent)]" />
+                  </div>
+                  <span class="text-[13px] font-semibold text-highlighted">Accident Information</span>
+                </div>
+              </div>
+              <div class="relative flex-1 space-y-3.5 p-5">
+                <!-- Row 1: Accident 12mo + Other Party Fault + Date of Accident -->
+                <div class="grid grid-cols-3 gap-3">
+                  <div class="space-y-1.5">
+                    <p class="text-xs font-medium text-highlighted">Accident within 12 months? <span class="text-red-400/80">*</span></p>
+                    <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
+                      <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.accident_last_12_months === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.accident_last_12_months = true">Yes</button>
+                      <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.accident_last_12_months === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.accident_last_12_months = false">No</button>
+                    </div>
+                  </div>
+                  <div class="space-y-1.5">
+                    <p class="text-xs font-medium text-highlighted">Other Party Fault? <span class="text-red-400/80">*</span></p>
+                    <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
+                      <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.other_party_admit_fault === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.other_party_admit_fault = true">Yes</button>
+                      <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.other_party_admit_fault === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.other_party_admit_fault = false">No</button>
+                    </div>
+                  </div>
+                  <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-highlighted">Date of Accident <span class="text-red-400/80">*</span></label>
+                    <UInput v-model="form.accident_date" type="date" class="w-full" />
+                  </div>
+                </div>
+
+                <!-- Row 2: Prior Attorney + Police Attend -->
+                <div class="grid grid-cols-3 gap-3">
+                  <div class="space-y-1.5">
+                    <p class="text-xs font-medium text-highlighted">Prior Attorney? <span class="text-red-400/80">*</span></p>
+                    <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
+                      <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.prior_attorney_involved === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.prior_attorney_involved = true">Yes</button>
+                      <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.prior_attorney_involved === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.prior_attorney_involved = false">No</button>
+                    </div>
+                  </div>
+                  <div class="space-y-1.5">
+                    <p class="text-xs font-medium text-highlighted">Police Attend? <span class="text-red-400/80">*</span></p>
+                    <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
+                      <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.police_attended === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.police_attended = true">Yes</button>
+                      <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.police_attended === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.police_attended = false">No</button>
+                    </div>
+                  </div>
+                  <div />
+                </div>
+
+                <!-- Conditional: Prior attorney details -->
+                <div v-if="form.prior_attorney_involved === true" class="space-y-1.5">
+                  <label class="text-xs font-medium text-highlighted">Prior Attorney Details <span class="text-red-400/80">*</span></label>
+                  <UInput v-model="form.prior_attorney_details" placeholder="Name of attorney previously involved" class="w-full" />
+                </div>
+
+                <!-- Conditional: Police report ref -->
+                <div v-if="form.police_attended === true" class="space-y-1.5">
+                  <label class="text-xs font-medium text-highlighted">Police Report Ref.</label>
+                  <UInput v-model="form.police_report_ref" placeholder="e.g. RPT-2024-001234" class="w-full" />
+                </div>
+
+                <!-- Accident location -->
+                <div class="space-y-1.5">
+                  <label class="text-xs font-medium text-highlighted">Location of the Accident</label>
+                  <div class="grid grid-cols-2 gap-3">
+                    <UInput v-model="form.acc_street" placeholder="Street Address" class="w-full" />
+                    <UInput v-model="form.acc_street2" placeholder="Street Address Line 2" class="w-full" />
+                  </div>
+                  <div class="mt-1.5 grid grid-cols-3 gap-3">
+                    <UInput v-model="form.acc_city" placeholder="City" />
+                    <USelect v-model="form.acc_state" :items="usStates" placeholder="State" value-key="value" />
+                    <UInput v-model="form.acc_zip" placeholder="Zip Code" />
+                  </div>
+                </div>
+
+                <!-- Accident scenario -->
+                <div class="space-y-1.5">
+                  <label class="text-xs font-medium text-highlighted">Accident Scenario <span class="text-red-400/80">*</span></label>
+                  <UTextarea v-model="form.accident_scenario" placeholder="Briefly describe how the accident occurred..." :rows="3" class="w-full" />
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ═══ Row 3 · Medical + Insurance + Lead Tracking (3-col) ════ -->
+          <div class="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-3">
+
+            <!-- Medical Information -->
+            <div class="ap-fade-in ap-delay-3 relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
+              <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
+              <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
+                <div class="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[var(--ap-accent)]/[0.08] to-transparent" />
+                <div class="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-[var(--ap-accent)] via-[var(--ap-accent)]/60 to-transparent" />
+                <div class="relative flex items-center gap-3 px-5 py-3.5">
+                  <div class="flex h-7 w-7 items-center justify-center rounded-lg border-[0.5px] border-[var(--ap-accent)]/45 bg-[var(--ap-accent)]/10">
+                    <UIcon name="i-lucide-heart-pulse" class="text-xs text-[var(--ap-accent)]" />
+                  </div>
+                  <span class="text-[13px] font-semibold text-highlighted">Medical Information</span>
+                </div>
+              </div>
+              <div class="relative flex-1 space-y-4 p-5">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p class="text-xs font-medium text-highlighted">Medical Attention Within 2 Weeks? <span class="text-red-400/80">*</span></p>
+                  <div class="flex w-fit shrink-0 overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
+                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-5 py-2 text-sm font-medium transition-colors" :class="form.received_medical_treatment === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.received_medical_treatment = true">Yes</button>
+                    <button type="button" class="px-5 py-2 text-sm font-medium transition-colors" :class="form.received_medical_treatment === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.received_medical_treatment = false">No</button>
+                  </div>
+                </div>
+                <div v-if="form.received_medical_treatment === true" class="space-y-1.5">
+                  <label class="text-xs font-medium text-highlighted">Hospitals / Care Received <span class="text-red-400/80">*</span></label>
+                  <UTextarea v-model="form.medical_attention" placeholder="List hospitals, clinics, and care received after the accident." :rows="4" class="w-full" />
+                </div>
+                <div class="space-y-1.5">
+                  <label class="text-xs font-medium text-highlighted">Customer Injuries / Areas Affected <span class="text-red-400/80">*</span></label>
+                  <UTextarea v-model="form.injuries" placeholder="Describe injuries and which parts of the body were affected." :rows="4" class="w-full" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Insurance & Vehicle Information -->
+            <div class="ap-fade-in ap-delay-3 relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
+              <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
+              <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
+                <div class="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[var(--ap-accent)]/[0.08] to-transparent" />
+                <div class="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-[var(--ap-accent)] via-[var(--ap-accent)]/60 to-transparent" />
+                <div class="relative flex items-center gap-3 px-5 py-3.5">
+                  <div class="flex h-7 w-7 items-center justify-center rounded-lg border-[0.5px] border-[var(--ap-accent)]/45 bg-[var(--ap-accent)]/10">
+                    <UIcon name="i-lucide-car" class="text-xs text-[var(--ap-accent)]" />
+                  </div>
+                  <span class="text-[13px] font-semibold text-highlighted">Insurance & Vehicle</span>
+                </div>
+              </div>
+              <div class="relative flex-1 space-y-4 p-5">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p class="text-xs font-medium text-highlighted">Is Customer Insured? <span class="text-red-400/80">*</span></p>
+                  <div class="flex w-fit shrink-0 overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
+                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-5 py-2 text-sm font-medium transition-colors" :class="form.insured === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.insured = true">Yes</button>
+                    <button type="button" class="px-5 py-2 text-sm font-medium transition-colors" :class="form.insured === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.insured = false">No</button>
+                  </div>
+                </div>
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-highlighted">Vehicle Registration <span class="text-red-400/80">*</span></label>
+                    <UInput v-model="form.vehicle_registration" placeholder="License plate number" class="w-full" />
+                  </div>
+                  <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-highlighted">Insurance Company <span class="text-red-400/80">*</span></label>
+                    <UInput v-model="form.insurance_company" placeholder="Insurance company name" class="w-full" />
+                  </div>
+                </div>
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-highlighted">Third Party Vehicle Reg. <span class="text-red-400/80">*</span></label>
+                    <UInput v-model="form.third_party_vehicle_registration" placeholder="Other party's plate" class="w-full" />
+                  </div>
+                  <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-highlighted">Passengers in Vehicle</label>
+                    <UInput v-model.number="form.passengers_count" type="number" placeholder="e.g. 2" min="0" class="w-full" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Lead Tracking -->
+            <div class="ap-fade-in ap-delay-3 relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
+              <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
+              <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
+                <div class="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[var(--ap-accent)]/[0.08] to-transparent" />
+                <div class="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-[var(--ap-accent)] via-[var(--ap-accent)]/60 to-transparent" />
+                <div class="relative flex items-center gap-3 px-5 py-3.5">
+                  <div class="flex h-7 w-7 items-center justify-center rounded-lg border-[0.5px] border-[var(--ap-accent)]/45 bg-[var(--ap-accent)]/10">
+                    <UIcon name="i-lucide-link" class="text-xs text-[var(--ap-accent)]" />
+                  </div>
+                  <span class="text-[13px] font-semibold text-highlighted">Lead Tracking</span>
+                </div>
+              </div>
+              <div class="relative flex-1 space-y-4 p-5">
+                <div class="space-y-1.5">
+                  <label class="text-xs font-medium text-highlighted">Source URL <span class="text-red-400/80">*</span></label>
+                  <UInput v-model="form.source_url" placeholder="Landing page URL" class="w-full" />
+                </div>
+                <div class="space-y-1.5">
+                  <label class="text-xs font-medium text-highlighted">TrustedForm Cert URL <span class="text-red-400/80">*</span></label>
+                  <UInput v-model="form.trustedform_cert_url" placeholder="TrustedForm certificate URL" class="w-full" />
+                </div>
+                <div class="space-y-1.5">
+                  <label class="text-xs font-medium text-highlighted">IP Address <span class="text-red-400/80">*</span></label>
+                  <UInput v-model="form.ip_address" placeholder="IP address of the user" class="w-full" />
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ═══ Row 4 · Supporting Documents (full width) ═════════════ -->
+          <div class="ap-fade-in ap-delay-4 relative overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
+            <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
+            <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
+              <div class="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[var(--ap-accent)]/[0.08] to-transparent" />
+              <div class="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-[var(--ap-accent)] via-[var(--ap-accent)]/60 to-transparent" />
+              <div class="relative flex items-center gap-3 px-5 py-3.5">
+                <div class="flex h-7 w-7 items-center justify-center rounded-lg border-[0.5px] border-[var(--ap-accent)]/45 bg-[var(--ap-accent)]/10">
+                  <UIcon name="i-lucide-file-up" class="text-xs text-[var(--ap-accent)]" />
+                </div>
+                <span class="text-[13px] font-semibold text-highlighted">Supporting Documents</span>
+              </div>
+            </div>
+            <div class="relative p-5">
+              <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <div
+                  v-for="cat in INTAKE_DOC_CATEGORIES"
+                  :key="cat.key"
+                  class="relative overflow-hidden rounded-xl border border-[var(--ap-accent)]/20"
+                >
+                  <div class="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[var(--ap-accent)]/[0.08] to-transparent" />
+                  <div class="relative flex items-center justify-between gap-2 border-b border-[var(--ap-accent)]/10 px-4 py-2.5">
+                    <div class="flex items-center gap-2">
+                      <UIcon
+                        :name="cat.key === 'medical_report' ? 'i-lucide-stethoscope' : cat.key === 'insurance_document' ? 'i-lucide-shield' : 'i-lucide-file-badge'"
+                        class="text-xs text-[var(--ap-accent)]"
+                      />
+                      <span class="text-xs font-semibold text-highlighted">{{ cat.label }}</span>
+                    </div>
+                    <span v-if="docFiles[cat.key].length > 0" class="text-[11px] tabular-nums text-muted">{{ docFiles[cat.key].length }} staged</span>
+                  </div>
+                  <div class="space-y-3 p-4">
+                    <p class="text-[11px] text-muted">{{ cat.description }}</p>
+
+                    <div class="flex items-center justify-between">
+                      <p class="text-xs font-medium text-highlighted">Has {{ cat.label }}? <span class="text-red-400/80">*</span></p>
+                      <div class="flex w-fit shrink-0 overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
+                        <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form[cat.formKey] === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form[cat.formKey] = true">Yes</button>
+                        <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form[cat.formKey] === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form[cat.formKey] = false; docFiles[cat.key] = []">No</button>
+                      </div>
                     </div>
 
-                    <!-- Staged file list -->
-                    <div v-if="docFiles[cat.key].length > 0" class="space-y-2">
-                      <p class="text-xs font-medium text-muted uppercase tracking-wide">
-                        {{ docFiles[cat.key].length }} file(s) staged — will upload on submit
-                      </p>
-                      <div
-                        v-for="(file, idx) in docFiles[cat.key]"
-                        :key="`${cat.key}-${idx}-${file.name}`"
-                        class="flex items-center gap-3 rounded-lg border border-default bg-elevated/20 px-3 py-2"
-                      >
-                        <UIcon
-                          :name="file.type === 'application/pdf' ? 'i-lucide-file-text' : 'i-lucide-image'"
-                          class="shrink-0 text-muted size-4"
-                        />
-                        <div class="min-w-0 flex-1">
-                          <p class="truncate text-sm font-medium text-highlighted">
-                            {{ file.name }}
-                          </p>
-                          <p class="text-xs text-muted">
-                            {{ formatDocBytes(file.size) }}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          class="shrink-0 text-muted hover:text-error-500 transition-colors"
-                          title="Remove"
-                          @click="removeDocFile(cat.key, idx)"
+                    <div v-if="form[cat.formKey] === true" class="space-y-2">
+                      <div class="cursor-pointer rounded-lg border-2 border-dashed border-[var(--ap-accent)]/20 p-4 text-center transition-colors hover:border-[var(--ap-accent)]/40" @click="docInputEl[cat.key]?.click()">
+                        <input :ref="el => { docInputEl[cat.key] = el as HTMLInputElement | null }" type="file" multiple class="hidden" accept=".pdf,.jpg,.jpeg,.png" @change="onDocFilesSelected($event, cat.key)">
+                        <UIcon name="i-lucide-upload" class="mx-auto mb-1 size-5 text-[var(--ap-accent)]/60" />
+                        <p class="text-xs text-muted">Browse Files</p>
+                        <p class="mt-0.5 text-[10px] text-muted">PDF, JPG, PNG · max 10 MB</p>
+                      </div>
+
+                      <div v-if="docFiles[cat.key].length > 0" class="flex flex-wrap gap-1.5">
+                        <div
+                          v-for="(file, idx) in docFiles[cat.key]"
+                          :key="`${cat.key}-${idx}-${file.name}`"
+                          class="group flex items-center gap-1.5 rounded-lg border border-[var(--ap-accent)]/20 bg-[var(--ap-accent)]/[0.06] py-1 pl-1 pr-1.5 transition-all duration-200 hover:border-[var(--ap-accent)]/40 hover:bg-[var(--ap-accent)]/[0.1]"
                         >
-                          <UIcon name="i-lucide-x" class="size-4" />
-                        </button>
+                          <span class="rounded-md bg-[var(--ap-accent)]/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--ap-accent)]">{{ file.type === 'application/pdf' ? 'PDF' : 'IMG' }}</span>
+                          <span class="max-w-24 truncate text-[11px] font-medium text-highlighted">{{ file.name }}</span>
+                          <span class="hidden text-[10px] text-muted sm:inline">{{ formatDocBytes(file.size) }}</span>
+                          <button type="button" class="flex h-4 w-4 items-center justify-center rounded p-0 opacity-30 transition-opacity group-hover:opacity-100" title="Remove" @click="removeDocFile(cat.key, idx)">
+                            <UIcon name="i-lucide-x" class="size-3" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-          </UPageCard>
+          </div>
 
-          <!-- ── Section 7: Additional Comments ───────────────────────── -->
-          <UPageCard variant="subtle">
-            <div class="space-y-4">
-              <h3 class="text-base font-semibold border-b border-default pb-3">
-                Additional Comments
-              </h3>
-
-              <UFormField name="additional_notes" label="Additional Notes">
-                <UTextarea
-                  v-model="form.additional_notes"
-                  placeholder="Any additional information relevant to this lead..."
-                  :rows="4"
-                  class="w-full"
-                />
-              </UFormField>
+          <!-- ═══ Row 5 · Additional Comments ════════════════════════════ -->
+          <div class="ap-fade-in ap-delay-5 relative overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
+            <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
+            <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
+              <div class="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[var(--ap-accent)]/[0.08] to-transparent" />
+              <div class="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-[var(--ap-accent)] via-[var(--ap-accent)]/60 to-transparent" />
+              <div class="relative flex items-center gap-3 px-5 py-3.5">
+                <div class="flex h-7 w-7 items-center justify-center rounded-lg border-[0.5px] border-[var(--ap-accent)]/45 bg-[var(--ap-accent)]/10">
+                  <UIcon name="i-lucide-message-square" class="text-xs text-[var(--ap-accent)]" />
+                </div>
+                <span class="text-[13px] font-semibold text-highlighted">Additional Comments</span>
+              </div>
             </div>
-          </UPageCard>
+            <div class="relative p-5">
+              <UTextarea v-model="form.additional_notes" placeholder="Any additional information relevant to this lead..." :rows="3" class="w-full" />
+            </div>
+          </div>
 
-          <!-- ── Submit ─────────────────────────────────────────────────── -->
-          <div class="flex justify-end gap-3 pt-2">
-            <UButton
-              label="Cancel"
-              color="neutral"
-              variant="ghost"
-              :disabled="submitting"
-              @click="router.push('/transfers')"
-            />
-            <UButton
-              label="Submit Lead"
-              icon="i-lucide-send"
-              color="primary"
-              :loading="submitting"
-              :disabled="formDisabled || submitting"
-              @click="onSubmit"
-            />
+          <!-- ═══ Submit ═════════════════════════════════════════════════ -->
+          <div class="flex justify-end gap-3 pt-1">
+            <UButton label="Cancel" color="neutral" variant="ghost" :disabled="submitting" @click="router.push('/transfers')" />
+            <UButton label="Submit Lead" icon="i-lucide-send" color="primary" :loading="submitting" :disabled="formDisabled || submitting" @click="onSubmit" />
           </div>
 
         </div>
-        <!-- end locked form -->
-
       </div>
     </template>
   </UDashboardPanel>
