@@ -63,6 +63,13 @@ const links = computed(() => [[{
   onSelect: () => {
     open.value = false
   }
+}, {
+  label: 'Lead Intake',
+  icon: 'i-lucide-clipboard-pen',
+  to: '/lead-intake',
+  onSelect: () => {
+    open.value = false
+  }
 }, ...(auth.state.value.profile?.role === 'super_admin' ? [{
   label: 'Users',
   icon: 'i-lucide-users',
