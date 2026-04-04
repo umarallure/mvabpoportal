@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { supabase } from '../lib/supabase'
@@ -87,7 +87,8 @@ const activeTab = ref('basic')
 const tabs = [
   { label: 'Basic Information', icon: 'i-lucide-user', value: 'basic' },
   { label: 'Accident Details', icon: 'i-lucide-car', value: 'accident' },
-  { label: 'Notes', icon: 'i-lucide-sticky-note', value: 'notes' }
+  { label: 'Notes', icon: 'i-lucide-sticky-note', value: 'notes' },
+  { label: 'Documents', icon: 'i-lucide-folder-open', value: 'documents' }
 ]
 
 const headerTitle = computed(() => {
@@ -305,6 +306,227 @@ function formatDateTime(value: string | null | undefined) {
     minute: '2-digit'
   })
 }
+
+// ── Documents ──────────────────────────────────────────────────────────────────
+
+const STORAGE_BUCKET = 'lead-documents'
+
+const DOC_CATEGORIES = [
+  { value: 'police_report',       label: 'Police Report',       icon: 'i-lucide-file-badge' },
+  { value: 'insurance_document',  label: 'Insurance Document',  icon: 'i-lucide-shield' },
+  { value: 'medical_report',      label: 'Medical Report',      icon: 'i-lucide-stethoscope' },
+  { value: 'others',              label: 'Others',              icon: 'i-lucide-file' }
+] as const
+
+type DocCategory = typeof DOC_CATEGORIES[number]['value']
+
+type StorageDoc = {
+  id: string          // full storage path used as stable key
+  category: DocCategory
+  fileName: string    // display name — timestamp prefix stripped
+  fileSize: number
+  createdAt: string
+  storagePath: string // submissionId/category/storedFileName
+}
+
+const activeDocCategory = ref<DocCategory>('police_report')
+const docs = ref<Record<DocCategory, StorageDoc[]>>({
+  police_report: [],
+  insurance_document: [],
+  medical_report: [],
+  others: []
+})
+const docsLoading = ref(false)
+
+// Upload state
+const docUploadFile = ref<File | null>(null)
+const docUploadName = ref('')   // required for 'others' category
+const docUploading = ref(false)
+const docFileInputEl = ref<HTMLInputElement | null>(null)
+
+// Inline delete confirmation state
+const deleteTarget = ref<StorageDoc | null>(null)
+const deleting = ref(false)
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+const sanitize = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, '_')
+const getExt  = (name: string) => { const i = name.lastIndexOf('.'); return i >= 0 ? name.slice(i) : '' }
+const stripTs = (name: string) => name.replace(/^\d+_/, '')
+
+const buildStoredName = (file: File, category: DocCategory, docName: string): string => {
+  const ts = Date.now()
+  if (category === 'others' && docName.trim()) {
+    const ext     = getExt(file.name)
+    let   base    = docName.trim()
+    const baseExt = getExt(base)
+    if (baseExt) base = base.slice(0, -baseExt.length)
+    const safe = sanitize(base).replace(/_+/g, '_').replace(/^_|_$/g, '')
+    return `${ts}_${safe}${ext}`
+  }
+  return `${ts}_${sanitize(file.name)}`
+}
+
+const formatBytes = (bytes: number) => {
+  if (!bytes) return '—'
+  if (bytes < 1024)             return `${bytes} B`
+  if (bytes < 1024 * 1024)     return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+}
+
+// ── Load ───────────────────────────────────────────────────────────────────────
+
+const loadCategoryDocs = async (category: DocCategory, submissionId: string): Promise<StorageDoc[]> => {
+  const folder = `${submissionId}/${category}`
+  const { data, error: listErr } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .list(folder, { limit: 100, offset: 0, sortBy: { column: 'created_at', order: 'desc' } })
+
+  if (listErr) {
+    console.warn(`[docs] list failed for ${folder}:`, listErr.message)
+    return []
+  }
+
+  return (data ?? [])
+    .filter(item => item.name !== '.emptyFolderPlaceholder')
+    .map(item => ({
+      id:          `${folder}/${item.name}`,
+      category,
+      fileName:    stripTs(item.name),
+      fileSize:    (item.metadata as Record<string, unknown>)?.size as number ?? 0,
+      createdAt:   item.created_at ?? new Date().toISOString(),
+      storagePath: `${folder}/${item.name}`
+    }))
+}
+
+const loadAllDocs = async () => {
+  if (!row.value?.submission_id) return
+  docsLoading.value = true
+  try {
+    const sid = row.value.submission_id
+    const results = await Promise.all(DOC_CATEGORIES.map(c => loadCategoryDocs(c.value, sid)))
+    DOC_CATEGORIES.forEach((c, i) => { docs.value[c.value] = results[i] })
+  } finally {
+    docsLoading.value = false
+  }
+}
+
+const refreshCategory = async (category: DocCategory) => {
+  if (!row.value?.submission_id) return
+  docs.value[category] = await loadCategoryDocs(category, row.value.submission_id)
+}
+
+// Load docs when the tab is opened for the first time
+watch(activeTab, val => { if (val === 'documents') loadAllDocs() })
+
+// ── Upload ─────────────────────────────────────────────────────────────────────
+
+const ALLOWED_TYPES = ['application/pdf', 'image/png', 'image/jpeg']
+const MAX_BYTES     = 10 * 1024 * 1024
+
+const toast = useToast()
+
+const onDocFileChange = (e: Event) => {
+  const file = (e.target as HTMLInputElement).files?.[0] ?? null
+  if (!file) return
+
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    toast.add({ title: 'Invalid file type', description: 'Only PDF, PNG, and JPEG are allowed.', color: 'error', icon: 'i-lucide-x' })
+    if (docFileInputEl.value) docFileInputEl.value.value = ''
+    return
+  }
+  if (file.size > MAX_BYTES) {
+    toast.add({ title: 'File too large', description: 'Maximum size is 10 MB.', color: 'error', icon: 'i-lucide-x' })
+    if (docFileInputEl.value) docFileInputEl.value.value = ''
+    return
+  }
+  docUploadFile.value = file
+}
+
+const uploadDocument = async () => {
+  if (!docUploadFile.value || !row.value?.submission_id) return
+
+  if (activeDocCategory.value === 'others' && !docUploadName.value.trim()) {
+    toast.add({ title: 'Document name required', description: 'Please enter a name for this document.', color: 'warning', icon: 'i-lucide-alert-circle' })
+    return
+  }
+
+  docUploading.value = true
+  try {
+    const storedName = buildStoredName(docUploadFile.value, activeDocCategory.value, docUploadName.value)
+    const filePath   = `${row.value.submission_id}/${activeDocCategory.value}/${storedName}`
+
+    const { error: uploadErr } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .upload(filePath, docUploadFile.value, { cacheControl: '3600', upsert: false })
+
+    if (uploadErr) throw uploadErr
+
+    toast.add({ title: 'Document uploaded', description: `${stripTs(storedName)} uploaded successfully.`, color: 'success', icon: 'i-lucide-check' })
+    docUploadFile.value = null
+    docUploadName.value = ''
+    if (docFileInputEl.value) docFileInputEl.value.value = ''
+    await refreshCategory(activeDocCategory.value)
+  } catch (e) {
+    toast.add({ title: 'Upload failed', description: e instanceof Error ? e.message : 'Unknown error', color: 'error', icon: 'i-lucide-x' })
+  } finally {
+    docUploading.value = false
+  }
+}
+
+// ── View (signed URL) ──────────────────────────────────────────────────────────
+
+const viewDocument = async (doc: StorageDoc) => {
+  const { data, error: signErr } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .createSignedUrl(doc.storagePath, 3600)
+
+  if (signErr || !data?.signedUrl) {
+    toast.add({ title: 'Cannot open document', description: signErr?.message ?? 'Signed URL failed', color: 'error', icon: 'i-lucide-x' })
+    return
+  }
+  window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+}
+
+// ── Delete ─────────────────────────────────────────────────────────────────────
+
+const requestDelete = (doc: StorageDoc) => { deleteTarget.value = doc }
+const cancelDelete  = ()              => { deleteTarget.value = null  }
+
+const confirmDelete = async () => {
+  if (!deleteTarget.value || !row.value?.submission_id) return
+  const doc   = deleteTarget.value
+  const parts = doc.storagePath.split('/')
+  const validCategories: string[] = ['police_report', 'insurance_document', 'medical_report', 'others']
+
+  // Mirror server-side guardrails from the handoff spec
+  if (
+    parts.length !== 3              ||
+    parts[0] !== row.value.submission_id ||
+    !validCategories.includes(parts[1])  ||
+    !parts[2]                            ||
+    parts[2] === '.emptyFolderPlaceholder' ||
+    doc.storagePath.includes('..')
+  ) {
+    toast.add({ title: 'Invalid path', description: 'Document path failed safety validation.', color: 'error', icon: 'i-lucide-x' })
+    deleteTarget.value = null
+    return
+  }
+
+  deleting.value = true
+  try {
+    const { error: delErr } = await supabase.storage.from(STORAGE_BUCKET).remove([doc.storagePath])
+    if (delErr) throw delErr
+
+    toast.add({ title: 'Document deleted', description: `${doc.fileName} has been removed.`, color: 'success', icon: 'i-lucide-check' })
+    docs.value[doc.category] = docs.value[doc.category].filter(d => d.id !== doc.id)
+  } catch (e) {
+    toast.add({ title: 'Delete failed', description: e instanceof Error ? e.message : 'Unknown error', color: 'error', icon: 'i-lucide-x' })
+  } finally {
+    deleting.value = false
+    deleteTarget.value = null
+  }
+}
 </script>
 
 <template>
@@ -410,6 +632,213 @@ function formatDateTime(value: string | null | undefined) {
                 </div>
               </div>
             </UCard>
+
+            <!-- ── Documents Tab ─────────────────────────────────────────── -->
+            <div v-else-if="item.value === 'documents'" class="space-y-4">
+
+              <!-- Category selector -->
+              <div class="flex flex-wrap gap-2">
+                <button
+                  v-for="cat in DOC_CATEGORIES"
+                  :key="cat.value"
+                  type="button"
+                  class="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors"
+                  :class="activeDocCategory === cat.value
+                    ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-300'
+                    : 'border-default hover:bg-muted text-muted'"
+                  @click="activeDocCategory = cat.value"
+                >
+                  <UIcon :name="cat.icon" class="size-4" />
+                  {{ cat.label }}
+                  <UBadge
+                    :label="String(docs[cat.value].length)"
+                    color="neutral"
+                    variant="soft"
+                    size="sm"
+                  />
+                </button>
+              </div>
+
+              <!-- Upload area -->
+              <UCard>
+                <div class="space-y-4">
+                  <div class="flex items-center gap-2">
+                    <UIcon name="i-lucide-upload" class="text-primary-500 size-4" />
+                    <h4 class="text-sm font-semibold">
+                      Upload to {{ DOC_CATEGORIES.find(c => c.value === activeDocCategory)?.label }}
+                    </h4>
+                  </div>
+
+                  <!-- Document name input (others only) -->
+                  <div v-if="activeDocCategory === 'others'">
+                    <UFormField label="Document Name" required>
+                      <UInput
+                        v-model="docUploadName"
+                        placeholder="e.g. Repair Estimate v2"
+                        class="w-full sm:max-w-sm"
+                      />
+                    </UFormField>
+                  </div>
+
+                  <!-- File picker -->
+                  <div
+                    class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-default p-6 text-center transition-colors hover:border-primary-400"
+                    @click="docFileInputEl?.click()"
+                  >
+                    <input
+                      ref="docFileInputEl"
+                      type="file"
+                      class="hidden"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      @change="onDocFileChange"
+                    >
+                    <UIcon name="i-lucide-file-plus" class="text-muted size-7" />
+                    <div v-if="docUploadFile" class="text-sm font-medium text-highlighted">
+                      {{ docUploadFile.name }}
+                      <span class="ml-1 text-xs text-muted">({{ formatBytes(docUploadFile.size) }})</span>
+                    </div>
+                    <div v-else class="space-y-1">
+                      <p class="text-sm text-muted">
+                        Click to browse or drag and drop
+                      </p>
+                      <p class="text-xs text-dimmed">
+                        PDF, PNG, JPEG · max 10 MB
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-3">
+                    <UButton
+                      label="Upload Document"
+                      icon="i-lucide-upload"
+                      color="primary"
+                      :loading="docUploading"
+                      :disabled="!docUploadFile || docUploading"
+                      @click="uploadDocument"
+                    />
+                    <UButton
+                      v-if="docUploadFile"
+                      label="Clear"
+                      color="neutral"
+                      variant="ghost"
+                      :disabled="docUploading"
+                      @click="docUploadFile = null; docUploadName = ''; if (docFileInputEl) docFileInputEl.value = ''"
+                    />
+                  </div>
+                </div>
+              </UCard>
+
+              <!-- Document list for active category -->
+              <UCard>
+                <div class="space-y-3">
+                  <div class="flex items-center justify-between">
+                    <h4 class="text-sm font-semibold">
+                      {{ DOC_CATEGORIES.find(c => c.value === activeDocCategory)?.label }} — {{ docs[activeDocCategory].length }} file(s)
+                    </h4>
+                    <UButton
+                      icon="i-lucide-refresh-cw"
+                      color="neutral"
+                      variant="ghost"
+                      size="sm"
+                      :loading="docsLoading"
+                      @click="refreshCategory(activeDocCategory)"
+                    />
+                  </div>
+
+                  <!-- Loading skeleton -->
+                  <div v-if="docsLoading" class="space-y-2">
+                    <div
+                      v-for="i in 3"
+                      :key="i"
+                      class="h-12 animate-pulse rounded-lg bg-elevated/40"
+                    />
+                  </div>
+
+                  <!-- Empty state -->
+                  <div
+                    v-else-if="docs[activeDocCategory].length === 0"
+                    class="flex flex-col items-center gap-2 py-10 text-center text-muted"
+                  >
+                    <UIcon name="i-lucide-folder-open" class="size-8" />
+                    <p class="text-sm">
+                      No documents uploaded yet
+                    </p>
+                  </div>
+
+                  <!-- File rows -->
+                  <div v-else class="divide-y divide-default">
+                    <div
+                      v-for="doc in docs[activeDocCategory]"
+                      :key="doc.id"
+                      class="space-y-2 py-3 first:pt-0 last:pb-0"
+                    >
+                      <!-- Normal row -->
+                      <div class="flex items-center gap-3">
+                        <UIcon
+                          :name="doc.fileName.endsWith('.pdf') ? 'i-lucide-file-text' : 'i-lucide-image'"
+                          class="shrink-0 text-muted size-5"
+                        />
+                        <div class="min-w-0 flex-1">
+                          <p class="truncate text-sm font-medium text-highlighted">
+                            {{ doc.fileName }}
+                          </p>
+                          <p class="text-xs text-muted">
+                            {{ formatBytes(doc.fileSize) }} · {{ formatDateTime(doc.createdAt) }}
+                          </p>
+                        </div>
+                        <div class="flex shrink-0 items-center gap-1">
+                          <UButton
+                            icon="i-lucide-eye"
+                            color="neutral"
+                            variant="ghost"
+                            size="xs"
+                            title="View document"
+                            @click="viewDocument(doc)"
+                          />
+                          <UButton
+                            icon="i-lucide-trash-2"
+                            color="error"
+                            variant="ghost"
+                            size="xs"
+                            title="Delete document"
+                            :disabled="deleteTarget?.id === doc.id"
+                            @click="requestDelete(doc)"
+                          />
+                        </div>
+                      </div>
+
+                      <!-- Inline delete confirmation -->
+                      <div
+                        v-if="deleteTarget?.id === doc.id"
+                        class="flex items-center gap-3 rounded-lg border border-error-200 bg-error-50 px-4 py-2.5 dark:border-error-800 dark:bg-error-950"
+                      >
+                        <UIcon name="i-lucide-triangle-alert" class="shrink-0 text-error-500 size-4" />
+                        <p class="flex-1 text-sm text-error-700 dark:text-error-300">
+                          Delete <strong>{{ doc.fileName }}</strong>? This cannot be undone.
+                        </p>
+                        <div class="flex gap-2">
+                          <UButton
+                            label="Delete"
+                            color="error"
+                            size="xs"
+                            :loading="deleting"
+                            @click="confirmDelete"
+                          />
+                          <UButton
+                            label="Cancel"
+                            color="neutral"
+                            variant="ghost"
+                            size="xs"
+                            :disabled="deleting"
+                            @click="cancelDelete"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </UCard>
+            </div>
           </template>
         </UTabs>
       </div>
