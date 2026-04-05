@@ -149,6 +149,81 @@ const form = reactive({
   additional_notes: ''
 })
 
+const fieldErrors = reactive<Record<string, string>>({})
+
+const validateField = (field: string, value: unknown): string | null => {
+  switch (field) {
+    case 'first_name':
+      if (!String(value).trim()) return 'First name is required.'
+      break
+    case 'last_name':
+      if (!String(value).trim()) return 'Last name is required.'
+      break
+    case 'email':
+      if (!String(value).trim()) return 'Email is required.'
+      if (!EMAIL_REGEX.test(String(value).trim())) return 'Please enter a valid email address.'
+      break
+    case 'date_of_birth':
+      if (!String(value)) return 'Date of birth is required.'
+      break
+    case 'street_address':
+      if (!String(value).trim()) return 'Street address is required.'
+      break
+    case 'city':
+      if (!String(value).trim()) return 'City is required.'
+      break
+    case 'state':
+      if (!String(value)) return 'State is required.'
+      break
+    case 'zip_code':
+      if (!String(value).trim()) return 'Zip code is required.'
+      break
+    case 'accident_date':
+      if (!String(value)) return 'Date of accident is required.'
+      break
+    case 'prior_attorney_details':
+      if (form.prior_attorney_involved === true && !String(value).trim()) return 'Prior attorney details are required.'
+      break
+    case 'medical_attention':
+      if (form.received_medical_treatment === true && !String(value).trim()) return 'Hospitals / care received is required.'
+      break
+    case 'injuries':
+      if (!String(value).trim()) return 'Customer injuries / areas affected is required.'
+      break
+    case 'vehicle_registration':
+      if (!String(value).trim()) return 'Vehicle registration is required.'
+      break
+    case 'insurance_company':
+      if (!String(value).trim()) return 'Insurance company is required.'
+      break
+    case 'third_party_vehicle_registration':
+      if (!String(value).trim()) return 'Third party vehicle registration is required.'
+      break
+    case 'accident_scenario':
+      if (!String(value).trim()) return 'Accident scenario is required.'
+      break
+    case 'source_url':
+      if (!String(value).trim()) return 'Source URL is required.'
+      break
+    case 'trustedform_cert_url':
+      if (!String(value).trim()) return 'TrustedForm Cert URL is required.'
+      break
+    case 'ip_address':
+      if (!String(value).trim()) return 'IP Address is required.'
+      break
+  }
+  return null
+}
+
+const touchField = (field: string) => {
+  const error = validateField(field, (form as Record<string, unknown>)[field])
+  if (error) {
+    fieldErrors[field] = error
+  } else {
+    delete fieldErrors[field]
+  }
+}
+
 type IntakeDocCategory = 'medical_report' | 'insurance_document' | 'police_report'
 
 const INTAKE_DOC_CATEGORIES = [
@@ -270,6 +345,16 @@ const usStates = [
 
 const formDisabled = computed(() => !dncVerified.value)
 
+const formBlocked = computed(() => {
+  if (form.accident_last_12_months === false) return "We're sorry, but we cannot take this transfer — the customer must have had an accident within the last 12 months to submit this form."
+  if (form.prior_attorney_involved === true) return "We're sorry, but we cannot take this transfer — the customer must not have an attorney involved."
+  if (form.other_party_admit_fault === false) return "We're sorry, but we cannot take this transfer — the other party must admit the fault."
+  if (form.received_medical_treatment === false) return "We're sorry, but we cannot take this transfer — the customer does not have Medical Attention within the 2 Weeks."
+  if (form.police_attended === false) return "We're sorry, but we cannot take this transfer — the customer must have police report."
+  if (form.insured === false) return "We're sorry, but we cannot take this transfer — the customer must be insured."
+  return null
+})
+
 const uploadCategoryFiles = async (
   files: File[],
   category: IntakeDocCategory,
@@ -292,22 +377,35 @@ const uploadCategoryFiles = async (
   return `${sid}/${category}`
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 const validate = (): string | null => {
+  Object.keys(fieldErrors).forEach(k => delete fieldErrors[k])
+
   if (!dncVerified.value) return 'Please verify the phone number via DNC check first.'
-  if (!form.first_name.trim()) return 'Customer first name is required.'
-  if (!form.last_name.trim()) return 'Customer last name is required.'
+  if (!form.first_name.trim()) { fieldErrors.first_name = 'First name is required.'; return 'Please fix the errors before submitting.' }
+  if (!form.last_name.trim()) { fieldErrors.last_name = 'Last name is required.'; return 'Please fix the errors before submitting.' }
+  if (!form.email.trim()) { fieldErrors.email = 'Email is required.'; return 'Please fix the errors before submitting.' }
+  if (!EMAIL_REGEX.test(form.email.trim())) { fieldErrors.email = 'Please enter a valid email address.'; return 'Please fix the errors before submitting.' }
+  if (!form.date_of_birth) { fieldErrors.date_of_birth = 'Date of birth is required.'; return 'Please fix the errors before submitting.' }
+  if (!form.street_address.trim()) { fieldErrors.street_address = 'Street address is required.'; return 'Please fix the errors before submitting.' }
+  if (!form.city.trim()) { fieldErrors.city = 'City is required.'; return 'Please fix the errors before submitting.' }
+  if (!form.state) { fieldErrors.state = 'State is required.'; return 'Please fix the errors before submitting.' }
+  if (!form.zip_code.trim()) { fieldErrors.zip_code = 'Zip code is required.'; return 'Please fix the errors before submitting.' }
   if (form.accident_last_12_months === null) return 'Please answer: Accident within last 12 months?'
-  if (!form.accident_date) return 'Date of accident is required.'
+  if (!form.accident_date) { fieldErrors.accident_date = 'Date of accident is required.'; return 'Please fix the errors before submitting.' }
   if (form.prior_attorney_involved === null) return 'Please answer: Any prior attorney involved?'
+  if (form.prior_attorney_involved === true && !form.prior_attorney_details.trim()) { fieldErrors.prior_attorney_details = 'Prior attorney details are required.'; return 'Please fix the errors before submitting.' }
   if (form.other_party_admit_fault === null) return 'Please answer: Did the other party admit fault?'
   if (form.received_medical_treatment === null) return 'Please answer: Medical attention within 2 weeks?'
+  if (form.received_medical_treatment === true && !form.medical_attention.trim()) { fieldErrors.medical_attention = 'Hospitals / care received is required.'; return 'Please fix the errors before submitting.' }
   if (form.police_attended === null) return 'Please answer: Did police attend the accident?'
   if (form.insured === null) return 'Please answer: Is the customer insured?'
-  if (!form.vehicle_registration.trim()) return 'Customer vehicle registration is required.'
-  if (!form.insurance_company.trim()) return 'Customer insurance company is required.'
-  if (!form.third_party_vehicle_registration.trim()) return 'Third party vehicle registration is required.'
-  if (!form.injuries.trim()) return 'Customer injuries / areas affected is required.'
-  if (!form.accident_scenario.trim()) return 'Accident scenario is required.'
+  if (!form.vehicle_registration.trim()) { fieldErrors.vehicle_registration = 'Vehicle registration is required.'; return 'Please fix the errors before submitting.' }
+  if (!form.insurance_company.trim()) { fieldErrors.insurance_company = 'Insurance company is required.'; return 'Please fix the errors before submitting.' }
+  if (!form.third_party_vehicle_registration.trim()) { fieldErrors.third_party_vehicle_registration = 'Third party vehicle registration is required.'; return 'Please fix the errors before submitting.' }
+  if (!form.injuries.trim()) { fieldErrors.injuries = 'Customer injuries / areas affected is required.'; return 'Please fix the errors before submitting.' }
+  if (!form.accident_scenario.trim()) { fieldErrors.accident_scenario = 'Accident scenario is required.'; return 'Please fix the errors before submitting.' }
   return null
 }
 
@@ -509,22 +607,26 @@ onMounted(async () => {
                   <div class="grid grid-cols-2 gap-3">
                     <div class="space-y-2">
                       <label class="text-xs font-medium text-highlighted">First Name <span class="text-red-400/80">*</span></label>
-                      <UInput v-model="form.first_name" placeholder="Enter first name" class="w-full" />
+                      <UInput v-model="form.first_name" placeholder="Enter first name" class="w-full" @blur="touchField('first_name')" />
+                      <p v-if="fieldErrors.first_name" class="text-xs text-red-500">{{ fieldErrors.first_name }}</p>
                     </div>
                     <div class="space-y-2">
                       <label class="text-xs font-medium text-highlighted">Last Name <span class="text-red-400/80">*</span></label>
-                      <UInput v-model="form.last_name" placeholder="Enter last name" class="w-full" />
+                      <UInput v-model="form.last_name" placeholder="Enter last name" class="w-full" @blur="touchField('last_name')" />
+                      <p v-if="fieldErrors.last_name" class="text-xs text-red-500">{{ fieldErrors.last_name }}</p>
                     </div>
                   </div>
                   <div class="grid grid-cols-2 gap-3">
                     <div class="space-y-2">
                       <label class="text-xs font-medium text-highlighted">Date of Birth <span class="text-red-400/80">*</span></label>
-                      <UInput v-model="form.date_of_birth" type="date" class="w-full" />
+                      <UInput v-model="form.date_of_birth" type="date" class="w-full" @blur="touchField('date_of_birth')" />
+                      <p v-if="fieldErrors.date_of_birth" class="text-xs text-red-500">{{ fieldErrors.date_of_birth }}</p>
                     </div>
                     <div class="space-y-2">
                       <label class="text-xs font-medium text-highlighted">Email <span class="text-red-400/80">*</span></label>
-                      <UInput v-model="form.email" type="email" placeholder="myname@example.com" class="w-full" />
+                      <UInput v-model="form.email" type="email" placeholder="myname@example.com" class="w-full" @blur="touchField('email')" />
                       <p class="text-[11px] text-muted">If no email, create one for the customer.</p>
+                      <p v-if="fieldErrors.email" class="text-xs text-red-500">{{ fieldErrors.email }}</p>
                     </div>
                   </div>
                 </div>
@@ -532,7 +634,8 @@ onMounted(async () => {
                 <div class="mt-1 space-y-4">
                     <div class="space-y-2">
                       <label class="text-xs font-medium text-highlighted">Street Address <span class="text-red-400/80">*</span></label>
-                      <UInput v-model="form.street_address" placeholder="Enter street address" class="w-full" />
+                      <UInput v-model="form.street_address" placeholder="Enter street address" class="w-full" @blur="touchField('street_address')" />
+                      <p v-if="fieldErrors.street_address" class="text-xs text-red-500">{{ fieldErrors.street_address }}</p>
                     </div>
                     <div class="space-y-2">
                       <label class="text-xs font-medium text-highlighted">Street Address Line 2</label>
@@ -541,15 +644,18 @@ onMounted(async () => {
                     <div class="grid grid-cols-3 items-end gap-3">
                       <div class="space-y-2">
                         <label class="text-xs font-medium text-highlighted">City <span class="text-red-400/80">*</span></label>
-                        <UInput v-model="form.city" placeholder="City" class="w-full" />
+                        <UInput v-model="form.city" placeholder="City" class="w-full" @blur="touchField('city')" />
+                        <p v-if="fieldErrors.city" class="text-xs text-red-500">{{ fieldErrors.city }}</p>
                       </div>
                       <div class="space-y-2">
                         <label class="text-xs font-medium text-highlighted">State <span class="text-red-400/80">*</span></label>
-                        <USelect v-model="form.state" :items="usStates" placeholder="State" value-key="value" class="w-full" />
+                        <USelect v-model="form.state" :items="usStates" placeholder="State" value-key="value" class="w-full" @blur="touchField('state')" />
+                        <p v-if="fieldErrors.state" class="text-xs text-red-500">{{ fieldErrors.state }}</p>
                       </div>
                       <div class="space-y-2">
                         <label class="text-xs font-medium text-highlighted">Zip <span class="text-red-400/80">*</span></label>
-                        <UInput v-model="form.zip_code" placeholder="Zip Code" class="w-full" />
+                        <UInput v-model="form.zip_code" placeholder="Zip Code" class="w-full" @blur="touchField('zip_code')" />
+                        <p v-if="fieldErrors.zip_code" class="text-xs text-red-500">{{ fieldErrors.zip_code }}</p>
                       </div>
                     </div>
                   </div>
@@ -569,52 +675,59 @@ onMounted(async () => {
                   <span class="text-[13px] font-semibold text-highlighted">Accident Information</span>
                 </div>
               </div>
-              <div class="relative flex-1 space-y-3.5 p-5">
-                <!-- Row 1: Accident 12mo + Other Party Fault + Date of Accident -->
-                <div class="grid grid-cols-3 gap-3">
-                  <div class="space-y-1.5">
-                    <p class="text-xs font-medium text-highlighted">Accident within 12 months? <span class="text-red-400/80">*</span></p>
-                    <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
-                      <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.accident_last_12_months === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.accident_last_12_months = true">Yes</button>
-                      <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.accident_last_12_months === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.accident_last_12_months = false">No</button>
-                    </div>
+              <div class="relative flex-1 space-y-4 p-5">
+                <!-- Accident within 12 months -->
+                <div class="space-y-1.5">
+                  <p class="text-xs font-medium text-highlighted">Accident within 12 months? <span class="text-red-400/80">*</span></p>
+                  <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
+                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.accident_last_12_months === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.accident_last_12_months = true">Yes</button>
+                    <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.accident_last_12_months === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.accident_last_12_months = false">No</button>
                   </div>
-                  <div class="space-y-1.5">
-                    <p class="text-xs font-medium text-highlighted">Other Party Fault? <span class="text-red-400/80">*</span></p>
-                    <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
-                      <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.other_party_admit_fault === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.other_party_admit_fault = true">Yes</button>
-                      <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.other_party_admit_fault === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.other_party_admit_fault = false">No</button>
-                    </div>
-                  </div>
-                  <div class="space-y-1.5">
-                    <label class="text-xs font-medium text-highlighted">Date of Accident <span class="text-red-400/80">*</span></label>
-                    <UInput v-model="form.accident_date" type="date" class="w-full" />
-                  </div>
+                  <p v-if="form.accident_last_12_months === false" class="text-xs text-red-500">We're sorry, but we cannot take this transfer — the customer must have had an accident within the last 12 months to submit this form.</p>
                 </div>
 
-                <!-- Row 2: Prior Attorney + Police Attend -->
-                <div class="grid grid-cols-3 gap-3">
-                  <div class="space-y-1.5">
-                    <p class="text-xs font-medium text-highlighted">Prior Attorney? <span class="text-red-400/80">*</span></p>
-                    <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
-                      <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.prior_attorney_involved === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.prior_attorney_involved = true">Yes</button>
-                      <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.prior_attorney_involved === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.prior_attorney_involved = false">No</button>
-                    </div>
+                <!-- Date of Accident -->
+                <div class="space-y-1.5">
+                  <label class="text-xs font-medium text-highlighted">Date of Accident <span class="text-red-400/80">*</span></label>
+                  <UInput v-model="form.accident_date" type="date" class="w-full" @blur="touchField('accident_date')" />
+                  <p v-if="fieldErrors.accident_date" class="text-xs text-red-500">{{ fieldErrors.accident_date }}</p>
+                </div>
+
+                <!-- Other Party Fault -->
+                <div class="space-y-1.5">
+                  <p class="text-xs font-medium text-highlighted">Did the Other Party Admit Fault at the Scene? <span class="text-red-400/80">*</span></p>
+                  <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
+                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.other_party_admit_fault === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.other_party_admit_fault = true">Yes</button>
+                    <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.other_party_admit_fault === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.other_party_admit_fault = false">No</button>
                   </div>
-                  <div class="space-y-1.5">
-                    <p class="text-xs font-medium text-highlighted">Police Attend? <span class="text-red-400/80">*</span></p>
-                    <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
-                      <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.police_attended === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.police_attended = true">Yes</button>
-                      <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.police_attended === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.police_attended = false">No</button>
-                    </div>
+                  <p v-if="form.other_party_admit_fault === false" class="text-xs text-red-500">We're sorry, but we cannot take this transfer — the other party must admit the fault.</p>
+                </div>
+
+                <!-- Prior Attorney Involved -->
+                <div class="space-y-1.5">
+                  <p class="text-xs font-medium text-highlighted">Any Prior Attorney Involved? <span class="text-red-400/80">*</span></p>
+                  <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
+                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.prior_attorney_involved === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.prior_attorney_involved = true">Yes</button>
+                    <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.prior_attorney_involved === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.prior_attorney_involved = false">No</button>
                   </div>
-                  <div />
+                  <p v-if="form.prior_attorney_involved === true" class="text-xs text-red-500">We're sorry, but we cannot take this transfer — the customer must not have an attorney involved.</p>
                 </div>
 
                 <!-- Conditional: Prior attorney details -->
                 <div v-if="form.prior_attorney_involved === true" class="space-y-1.5">
                   <label class="text-xs font-medium text-highlighted">Prior Attorney Details <span class="text-red-400/80">*</span></label>
-                  <UInput v-model="form.prior_attorney_details" placeholder="Name of attorney previously involved" class="w-full" />
+                  <UInput v-model="form.prior_attorney_details" placeholder="Name of attorney previously involved" class="w-full" @blur="touchField('prior_attorney_details')" />
+                  <p v-if="fieldErrors.prior_attorney_details" class="text-xs text-red-500">{{ fieldErrors.prior_attorney_details }}</p>
+                </div>
+
+                <!-- Police Attend -->
+                <div class="space-y-1.5">
+                  <p class="text-xs font-medium text-highlighted">Did Police Attend the Accident? <span class="text-red-400/80">*</span></p>
+                  <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
+                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.police_attended === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.police_attended = true">Yes</button>
+                    <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.police_attended === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.police_attended = false">No</button>
+                  </div>
+                  <p v-if="form.police_attended === false" class="text-xs text-red-500">We're sorry, but we cannot take this transfer — the customer must have police report.</p>
                 </div>
 
                 <!-- Conditional: Police report ref -->
@@ -640,7 +753,8 @@ onMounted(async () => {
                 <!-- Accident scenario -->
                 <div class="space-y-1.5">
                   <label class="text-xs font-medium text-highlighted">Accident Scenario <span class="text-red-400/80">*</span></label>
-                  <UTextarea v-model="form.accident_scenario" placeholder="Briefly describe how the accident occurred..." :rows="3" class="w-full" />
+                  <UTextarea v-model="form.accident_scenario" placeholder="Briefly describe how the accident occurred..." :rows="3" class="w-full" @blur="touchField('accident_scenario')" />
+                  <p v-if="fieldErrors.accident_scenario" class="text-xs text-red-500">{{ fieldErrors.accident_scenario }}</p>
                 </div>
               </div>
             </div>
@@ -664,20 +778,28 @@ onMounted(async () => {
                 </div>
               </div>
               <div class="relative flex-1 space-y-4 p-5">
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <!-- Medical Attention Within 2 Weeks -->
+                <div class="space-y-1.5">
                   <p class="text-xs font-medium text-highlighted">Medical Attention Within 2 Weeks? <span class="text-red-400/80">*</span></p>
-                  <div class="flex w-fit shrink-0 overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
-                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-5 py-2 text-sm font-medium transition-colors" :class="form.received_medical_treatment === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.received_medical_treatment = true">Yes</button>
-                    <button type="button" class="px-5 py-2 text-sm font-medium transition-colors" :class="form.received_medical_treatment === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.received_medical_treatment = false">No</button>
+                  <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
+                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.received_medical_treatment === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.received_medical_treatment = true">Yes</button>
+                    <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.received_medical_treatment === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.received_medical_treatment = false">No</button>
                   </div>
+                  <p v-if="form.received_medical_treatment === false" class="text-xs text-red-500">We're sorry, but we cannot take this transfer — the customer does not have Medical Attention within the 2 Weeks.</p>
                 </div>
+
+                <!-- Conditional: Hospitals / Care Received -->
                 <div v-if="form.received_medical_treatment === true" class="space-y-1.5">
                   <label class="text-xs font-medium text-highlighted">Hospitals / Care Received <span class="text-red-400/80">*</span></label>
-                  <UTextarea v-model="form.medical_attention" placeholder="List hospitals, clinics, and care received after the accident." :rows="4" class="w-full" />
+                  <UTextarea v-model="form.medical_attention" placeholder="List hospitals, clinics, and care received after the accident." :rows="4" class="w-full" @blur="touchField('medical_attention')" />
+                  <p v-if="fieldErrors.medical_attention" class="text-xs text-red-500">{{ fieldErrors.medical_attention }}</p>
                 </div>
+
+                <!-- Customer Injuries / Areas Affected -->
                 <div class="space-y-1.5">
                   <label class="text-xs font-medium text-highlighted">Customer Injuries / Areas Affected <span class="text-red-400/80">*</span></label>
-                  <UTextarea v-model="form.injuries" placeholder="Describe injuries and which parts of the body were affected." :rows="4" class="w-full" />
+                  <UTextarea v-model="form.injuries" placeholder="Describe injuries and which parts of the body were affected." :rows="4" class="w-full" @blur="touchField('injuries')" />
+                  <p v-if="fieldErrors.injuries" class="text-xs text-red-500">{{ fieldErrors.injuries }}</p>
                 </div>
               </div>
             </div>
@@ -696,32 +818,41 @@ onMounted(async () => {
                 </div>
               </div>
               <div class="relative flex-1 space-y-4 p-5">
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <!-- Is Customer Insured -->
+                <div class="space-y-1.5">
                   <p class="text-xs font-medium text-highlighted">Is Customer Insured? <span class="text-red-400/80">*</span></p>
-                  <div class="flex w-fit shrink-0 overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
-                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-5 py-2 text-sm font-medium transition-colors" :class="form.insured === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.insured = true">Yes</button>
-                    <button type="button" class="px-5 py-2 text-sm font-medium transition-colors" :class="form.insured === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.insured = false">No</button>
+                  <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
+                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.insured === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.insured = true">Yes</button>
+                    <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.insured === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.insured = false">No</button>
                   </div>
+                  <p v-if="form.insured === false" class="text-xs text-red-500">We're sorry, but we cannot take this transfer — the customer must be insured.</p>
                 </div>
-                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div class="space-y-1.5">
-                    <label class="text-xs font-medium text-highlighted">Vehicle Registration <span class="text-red-400/80">*</span></label>
-                    <UInput v-model="form.vehicle_registration" placeholder="License plate number" class="w-full" />
-                  </div>
-                  <div class="space-y-1.5">
-                    <label class="text-xs font-medium text-highlighted">Insurance Company <span class="text-red-400/80">*</span></label>
-                    <UInput v-model="form.insurance_company" placeholder="Insurance company name" class="w-full" />
-                  </div>
+
+                <!-- Vehicle Registration -->
+                <div class="space-y-1.5">
+                  <label class="text-xs font-medium text-highlighted">Vehicle Registration <span class="text-red-400/80">*</span></label>
+                  <UInput v-model="form.vehicle_registration" placeholder="License plate number" class="w-full" @blur="touchField('vehicle_registration')" />
+                  <p v-if="fieldErrors.vehicle_registration" class="text-xs text-red-500">{{ fieldErrors.vehicle_registration }}</p>
                 </div>
-                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div class="space-y-1.5">
-                    <label class="text-xs font-medium text-highlighted">Third Party Vehicle Reg. <span class="text-red-400/80">*</span></label>
-                    <UInput v-model="form.third_party_vehicle_registration" placeholder="Other party's plate" class="w-full" />
-                  </div>
-                  <div class="space-y-1.5">
-                    <label class="text-xs font-medium text-highlighted">Passengers in Vehicle</label>
-                    <UInput v-model.number="form.passengers_count" type="number" placeholder="e.g. 2" min="0" class="w-full" />
-                  </div>
+
+                <!-- Insurance Company -->
+                <div class="space-y-1.5">
+                  <label class="text-xs font-medium text-highlighted">Insurance Company <span class="text-red-400/80">*</span></label>
+                  <UInput v-model="form.insurance_company" placeholder="Insurance company name" class="w-full" @blur="touchField('insurance_company')" />
+                  <p v-if="fieldErrors.insurance_company" class="text-xs text-red-500">{{ fieldErrors.insurance_company }}</p>
+                </div>
+
+                <!-- Third Party Vehicle Reg. -->
+                <div class="space-y-1.5">
+                  <label class="text-xs font-medium text-highlighted">Third Party Vehicle Reg. <span class="text-red-400/80">*</span></label>
+                  <UInput v-model="form.third_party_vehicle_registration" placeholder="Other party's plate" class="w-full" @blur="touchField('third_party_vehicle_registration')" />
+                  <p v-if="fieldErrors.third_party_vehicle_registration" class="text-xs text-red-500">{{ fieldErrors.third_party_vehicle_registration }}</p>
+                </div>
+
+                <!-- Passengers in Vehicle -->
+                <div class="space-y-1.5">
+                  <label class="text-xs font-medium text-highlighted">Passengers in Vehicle</label>
+                  <UInput v-model.number="form.passengers_count" type="number" placeholder="e.g. 2" min="0" class="w-full" />
                 </div>
               </div>
             </div>
@@ -742,15 +873,18 @@ onMounted(async () => {
               <div class="relative flex-1 space-y-4 p-5">
                 <div class="space-y-1.5">
                   <label class="text-xs font-medium text-highlighted">Source URL <span class="text-red-400/80">*</span></label>
-                  <UInput v-model="form.source_url" placeholder="Landing page URL" class="w-full" />
+                  <UInput v-model="form.source_url" placeholder="Landing page URL" class="w-full" @blur="touchField('source_url')" />
+                  <p v-if="fieldErrors.source_url" class="text-xs text-red-500">{{ fieldErrors.source_url }}</p>
                 </div>
                 <div class="space-y-1.5">
                   <label class="text-xs font-medium text-highlighted">TrustedForm Cert URL <span class="text-red-400/80">*</span></label>
-                  <UInput v-model="form.trustedform_cert_url" placeholder="TrustedForm certificate URL" class="w-full" />
+                  <UInput v-model="form.trustedform_cert_url" placeholder="TrustedForm certificate URL" class="w-full" @blur="touchField('trustedform_cert_url')" />
+                  <p v-if="fieldErrors.trustedform_cert_url" class="text-xs text-red-500">{{ fieldErrors.trustedform_cert_url }}</p>
                 </div>
                 <div class="space-y-1.5">
                   <label class="text-xs font-medium text-highlighted">IP Address <span class="text-red-400/80">*</span></label>
-                  <UInput v-model="form.ip_address" placeholder="IP address of the user" class="w-full" />
+                  <UInput v-model="form.ip_address" placeholder="IP address of the user" class="w-full" @blur="touchField('ip_address')" />
+                  <p v-if="fieldErrors.ip_address" class="text-xs text-red-500">{{ fieldErrors.ip_address }}</p>
                 </div>
               </div>
             </div>
@@ -846,10 +980,14 @@ onMounted(async () => {
             </div>
           </div>
 
+          <div v-if="formBlocked" class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950">
+                <UIcon name="i-lucide-ban" class="size-5 shrink-0 text-red-600 dark:text-red-400" />
+                <p class="text-sm font-medium text-red-700 dark:text-red-300">{{ formBlocked }}</p>
+              </div>
           <!-- ═══ Submit ═════════════════════════════════════════════════ -->
           <div class="flex justify-end gap-3 pt-1">
             <UButton label="Cancel" color="neutral" variant="ghost" :disabled="submitting" @click="router.push('/transfers')" />
-            <UButton label="Submit Lead" icon="i-lucide-send" color="primary" :loading="submitting" :disabled="formDisabled || submitting" @click="onSubmit" />
+            <UButton label="Submit Lead" icon="i-lucide-send" color="primary" :loading="submitting" :disabled="formDisabled || !!formBlocked || submitting" @click="onSubmit" />
           </div>
 
         </div>
