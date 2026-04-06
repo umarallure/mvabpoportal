@@ -115,6 +115,8 @@ const form = reactive({
   acc_city: '',
   acc_state: '',
   acc_zip: '',
+  acc_country: '',
+  customer_state: '',
   accident_scenario: '',
 
   received_medical_treatment: null as boolean | null,
@@ -266,6 +268,206 @@ const usStates = [
   { label: 'West Virginia', value: 'WV' },
   { label: 'Wisconsin', value: 'WI' },
   { label: 'Wyoming', value: 'WY' }
+]
+
+const countries = [
+  { label: 'United States', value: 'US' },
+  { label: 'Afghanistan', value: 'AF' },
+  { label: 'Albania', value: 'AL' },
+  { label: 'Algeria', value: 'DZ' },
+  { label: 'Andorra', value: 'AD' },
+  { label: 'Angola', value: 'AO' },
+  { label: 'Antigua and Barbuda', value: 'AG' },
+  { label: 'Argentina', value: 'AR' },
+  { label: 'Armenia', value: 'AM' },
+  { label: 'Australia', value: 'AU' },
+  { label: 'Austria', value: 'AT' },
+  { label: 'Azerbaijan', value: 'AZ' },
+  { label: 'Bahamas', value: 'BS' },
+  { label: 'Bahrain', value: 'BH' },
+  { label: 'Bangladesh', value: 'BD' },
+  { label: 'Barbados', value: 'BB' },
+  { label: 'Belarus', value: 'BY' },
+  { label: 'Belgium', value: 'BE' },
+  { label: 'Belize', value: 'BZ' },
+  { label: 'Benin', value: 'BJ' },
+  { label: 'Bhutan', value: 'BT' },
+  { label: 'Bolivia', value: 'BO' },
+  { label: 'Bosnia and Herzegovina', value: 'BA' },
+  { label: 'Botswana', value: 'BW' },
+  { label: 'Brazil', value: 'BR' },
+  { label: 'Brunei', value: 'BN' },
+  { label: 'Bulgaria', value: 'BG' },
+  { label: 'Burkina Faso', value: 'BF' },
+  { label: 'Burundi', value: 'BI' },
+  { label: 'Cabo Verde', value: 'CV' },
+  { label: 'Cambodia', value: 'KH' },
+  { label: 'Cameroon', value: 'CM' },
+  { label: 'Canada', value: 'CA' },
+  { label: 'Central African Republic', value: 'CF' },
+  { label: 'Chad', value: 'TD' },
+  { label: 'Chile', value: 'CL' },
+  { label: 'China', value: 'CN' },
+  { label: 'Colombia', value: 'CO' },
+  { label: 'Comoros', value: 'KM' },
+  { label: 'Congo (DRC)', value: 'CD' },
+  { label: 'Congo (Republic)', value: 'CG' },
+  { label: 'Costa Rica', value: 'CR' },
+  { label: 'Croatia', value: 'HR' },
+  { label: 'Cuba', value: 'CU' },
+  { label: 'Cyprus', value: 'CY' },
+  { label: 'Czech Republic', value: 'CZ' },
+  { label: 'Denmark', value: 'DK' },
+  { label: 'Djibouti', value: 'DJ' },
+  { label: 'Dominica', value: 'DM' },
+  { label: 'Dominican Republic', value: 'DO' },
+  { label: 'Ecuador', value: 'EC' },
+  { label: 'Egypt', value: 'EG' },
+  { label: 'El Salvador', value: 'SV' },
+  { label: 'Equatorial Guinea', value: 'GQ' },
+  { label: 'Eritrea', value: 'ER' },
+  { label: 'Estonia', value: 'EE' },
+  { label: 'Eswatini', value: 'SZ' },
+  { label: 'Ethiopia', value: 'ET' },
+  { label: 'Fiji', value: 'FJ' },
+  { label: 'Finland', value: 'FI' },
+  { label: 'France', value: 'FR' },
+  { label: 'Gabon', value: 'GA' },
+  { label: 'Gambia', value: 'GM' },
+  { label: 'Georgia', value: 'GE' },
+  { label: 'Germany', value: 'DE' },
+  { label: 'Ghana', value: 'GH' },
+  { label: 'Greece', value: 'GR' },
+  { label: 'Grenada', value: 'GD' },
+  { label: 'Guatemala', value: 'GT' },
+  { label: 'Guinea', value: 'GN' },
+  { label: 'Guinea-Bissau', value: 'GW' },
+  { label: 'Guyana', value: 'GY' },
+  { label: 'Haiti', value: 'HT' },
+  { label: 'Honduras', value: 'HN' },
+  { label: 'Hungary', value: 'HU' },
+  { label: 'Iceland', value: 'IS' },
+  { label: 'India', value: 'IN' },
+  { label: 'Indonesia', value: 'ID' },
+  { label: 'Iran', value: 'IR' },
+  { label: 'Iraq', value: 'IQ' },
+  { label: 'Ireland', value: 'IE' },
+  { label: 'Israel', value: 'IL' },
+  { label: 'Italy', value: 'IT' },
+  { label: 'Ivory Coast', value: 'CI' },
+  { label: 'Jamaica', value: 'JM' },
+  { label: 'Japan', value: 'JP' },
+  { label: 'Jordan', value: 'JO' },
+  { label: 'Kazakhstan', value: 'KZ' },
+  { label: 'Kenya', value: 'KE' },
+  { label: 'Kiribati', value: 'KI' },
+  { label: 'Kosovo', value: 'XK' },
+  { label: 'Kuwait', value: 'KW' },
+  { label: 'Kyrgyzstan', value: 'KG' },
+  { label: 'Laos', value: 'LA' },
+  { label: 'Latvia', value: 'LV' },
+  { label: 'Lebanon', value: 'LB' },
+  { label: 'Lesotho', value: 'LS' },
+  { label: 'Liberia', value: 'LR' },
+  { label: 'Libya', value: 'LY' },
+  { label: 'Liechtenstein', value: 'LI' },
+  { label: 'Lithuania', value: 'LT' },
+  { label: 'Luxembourg', value: 'LU' },
+  { label: 'Madagascar', value: 'MG' },
+  { label: 'Malawi', value: 'MW' },
+  { label: 'Malaysia', value: 'MY' },
+  { label: 'Maldives', value: 'MV' },
+  { label: 'Mali', value: 'ML' },
+  { label: 'Malta', value: 'MT' },
+  { label: 'Marshall Islands', value: 'MH' },
+  { label: 'Mauritania', value: 'MR' },
+  { label: 'Mauritius', value: 'MU' },
+  { label: 'Mexico', value: 'MX' },
+  { label: 'Micronesia', value: 'FM' },
+  { label: 'Moldova', value: 'MD' },
+  { label: 'Monaco', value: 'MC' },
+  { label: 'Mongolia', value: 'MN' },
+  { label: 'Montenegro', value: 'ME' },
+  { label: 'Morocco', value: 'MA' },
+  { label: 'Mozambique', value: 'MZ' },
+  { label: 'Myanmar', value: 'MM' },
+  { label: 'Namibia', value: 'NA' },
+  { label: 'Nauru', value: 'NR' },
+  { label: 'Nepal', value: 'NP' },
+  { label: 'Netherlands', value: 'NL' },
+  { label: 'New Zealand', value: 'NZ' },
+  { label: 'Nicaragua', value: 'NI' },
+  { label: 'Niger', value: 'NE' },
+  { label: 'Nigeria', value: 'NG' },
+  { label: 'North Korea', value: 'KP' },
+  { label: 'North Macedonia', value: 'MK' },
+  { label: 'Norway', value: 'NO' },
+  { label: 'Oman', value: 'OM' },
+  { label: 'Pakistan', value: 'PK' },
+  { label: 'Palau', value: 'PW' },
+  { label: 'Palestine', value: 'PS' },
+  { label: 'Panama', value: 'PA' },
+  { label: 'Papua New Guinea', value: 'PG' },
+  { label: 'Paraguay', value: 'PY' },
+  { label: 'Peru', value: 'PE' },
+  { label: 'Philippines', value: 'PH' },
+  { label: 'Poland', value: 'PL' },
+  { label: 'Portugal', value: 'PT' },
+  { label: 'Qatar', value: 'QA' },
+  { label: 'Romania', value: 'RO' },
+  { label: 'Russia', value: 'RU' },
+  { label: 'Rwanda', value: 'RW' },
+  { label: 'Saint Kitts and Nevis', value: 'KN' },
+  { label: 'Saint Lucia', value: 'LC' },
+  { label: 'Saint Vincent and the Grenadines', value: 'VC' },
+  { label: 'Samoa', value: 'WS' },
+  { label: 'San Marino', value: 'SM' },
+  { label: 'Sao Tome and Principe', value: 'ST' },
+  { label: 'Saudi Arabia', value: 'SA' },
+  { label: 'Senegal', value: 'SN' },
+  { label: 'Serbia', value: 'RS' },
+  { label: 'Seychelles', value: 'SC' },
+  { label: 'Sierra Leone', value: 'SL' },
+  { label: 'Singapore', value: 'SG' },
+  { label: 'Slovakia', value: 'SK' },
+  { label: 'Slovenia', value: 'SI' },
+  { label: 'Solomon Islands', value: 'SB' },
+  { label: 'Somalia', value: 'SO' },
+  { label: 'South Africa', value: 'ZA' },
+  { label: 'South Korea', value: 'KR' },
+  { label: 'South Sudan', value: 'SS' },
+  { label: 'Spain', value: 'ES' },
+  { label: 'Sri Lanka', value: 'LK' },
+  { label: 'Sudan', value: 'SD' },
+  { label: 'Suriname', value: 'SR' },
+  { label: 'Sweden', value: 'SE' },
+  { label: 'Switzerland', value: 'CH' },
+  { label: 'Syria', value: 'SY' },
+  { label: 'Taiwan', value: 'TW' },
+  { label: 'Tajikistan', value: 'TJ' },
+  { label: 'Tanzania', value: 'TZ' },
+  { label: 'Thailand', value: 'TH' },
+  { label: 'Timor-Leste', value: 'TL' },
+  { label: 'Togo', value: 'TG' },
+  { label: 'Tonga', value: 'TO' },
+  { label: 'Trinidad and Tobago', value: 'TT' },
+  { label: 'Tunisia', value: 'TN' },
+  { label: 'Turkey', value: 'TR' },
+  { label: 'Turkmenistan', value: 'TM' },
+  { label: 'Tuvalu', value: 'TV' },
+  { label: 'Uganda', value: 'UG' },
+  { label: 'Ukraine', value: 'UA' },
+  { label: 'United Arab Emirates', value: 'AE' },
+  { label: 'United Kingdom', value: 'GB' },
+  { label: 'Uruguay', value: 'UY' },
+  { label: 'Uzbekistan', value: 'UZ' },
+  { label: 'Vanuatu', value: 'VU' },
+  { label: 'Vatican City', value: 'VA' },
+  { label: 'Venezuela', value: 'VE' },
+  { label: 'Vietnam', value: 'VN' },
+  { label: 'Yemen', value: 'YE' },
+  { label: 'Zambia', value: 'ZM' },
+  { label: 'Zimbabwe', value: 'ZW' }
 ]
 
 const formDisabled = computed(() => !dncVerified.value)
@@ -438,11 +640,10 @@ onMounted(async () => {
     </template>
 
     <template #body>
-      <div class="space-y-5 pb-8">
+      <div class="mx-auto max-w-4xl space-y-5 pb-8">
 
-        <!-- ═══ Row 1 · DNC Verification (centered, narrower, amber theme) ═ -->
-        <div class="mx-auto max-w-2xl">
-          <div class="ap-fade-in ap-delay-1 relative overflow-hidden rounded-xl border border-amber-500/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
+        <!-- ═══ Row 1 · DNC Verification ═══════════════════════════════════ -->
+        <div class="ap-fade-in ap-delay-1 relative overflow-hidden rounded-xl border border-amber-500/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
             <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-500/[0.04] via-transparent to-transparent" />
             <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
               <div class="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-amber-500/[0.08] to-transparent" />
@@ -482,15 +683,11 @@ onMounted(async () => {
               </div>
             </div>
           </div>
-        </div>
 
         <!-- ═══ Locked form area ═════════════════════════════════════════ -->
         <div :class="formDisabled ? 'pointer-events-none select-none opacity-40' : ''" class="space-y-5 transition-opacity duration-300">
 
-          <!-- ═══ Row 2 · Customer Info + Accident Info (side by side) ═══ -->
-          <div class="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-[5fr_7fr]">
-
-            <!-- Customer Personal Information (narrower) -->
+          <!-- ═══ Customer Personal Information ═══════════════════════════ -->
             <div class="ap-fade-in ap-delay-2 relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
               <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
               <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
@@ -556,7 +753,7 @@ onMounted(async () => {
               </div>
             </div>
 
-            <!-- Accident Information -->
+          <!-- ═══ Accident Information ═════════════════════════════════ -->
             <div class="ap-fade-in ap-delay-2 relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
               <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
               <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
@@ -635,6 +832,16 @@ onMounted(async () => {
                     <USelect v-model="form.acc_state" :items="usStates" placeholder="State" value-key="value" />
                     <UInput v-model="form.acc_zip" placeholder="Zip Code" />
                   </div>
+                  <div class="mt-1.5 grid grid-cols-2 gap-3">
+                    <div class="space-y-1.5">
+                      <label class="text-xs font-medium text-highlighted">Country</label>
+                      <USelect v-model="form.acc_country" :items="countries" placeholder="Select Country" value-key="value" class="w-full" />
+                    </div>
+                    <div class="space-y-1.5">
+                      <label class="text-xs font-medium text-highlighted">Customer State</label>
+                      <USelect v-model="form.customer_state" :items="usStates" placeholder="Select State" value-key="value" class="w-full" />
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Accident scenario -->
@@ -645,12 +852,7 @@ onMounted(async () => {
               </div>
             </div>
 
-          </div>
-
-          <!-- ═══ Row 3 · Medical + Insurance + Lead Tracking (3-col) ════ -->
-          <div class="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-3">
-
-            <!-- Medical Information -->
+          <!-- ═══ Medical Information ═══════════════════════════════════ -->
             <div class="ap-fade-in ap-delay-3 relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
               <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
               <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
@@ -755,9 +957,7 @@ onMounted(async () => {
               </div>
             </div>
 
-          </div>
-
-          <!-- ═══ Row 4 · Supporting Documents (full width) ═════════════ -->
+          <!-- ═══ Supporting Documents ══════════════════════════════════ -->
           <div class="ap-fade-in ap-delay-4 relative overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
             <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
             <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
@@ -828,7 +1028,7 @@ onMounted(async () => {
             </div>
           </div>
 
-          <!-- ═══ Row 5 · Additional Comments ════════════════════════════ -->
+          <!-- ═══ Additional Comments ═══════════════════════════════════ -->
           <div class="ap-fade-in ap-delay-5 relative overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
             <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
             <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
