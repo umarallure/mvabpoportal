@@ -30,8 +30,7 @@ const EMPTY_STATS: Stat[] = [
   { title: 'Not Qualified', icon: 'i-lucide-circle-x', value: 0, variation: 0 },
   { title: 'No Coverage', icon: 'i-lucide-shield-x', value: 0, variation: 0 },
   { title: 'Submitted to Attorney', icon: 'i-lucide-send', value: 0, variation: 0 },
-  { title: 'Approved Attorney', icon: 'i-lucide-scale', value: 0, variation: 0 },
-  { title: 'Denied Attorney', icon: 'i-lucide-badge-x', value: 0, variation: 0 }
+  { title: 'Approved Attorney', icon: 'i-lucide-scale', value: 0, variation: 0 }
 ]
 
 const CARD_ACCENTS = [
@@ -40,8 +39,7 @@ const CARD_ACCENTS = [
   'var(--dashboard-accent-orange)',
   'var(--dashboard-accent-amber)',
   'var(--dashboard-accent-blue)',
-  'var(--dashboard-accent-primary)',
-  'var(--dashboard-accent-red)'
+  'var(--dashboard-accent-primary)'
 ]
 
 const stats = ref<Stat[]>([...EMPTY_STATS])
@@ -75,16 +73,13 @@ const buildStats = (rows: DashboardStatRow[]): Stat[] => {
 
   const approvedAttorneyInbound = rows.filter((row) => normalize(row.submitted_attorney_status) === 'approved').length
 
-  const deniedAttorneyInbound = rows.filter((row) => normalize(row.submitted_attorney_status) === 'denied').length
-
   return [
     { title: 'Total BPO Transfers', icon: 'i-lucide-arrow-right-left', value: totalInbound, variation: 0 },
     { title: 'Qualified', icon: 'i-lucide-badge-check', value: qualifiedInbound, variation: 0 },
     { title: 'Not Qualified', icon: 'i-lucide-circle-x', value: notQualifiedInbound, variation: 0 },
     { title: 'No Coverage', icon: 'i-lucide-shield-x', value: noCoverageInbound, variation: 0 },
     { title: 'Submitted to Attorney', icon: 'i-lucide-send', value: submittedToAttorneyInbound, variation: 0 },
-    { title: 'Approved Attorney', icon: 'i-lucide-scale', value: approvedAttorneyInbound, variation: 0 },
-    { title: 'Denied Attorney', icon: 'i-lucide-badge-x', value: deniedAttorneyInbound, variation: 0 }
+    { title: 'Approved Attorney', icon: 'i-lucide-scale', value: approvedAttorneyInbound, variation: 0 }
   ]
 }
 
@@ -184,13 +179,13 @@ watch([() => props.period, () => props.range, () => route.fullPath], () => {
 
 @media (min-width: 900px) {
   .dashboard-stats-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (min-width: 1280px) {
   .dashboard-stats-grid {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
 

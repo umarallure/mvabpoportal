@@ -131,11 +131,6 @@ const pagedRows = computed(() => {
 
 const totalTransfersCount = computed(() => filteredLeads.value.length)
 
-const totalVolume = computed(() => filteredLeads.value.reduce((sum, t) => sum + t.opportunityValue, 0))
-
-const avgVolume = computed(() => {
-  return totalTransfersCount.value > 0 ? Math.round(totalVolume.value / totalTransfersCount.value) : 0
-})
 
 const leadsByStage = computed(() => {
   const grouped = new Map<string, TransferLead[]>()
@@ -311,10 +306,41 @@ const STAGE_ICON_MAP: Record<string, string> = {
 const getStageColor = (key: string, index: number) => STAGE_COLOR_MAP[key] || STAGE_COLORS[index % STAGE_COLORS.length]
 const getStageIcon = (key: string, index: number) => STAGE_ICON_MAP[key] || ['i-lucide-circle-dot', 'i-lucide-clock', 'i-lucide-check-circle', 'i-lucide-alert-triangle', 'i-lucide-flame', 'i-lucide-star', 'i-lucide-shield-check', 'i-lucide-heart', 'i-lucide-zap'][index % 9]
 
+const newTransfersCount = computed(() =>
+  filteredLeads.value.filter(t => t.stage === 'transfer_api').length
+)
+
+const needsFollowUpCount = computed(() =>
+  filteredLeads.value.filter(t =>
+    ['incomplete_transfer', 'needs_bpo_callback', 'pending_information'].includes(t.stage)
+  ).length
+)
+
+const returnedDQCount = computed(() =>
+  filteredLeads.value.filter(t => t.stage.startsWith('returned_to_center')).length
+)
+
 const summaryCards = computed(() => [
-  { label: 'Total Transfers', value: String(totalTransfersCount.value), icon: 'i-lucide-arrow-right-left', accent: '#ae4010', light: '#e8763c', rgb: '174,64,16', delay: 0 },
-  { label: 'Total Volume', value: formatMoney(totalVolume.value), icon: 'i-lucide-trending-up', accent: '#3b82f6', light: '#60a5fa', rgb: '59,130,246', delay: 60 },
-  { label: 'Avg Volume', value: formatMoney(avgVolume.value), icon: 'i-lucide-bar-chart-3', accent: '#22c55e', light: '#4ade80', rgb: '34,197,94', delay: 120 },
+  {
+    label: 'Total Transfers', value: totalTransfersCount.value, icon: 'i-lucide-arrow-right-left',
+    accent: '#ae4010', light: '#e8763c', rgb: '174,64,16', delay: 0,
+    stages: ['All active transfer stages after filters are applied']
+  },
+  {
+    label: 'New Transfers', value: newTransfersCount.value, icon: 'i-lucide-zap',
+    accent: '#3b82f6', light: '#60a5fa', rgb: '59,130,246', delay: 60,
+    stages: ['Transfer API']
+  },
+  {
+    label: 'Needs Follow-Up', value: needsFollowUpCount.value, icon: 'i-lucide-phone-call',
+    accent: '#f59e0b', light: '#fcd34d', rgb: '245,158,11', delay: 120,
+    stages: ['Incomplete Transfer', 'Needs BPO Callback', 'Internal Callback']
+  },
+  {
+    label: 'Returned / DQ', value: returnedDQCount.value, icon: 'i-lucide-undo-2',
+    accent: '#ef4444', light: '#fca5a5', rgb: '239,68,68', delay: 180,
+    stages: ['Returned To Center - DQ']
+  },
 ])
 
 const hasActiveFilters = computed(() => activeFilterCount.value > 0 || query.value.trim() !== '')
@@ -505,7 +531,7 @@ void sourceTypeOptions.value
     <template #body>
       <div class="ap-page flex h-full min-h-0 flex-col" style="gap: 20px;">
         <!-- ═══ SUMMARY CARDS ═══ -->
-        <div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
           <div
             v-for="card in summaryCards"
             :key="card.label"
@@ -519,16 +545,30 @@ void sourceTypeOptions.value
             }"
           >
             <div class="flex items-center justify-between px-5 py-4">
-              <div>
-                <div class="ap-card-label">
-                  {{ card.label }}
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-1.5">
+                  <div class="ap-card-label">{{ card.label }}</div>
+                  <UPopover mode="hover" :open-delay="100" :close-delay="120" :content="{ side: 'top', align: 'start', sideOffset: 8 }">
+                    <button type="button" class="shrink-0 opacity-35 transition-opacity hover:opacity-70" tabindex="-1">
+                      <UIcon name="i-lucide-circle-help" class="size-3" />
+                    </button>
+                    <template #content>
+                      <div class="w-56 p-3">
+                        <div class="mb-2 text-[10px] font-semibold uppercase tracking-widest" style="color: var(--dashboard-text-muted);">Connected Stages</div>
+                        <ul class="space-y-1">
+                          <li v-for="stage in card.stages" :key="stage" class="flex items-center gap-1.5">
+                            <span class="size-1.5 shrink-0 rounded-full" :style="{ background: card.accent }" />
+                            <span class="text-xs" style="color: var(--dashboard-text-primary);">{{ stage }}</span>
+                          </li>
+                        </ul>
+                      </div>
+                    </template>
+                  </UPopover>
                 </div>
-                <div class="ap-card-value">
-                  {{ card.value }}
-                </div>
+                <div class="ap-card-value">{{ card.value }}</div>
               </div>
               <div
-                class="flex size-10 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105"
+                class="flex size-10 shrink-0 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105"
                 :style="{ background: `rgba(${card.rgb}, 0.12)` }"
               >
                 <UIcon :name="card.icon" class="size-5" :style="{ color: card.light }" />

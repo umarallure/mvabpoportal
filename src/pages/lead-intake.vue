@@ -107,6 +107,7 @@ const form = reactive({
   accident_date: '',
   prior_attorney_involved: null as boolean | null,
   prior_attorney_details: '',
+  signed_contract_with_attorney: null as boolean | null,
   other_party_admit_fault: null as boolean | null,
   police_attended: null as boolean | null,
   police_report_ref: '',
@@ -132,6 +133,7 @@ const form = reactive({
   first_name: '',
   last_name: '',
   phone_number: '',
+  can_receive_texts: null as boolean | null,
   date_of_birth: '',
   email: '',
   street_address: '',
@@ -547,6 +549,15 @@ const countries = [
 
 const formDisabled = computed(() => !dncVerified.value)
 
+const allowedStateCodes = ref<Set<string>>(new Set())
+const statesLoaded = ref(false)
+
+const stateBlockedError = computed(() => {
+  if (!statesLoaded.value || !form.state) return null
+  if (allowedStateCodes.value.has(form.state)) return null
+  return `We're sorry, but we cannot take this transfer — we don't have coverage in the selected state ${form.state} right now.`
+})
+
 const formBlocked = computed(() => {
   if (form.accident_last_12_months === false) return "We're sorry, but we cannot take this transfer — the customer must have had an accident within the last 12 months to submit this form."
   if (form.prior_attorney_involved === true) return "We're sorry, but we cannot take this transfer — the customer must not have an attorney involved."
@@ -554,6 +565,7 @@ const formBlocked = computed(() => {
   if (form.received_medical_treatment === false) return "We're sorry, but we cannot take this transfer — the customer does not have Medical Attention within the 2 Weeks."
   if (form.police_attended === false) return "We're sorry, but we cannot take this transfer — the customer must have police report."
   if (form.insured === false) return "We're sorry, but we cannot take this transfer — the customer must be insured."
+  if (stateBlockedError.value) return stateBlockedError.value
   return null
 })
 
@@ -648,6 +660,7 @@ const onSubmit = async () => {
       submission_id: sid,
       customer_full_name: `${form.first_name.trim()} ${form.last_name.trim()}`,
       phone_number: dncRawPhone.value.replace(/\D/g, ''),
+      can_receive_texts: form.can_receive_texts === null ? null : (form.can_receive_texts ? 'yes' : 'no'),
       email: form.email.trim() || null,
       date_of_birth: form.date_of_birth || null,
       street_address: form.street_address.trim() || null,
@@ -658,6 +671,7 @@ const onSubmit = async () => {
       accident_date: form.accident_date || null,
       prior_attorney_involved: form.prior_attorney_involved ?? false,
       prior_attorney_details: form.prior_attorney_details.trim() || null,
+      signed_contract_with_attorney: form.signed_contract_with_attorney,
       other_party_admit_fault: form.other_party_admit_fault ?? false,
       police_attended: form.police_attended ?? false,
       accident_location: accidentLocation,
@@ -723,7 +737,24 @@ const onSubmit = async () => {
 }
 
 onMounted(async () => {
-  await auth.init()
+  auth.init().catch(() => {})
+
+  try {
+    const { data: stateRows, error: stateError } = await supabase
+      .from('sales_map_states')
+      .select('state_code')
+      .eq('availability_status', 'unblocked')
+
+    if (stateError) {
+      console.warn('[lead-intake] Failed to fetch allowed states:', stateError.message)
+    } else if (stateRows && stateRows.length > 0) {
+      allowedStateCodes.value = new Set(stateRows.map((r: { state_code: string }) => r.state_code))
+    }
+  } catch (e) {
+    console.warn('[lead-intake] Unexpected error fetching allowed states:', e)
+  } finally {
+    statesLoaded.value = true
+  }
 })
 </script>
 
@@ -822,8 +853,21 @@ onMounted(async () => {
                     <div class="space-y-2">
                       <label class="text-xs font-medium text-highlighted">Email <span class="text-red-400/80">*</span></label>
                       <UInput v-model="form.email" type="email" placeholder="myname@example.com" class="w-full" @blur="touchField('email')" />
-                      <p class="text-[11px] text-muted">If no email, create one for the customer.</p>
                       <p v-if="fieldErrors.email" class="text-xs text-red-500">{{ fieldErrors.email }}</p>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-2">
+                      <label class="text-xs font-medium text-highlighted">Phone Number</label>
+                      <UInput :model-value="dncRawPhone" type="tel" disabled class="w-full opacity-60 cursor-not-allowed" />
+                      <p class="text-[11px] text-muted">Verified from DNC check above.</p>
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-xs font-medium text-highlighted">Can They Receive Text Messages? <span class="text-red-400/80">*</span></label>
+                      <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
+                        <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.can_receive_texts === true ? 'bg-green-600 text-white' : 'text-muted hover:bg-green-500/5'" @click="form.can_receive_texts = true">Yes</button>
+                        <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.can_receive_texts === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.can_receive_texts = false">No</button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -845,9 +889,10 @@ onMounted(async () => {
                         <p v-if="fieldErrors.city" class="text-xs text-red-500">{{ fieldErrors.city }}</p>
                       </div>
                       <div class="space-y-2">
-                        <label class="text-xs font-medium text-highlighted">State <span class="text-red-400/80">*</span></label>
+                        <label class="text-xs font-medium text-highlighted">Customer State <span class="text-red-400/80">*</span></label>
                         <USelect v-model="form.state" :items="usStates" placeholder="State" value-key="value" class="w-full" @blur="touchField('state')" />
                         <p v-if="fieldErrors.state" class="text-xs text-red-500">{{ fieldErrors.state }}</p>
+                        <p v-else-if="stateBlockedError" class="text-xs text-red-500">{{ stateBlockedError }}</p>
                       </div>
                       <div class="space-y-2">
                         <label class="text-xs font-medium text-highlighted">Zip <span class="text-red-400/80">*</span></label>
@@ -917,6 +962,15 @@ onMounted(async () => {
                   <p v-if="fieldErrors.prior_attorney_details" class="text-xs text-red-500">{{ fieldErrors.prior_attorney_details }}</p>
                 </div>
 
+                <!-- Signed Contract With Attorney -->
+                <div class="space-y-1.5">
+                  <p class="text-xs font-medium text-highlighted">Did You Sign a Contract With Another Attorney?</p>
+                  <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
+                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.signed_contract_with_attorney === true ? 'bg-green-600 text-white' : 'text-muted hover:bg-green-500/5'" @click="form.signed_contract_with_attorney = true">Yes</button>
+                    <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.signed_contract_with_attorney === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.signed_contract_with_attorney = false">No</button>
+                  </div>
+                </div>
+
                 <!-- Police Attend -->
                 <div class="space-y-1.5">
                   <p class="text-xs font-medium text-highlighted">Did Police Attend the Accident? <span class="text-red-400/80">*</span></p>
@@ -951,7 +1005,7 @@ onMounted(async () => {
                       <USelect v-model="form.acc_country" :items="countries" placeholder="Select Country" value-key="value" class="w-full" />
                     </div>
                     <div class="space-y-1.5">
-                      <label class="text-xs font-medium text-highlighted">Customer State</label>
+                      <label class="text-xs font-medium text-highlighted">Accident State</label>
                       <USelect v-model="form.customer_state" :items="usStates" placeholder="Select State" value-key="value" class="w-full" />
                     </div>
                   </div>
