@@ -291,6 +291,11 @@ const STAGE_COLORS = [
   { accent: '#14b8a6', rgb: '20,184,166' },
 ]
 
+const STAGE_COLOR_MAP: Record<string, { accent: string, rgb: string }> = {
+  returned_to_center_dq: { accent: '#ef4444', rgb: '239,68,68' },
+  previously_sold_bpo: { accent: '#ef4444', rgb: '239,68,68' },
+}
+
 const STAGE_ICON_MAP: Record<string, string> = {
   transfer_api: 'i-lucide-zap',
   incomplete_transfer: 'i-lucide-alert-circle',
@@ -303,7 +308,7 @@ const STAGE_ICON_MAP: Record<string, string> = {
   application_withdrawn: 'i-lucide-x-circle',
 }
 
-const getStageColor = (_key: string, index: number) => STAGE_COLORS[index % STAGE_COLORS.length]
+const getStageColor = (key: string, index: number) => STAGE_COLOR_MAP[key] || STAGE_COLORS[index % STAGE_COLORS.length]
 const getStageIcon = (key: string, index: number) => STAGE_ICON_MAP[key] || ['i-lucide-circle-dot', 'i-lucide-clock', 'i-lucide-check-circle', 'i-lucide-alert-triangle', 'i-lucide-flame', 'i-lucide-star', 'i-lucide-shield-check', 'i-lucide-heart', 'i-lucide-zap'][index % 9]
 
 const summaryCards = computed(() => [

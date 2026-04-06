@@ -25,13 +25,13 @@ type DashboardStatRow = {
 }
 
 const EMPTY_STATS: Stat[] = [
-  { title: 'Total Inbound BPO Transfers', icon: 'i-lucide-arrow-right-left', value: 0, variation: 0 },
-  { title: 'Qualified Inbound', icon: 'i-lucide-badge-check', value: 0, variation: 0 },
-  { title: 'Not Qualified Inbound', icon: 'i-lucide-circle-x', value: 0, variation: 0 },
-  { title: 'No Coverage (Inbound)', icon: 'i-lucide-shield-x', value: 0, variation: 0 },
-  { title: 'Submitted to Attorney (Inbound)', icon: 'i-lucide-send', value: 0, variation: 0 },
-  { title: 'Approved Attorney (Inbound)', icon: 'i-lucide-scale', value: 0, variation: 0 },
-  { title: 'Denied Attorney (Inbound)', icon: 'i-lucide-badge-x', value: 0, variation: 0 }
+  { title: 'Total BPO Transfers', icon: 'i-lucide-arrow-right-left', value: 0, variation: 0 },
+  { title: 'Qualified', icon: 'i-lucide-badge-check', value: 0, variation: 0 },
+  { title: 'Not Qualified', icon: 'i-lucide-circle-x', value: 0, variation: 0 },
+  { title: 'No Coverage', icon: 'i-lucide-shield-x', value: 0, variation: 0 },
+  { title: 'Submitted to Attorney', icon: 'i-lucide-send', value: 0, variation: 0 },
+  { title: 'Approved Attorney', icon: 'i-lucide-scale', value: 0, variation: 0 },
+  { title: 'Denied Attorney', icon: 'i-lucide-badge-x', value: 0, variation: 0 }
 ]
 
 const CARD_ACCENTS = [
@@ -78,13 +78,13 @@ const buildStats = (rows: DashboardStatRow[]): Stat[] => {
   const deniedAttorneyInbound = rows.filter((row) => normalize(row.submitted_attorney_status) === 'denied').length
 
   return [
-    { title: 'Total Inbound BPO Transfers', icon: 'i-lucide-arrow-right-left', value: totalInbound, variation: 0 },
-    { title: 'Qualified Inbound', icon: 'i-lucide-badge-check', value: qualifiedInbound, variation: 0 },
-    { title: 'Not Qualified Inbound', icon: 'i-lucide-circle-x', value: notQualifiedInbound, variation: 0 },
-    { title: 'No Coverage (Inbound)', icon: 'i-lucide-shield-x', value: noCoverageInbound, variation: 0 },
-    { title: 'Submitted to Attorney (Inbound)', icon: 'i-lucide-send', value: submittedToAttorneyInbound, variation: 0 },
-    { title: 'Approved Attorney (Inbound)', icon: 'i-lucide-scale', value: approvedAttorneyInbound, variation: 0 },
-    { title: 'Denied Attorney (Inbound)', icon: 'i-lucide-badge-x', value: deniedAttorneyInbound, variation: 0 }
+    { title: 'Total BPO Transfers', icon: 'i-lucide-arrow-right-left', value: totalInbound, variation: 0 },
+    { title: 'Qualified', icon: 'i-lucide-badge-check', value: qualifiedInbound, variation: 0 },
+    { title: 'Not Qualified', icon: 'i-lucide-circle-x', value: notQualifiedInbound, variation: 0 },
+    { title: 'No Coverage', icon: 'i-lucide-shield-x', value: noCoverageInbound, variation: 0 },
+    { title: 'Submitted to Attorney', icon: 'i-lucide-send', value: submittedToAttorneyInbound, variation: 0 },
+    { title: 'Approved Attorney', icon: 'i-lucide-scale', value: approvedAttorneyInbound, variation: 0 },
+    { title: 'Denied Attorney', icon: 'i-lucide-badge-x', value: deniedAttorneyInbound, variation: 0 }
   ]
 }
 
