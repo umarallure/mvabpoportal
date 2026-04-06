@@ -167,6 +167,13 @@ const customEndDate = ref('')
 const selectedStage = ref(ALL_FILTER_VALUE)
 const selectedSourceType = ref(ALL_FILTER_VALUE)
 const selectedStates = ref<string[]>([])
+const filterCaseCategory = ref<string[]>([])
+const filterInjurySeverity = ref<string[]>([])
+const filterInsuranceStatus = ref<string[]>([])
+const filterLiabilityStatus = ref<string[]>([])
+const filterMedicalTreatment = ref<string[]>([])
+const filterLanguage = ref<string[]>([])
+const filterExpiry = ref('all')
 
 const editOpen = ref(false)
 const editSaving = ref(false)
@@ -223,8 +230,85 @@ const activeFilterCount = computed(() => {
   if (selectedStage.value !== ALL_FILTER_VALUE) count += 1
   if (selectedSourceType.value !== ALL_FILTER_VALUE) count += 1
   if (selectedStates.value.length > 0) count += 1
+  if (filterCaseCategory.value.length > 0) count += 1
+  if (filterInjurySeverity.value.length > 0) count += 1
+  if (filterInsuranceStatus.value.length > 0) count += 1
+  if (filterLiabilityStatus.value.length > 0) count += 1
+  if (filterMedicalTreatment.value.length > 0) count += 1
+  if (filterLanguage.value.length > 0) count += 1
+  if (filterExpiry.value !== 'all') count += 1
   return count
 })
+
+const hasActiveFilters = computed(() => activeFilterCount.value > 0 || searchTerm.value.trim() !== '')
+
+const resetFilters = () => {
+  searchTerm.value = ''
+  selectedStage.value = ALL_FILTER_VALUE
+  selectedSourceType.value = ALL_FILTER_VALUE
+  selectedStates.value = []
+  selectedDateRange.value = 'all'
+  customStartDate.value = ''
+  customEndDate.value = ''
+  filterCaseCategory.value = []
+  filterInjurySeverity.value = []
+  filterInsuranceStatus.value = []
+  filterLiabilityStatus.value = []
+  filterMedicalTreatment.value = []
+  filterLanguage.value = []
+  filterExpiry.value = 'all'
+}
+
+const multiSelectUi = {
+  value: 'truncate whitespace-nowrap overflow-hidden',
+  item: 'group',
+  itemTrailingIcon: 'hidden',
+  content: 'w-max min-w-[var(--reka-select-trigger-width)]'
+}
+
+const singleSelectUi = {
+  content: 'w-max min-w-[var(--reka-select-trigger-width)]'
+}
+
+const CASE_CATEGORY_OPTIONS = [
+  { label: 'Consumer Cases', value: 'Consumer Cases' },
+  { label: 'Commercial Cases', value: 'Commercial Cases' }
+]
+
+const INJURY_SEVERITY_OPTIONS = [
+  { label: 'Minor', value: 'minor' },
+  { label: 'Moderate', value: 'moderate' },
+  { label: 'Severe', value: 'severe' }
+]
+
+const INSURANCE_STATUS_OPTIONS = [
+  { label: 'Insured only', value: 'insured_only' },
+  { label: 'Uninsured acceptable', value: 'uninsured_ok' }
+]
+
+const LIABILITY_STATUS_OPTIONS = [
+  { label: 'Clear liability only', value: 'clear_only' },
+  { label: 'Disputed acceptable', value: 'disputed_ok' }
+]
+
+const MEDICAL_TREATMENT_OPTIONS = [
+  { label: 'No medical', value: 'no_medical' },
+  { label: 'Ongoing', value: 'ongoing' },
+  { label: 'Proof of medical treatment', value: 'proof_of_medical_treatment' }
+]
+
+const LANGUAGE_OPTIONS = [
+  { label: 'English', value: 'English' },
+  { label: 'Spanish', value: 'Spanish' }
+]
+
+const EXPIRY_OPTIONS = [
+  { label: 'Any expiry', value: 'all' },
+  { label: 'Next 30 days', value: '30' },
+  { label: 'Next 60 days', value: '60' },
+  { label: 'Next 90 days', value: '90' },
+  { label: 'No expiry date', value: 'no_expiry' }
+]
 
 const filteredRows = computed(() => {
   let data = rows.value.slice()
@@ -518,6 +602,17 @@ onMounted(async () => {
               </UButton>
 
               <UButton
+                v-if="hasActiveFilters"
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                icon="i-lucide-rotate-ccw"
+                @click="resetFilters"
+              >
+                Reset all
+              </UButton>
+
+              <UButton
                 color="neutral"
                 variant="outline"
                 size="sm"
@@ -531,67 +626,9 @@ onMounted(async () => {
           <div class="ap-filter-collapse" :class="{ 'is-open': filtersOpen }">
             <div class="ap-filter-inner">
               <div class="border-t border-[var(--dashboard-divider)] px-5 py-4">
-                <div class="grid gap-4 lg:grid-cols-4">
-                  <div>
-                    <div class="ap-filter-label">
-                      Date Range
-                    </div>
-                    <USelect
-                      v-model="selectedDateRange"
-                      :items="PIPELINE_DATE_RANGE_OPTIONS"
-                      value-key="value"
-                      label-key="label"
-                      size="sm"
-                    />
-                  </div>
+                <div class="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
 
-                  <div v-if="selectedDateRange === 'custom'" class="lg:col-span-2">
-                    <div class="ap-filter-label">
-                      Custom Range
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <UInput
-                        v-model="customStartDate"
-                        type="date"
-                        size="sm"
-                        class="flex-1"
-                      />
-                      <span class="text-xs text-[var(--dashboard-text-soft)]">to</span>
-                      <UInput
-                        v-model="customEndDate"
-                        type="date"
-                        size="sm"
-                        class="flex-1"
-                      />
-                    </div>
-                  </div>
-
-                  <div v-if="selectedDateRange !== 'custom'">
-                    <div class="ap-filter-label">
-                      Stage
-                    </div>
-                    <USelect
-                      v-model="selectedStage"
-                      :items="stageFilterOptions"
-                      value-key="value"
-                      label-key="label"
-                      size="sm"
-                    />
-                  </div>
-
-                  <div>
-                    <div class="ap-filter-label">
-                      Source Type
-                    </div>
-                    <USelect
-                      v-model="selectedSourceType"
-                      :items="sourceTypeOptions"
-                      value-key="value"
-                      label-key="label"
-                      size="sm"
-                    />
-                  </div>
-
+                  <!-- State -->
                   <div>
                     <div class="ap-filter-label">
                       State
@@ -604,20 +641,175 @@ onMounted(async () => {
                       multiple
                       placeholder="All States"
                       size="sm"
+                      class="w-full"
                       :search-input="{ placeholder: 'Search states...' }"
+                      :ui="multiSelectUi"
                     />
                   </div>
 
-                  <div v-if="selectedDateRange === 'custom'">
+                  <!-- Case Category -->
+                  <div>
                     <div class="ap-filter-label">
-                      Stage
+                      Case Category
+                    </div>
+                    <USelectMenu
+                      v-model="filterCaseCategory"
+                      :items="CASE_CATEGORY_OPTIONS"
+                      value-key="value"
+                      label-key="label"
+                      multiple
+                      placeholder="All categories"
+                      size="sm"
+                      class="w-full"
+                      :ui="multiSelectUi"
+                    >
+                      <template #item-leading>
+                        <span class="relative flex size-4 items-center justify-center">
+                          <UIcon name="i-lucide-square" class="absolute size-4 text-muted group-data-[state=checked]:hidden" />
+                          <UIcon name="i-lucide-check-square" class="absolute hidden size-4 text-primary group-data-[state=checked]:block" />
+                        </span>
+                      </template>
+                    </USelectMenu>
+                  </div>
+
+                  <!-- Injury Severity -->
+                  <div>
+                    <div class="ap-filter-label">
+                      Injury Severity
+                    </div>
+                    <USelectMenu
+                      v-model="filterInjurySeverity"
+                      :items="INJURY_SEVERITY_OPTIONS"
+                      value-key="value"
+                      label-key="label"
+                      multiple
+                      placeholder="All severities"
+                      size="sm"
+                      class="w-full"
+                      :ui="multiSelectUi"
+                    >
+                      <template #item-leading>
+                        <span class="relative flex size-4 items-center justify-center">
+                          <UIcon name="i-lucide-square" class="absolute size-4 text-muted group-data-[state=checked]:hidden" />
+                          <UIcon name="i-lucide-check-square" class="absolute hidden size-4 text-primary group-data-[state=checked]:block" />
+                        </span>
+                      </template>
+                    </USelectMenu>
+                  </div>
+
+                  <!-- Insurance Status -->
+                  <div>
+                    <div class="ap-filter-label">
+                      Insurance Status
+                    </div>
+                    <USelectMenu
+                      v-model="filterInsuranceStatus"
+                      :items="INSURANCE_STATUS_OPTIONS"
+                      value-key="value"
+                      label-key="label"
+                      multiple
+                      placeholder="Any"
+                      size="sm"
+                      class="w-full"
+                      :ui="multiSelectUi"
+                    >
+                      <template #item-leading>
+                        <span class="relative flex size-4 items-center justify-center">
+                          <UIcon name="i-lucide-square" class="absolute size-4 text-muted group-data-[state=checked]:hidden" />
+                          <UIcon name="i-lucide-check-square" class="absolute hidden size-4 text-primary group-data-[state=checked]:block" />
+                        </span>
+                      </template>
+                    </USelectMenu>
+                  </div>
+
+                  <!-- Liability Status -->
+                  <div>
+                    <div class="ap-filter-label">
+                      Liability Status
+                    </div>
+                    <USelectMenu
+                      v-model="filterLiabilityStatus"
+                      :items="LIABILITY_STATUS_OPTIONS"
+                      value-key="value"
+                      label-key="label"
+                      multiple
+                      placeholder="Any"
+                      size="sm"
+                      class="w-full"
+                      :ui="multiSelectUi"
+                    >
+                      <template #item-leading>
+                        <span class="relative flex size-4 items-center justify-center">
+                          <UIcon name="i-lucide-square" class="absolute size-4 text-muted group-data-[state=checked]:hidden" />
+                          <UIcon name="i-lucide-check-square" class="absolute hidden size-4 text-primary group-data-[state=checked]:block" />
+                        </span>
+                      </template>
+                    </USelectMenu>
+                  </div>
+
+                  <!-- Medical Treatment -->
+                  <div>
+                    <div class="ap-filter-label">
+                      Medical Treatment
+                    </div>
+                    <USelectMenu
+                      v-model="filterMedicalTreatment"
+                      :items="MEDICAL_TREATMENT_OPTIONS"
+                      value-key="value"
+                      label-key="label"
+                      multiple
+                      placeholder="Any"
+                      size="sm"
+                      class="w-full"
+                      :ui="multiSelectUi"
+                    >
+                      <template #item-leading>
+                        <span class="relative flex size-4 items-center justify-center">
+                          <UIcon name="i-lucide-square" class="absolute size-4 text-muted group-data-[state=checked]:hidden" />
+                          <UIcon name="i-lucide-check-square" class="absolute hidden size-4 text-primary group-data-[state=checked]:block" />
+                        </span>
+                      </template>
+                    </USelectMenu>
+                  </div>
+
+                  <!-- Language -->
+                  <div>
+                    <div class="ap-filter-label">
+                      Language
+                    </div>
+                    <USelectMenu
+                      v-model="filterLanguage"
+                      :items="LANGUAGE_OPTIONS"
+                      value-key="value"
+                      label-key="label"
+                      multiple
+                      placeholder="Any language"
+                      size="sm"
+                      class="w-full"
+                      :ui="multiSelectUi"
+                    >
+                      <template #item-leading>
+                        <span class="relative flex size-4 items-center justify-center">
+                          <UIcon name="i-lucide-square" class="absolute size-4 text-muted group-data-[state=checked]:hidden" />
+                          <UIcon name="i-lucide-check-square" class="absolute hidden size-4 text-primary group-data-[state=checked]:block" />
+                        </span>
+                      </template>
+                    </USelectMenu>
+                  </div>
+
+                  <!-- Expiration -->
+                  <div>
+                    <div class="ap-filter-label">
+                      Expiration
                     </div>
                     <USelect
-                      v-model="selectedStage"
-                      :items="stageFilterOptions"
+                      v-model="filterExpiry"
+                      :items="EXPIRY_OPTIONS"
                       value-key="value"
                       label-key="label"
                       size="sm"
+                      class="w-full"
+                      :ui="singleSelectUi"
                     />
                   </div>
                 </div>
