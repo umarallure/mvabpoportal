@@ -374,6 +374,59 @@ const leadsByStage = computed(() => {
   return grouped
 })
 
+// Rows that resolve to a valid active submission stage key (strict — no blank/unmapped fallback)
+const boardVisibleRows = computed(() =>
+  filteredRows.value.filter((row) => {
+    const status = String(row.status || '').trim()
+    return status !== '' && dbStages.value.some((s) => s.key === status)
+  })
+)
+
+const intakeQueueCount = computed(() =>
+  boardVisibleRows.value.filter((r) => {
+    const key = deriveStageKey(r)
+    return key === 'retainer_signed' || key === 'qualified_missing_info'
+  }).length
+)
+
+const qualifiedReviewCount = computed(() =>
+  boardVisibleRows.value.filter((r) => {
+    const key = deriveStageKey(r)
+    return ['qualified_tier_1', 'qualified_tier_2', 'qualified_tier_3', 'qualified_tier_4',
+      'attorney_review', 'attorney_rejected', 'attorney_approved'].includes(key)
+  }).length
+)
+
+const paymentQueueCount = computed(() =>
+  boardVisibleRows.value.filter((r) => {
+    const key = deriveStageKey(r)
+    return key === 'qualified_payable' || key === 'paid_to_bpo'
+  }).length
+)
+
+const submissionStatCards = computed(() => [
+  {
+    label: 'Total Cases', value: boardVisibleRows.value.length, icon: 'i-lucide-layout-dashboard',
+    accent: '#ae4010', light: '#e8763c', rgb: '174,64,16', delay: 0,
+    stages: ['All valid submission stages after filters are applied']
+  },
+  {
+    label: 'Intake Queue', value: intakeQueueCount.value, icon: 'i-lucide-inbox',
+    accent: '#3b82f6', light: '#60a5fa', rgb: '59,130,246', delay: 60,
+    stages: ['Retainer Signed', 'Signed: Missing Information']
+  },
+  {
+    label: 'Qualified & Review', value: qualifiedReviewCount.value, icon: 'i-lucide-scale',
+    accent: '#22c55e', light: '#4ade80', rgb: '34,197,94', delay: 120,
+    stages: ['Qualified: Tier 1', 'Qualified: Tier 2', 'Qualified: Tier 3', 'Qualified: Tier 4', 'Attorney Review', 'Attorney Approved', 'Attorney Rejected']
+  },
+  {
+    label: 'Payment Queue', value: paymentQueueCount.value, icon: 'i-lucide-banknote',
+    accent: '#8b5cf6', light: '#c4b5fd', rgb: '139,92,246', delay: 180,
+    stages: ['Qualified / Payable', 'Paid to BPO']
+  },
+])
+
 const stageOptions = computed(() => {
   return dbStages.value.map((s) => ({ label: s.label, value: s.key }))
 })
@@ -556,6 +609,54 @@ onMounted(async () => {
 
     <template #body>
       <div class="ap-page flex h-full min-h-0 flex-col gap-4">
+        <!-- ═══ SUBMISSION STAT CARDS ═══ -->
+        <div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          <div
+            v-for="card in submissionStatCards"
+            :key="card.label"
+            class="ap-summary-card dashboard-fade-up group"
+            :style="{
+              '--dashboard-enter-delay': card.delay + 'ms',
+              '--card-accent': card.accent,
+              '--card-light': card.light,
+              '--card-rgb': card.rgb,
+              borderLeftColor: card.accent,
+            }"
+          >
+            <div class="flex items-center justify-between px-5 py-4">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-1.5">
+                  <div class="ap-card-label">{{ card.label }}</div>
+                  <UPopover mode="hover" :open-delay="100" :close-delay="120" :content="{ side: 'top', align: 'start', sideOffset: 8 }">
+                    <button type="button" class="shrink-0 opacity-35 transition-opacity hover:opacity-70" tabindex="-1">
+                      <UIcon name="i-lucide-circle-help" class="size-3" />
+                    </button>
+                    <template #content>
+                      <div class="w-56 p-3">
+                        <div class="mb-2 text-[10px] font-semibold uppercase tracking-widest" style="color: var(--dashboard-text-muted);">Connected Stages</div>
+                        <ul class="space-y-1">
+                          <li v-for="stage in card.stages" :key="stage" class="flex items-center gap-1.5">
+                            <span class="size-1.5 shrink-0 rounded-full" :style="{ background: card.accent }" />
+                            <span class="text-xs" style="color: var(--dashboard-text-primary);">{{ stage }}</span>
+                          </li>
+                        </ul>
+                      </div>
+                    </template>
+                  </UPopover>
+                </div>
+                <div class="ap-card-value">{{ card.value }}</div>
+              </div>
+              <div
+                class="flex size-10 shrink-0 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105"
+                :style="{ background: `rgba(${card.rgb}, 0.12)` }"
+              >
+                <UIcon :name="card.icon" class="size-5" :style="{ color: card.light }" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ TOOLBAR CARD ═══ -->
         <div
           class="dashboard-surface-card dashboard-fade-up"
           :style="{ '--dashboard-enter-delay': '180ms', '--dashboard-surface-glow': 'transparent' }"
