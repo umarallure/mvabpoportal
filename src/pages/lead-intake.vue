@@ -877,7 +877,7 @@ onMounted(async () => {
                 <div class="space-y-1.5">
                   <p class="text-xs font-medium text-highlighted">Accident within 12 months? <span class="text-red-400/80">*</span></p>
                   <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
-                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.accident_last_12_months === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.accident_last_12_months = true">Yes</button>
+                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.accident_last_12_months === true ? 'bg-green-600 text-white' : 'text-muted hover:bg-green-500/5'" @click="form.accident_last_12_months = true">Yes</button>
                     <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.accident_last_12_months === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.accident_last_12_months = false">No</button>
                   </div>
                   <p v-if="form.accident_last_12_months === false" class="text-xs text-red-500">We're sorry, but we cannot take this transfer — the customer must have had an accident within the last 12 months to submit this form.</p>
@@ -894,7 +894,7 @@ onMounted(async () => {
                 <div class="space-y-1.5">
                   <p class="text-xs font-medium text-highlighted">Did the Other Party Admit Fault at the Scene? <span class="text-red-400/80">*</span></p>
                   <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
-                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.other_party_admit_fault === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.other_party_admit_fault = true">Yes</button>
+                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.other_party_admit_fault === true ? 'bg-green-600 text-white' : 'text-muted hover:bg-green-500/5'" @click="form.other_party_admit_fault = true">Yes</button>
                     <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.other_party_admit_fault === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.other_party_admit_fault = false">No</button>
                   </div>
                   <p v-if="form.other_party_admit_fault === false" class="text-xs text-red-500">We're sorry, but we cannot take this transfer — the other party must admit the fault.</p>
@@ -904,7 +904,7 @@ onMounted(async () => {
                 <div class="space-y-1.5">
                   <p class="text-xs font-medium text-highlighted">Any Prior Attorney Involved? <span class="text-red-400/80">*</span></p>
                   <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
-                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.prior_attorney_involved === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.prior_attorney_involved = true">Yes</button>
+                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.prior_attorney_involved === true ? 'bg-green-600 text-white' : 'text-muted hover:bg-green-500/5'" @click="form.prior_attorney_involved = true">Yes</button>
                     <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.prior_attorney_involved === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.prior_attorney_involved = false">No</button>
                   </div>
                   <p v-if="form.prior_attorney_involved === true" class="text-xs text-red-500">We're sorry, but we cannot take this transfer — the customer must not have an attorney involved.</p>
@@ -921,7 +921,7 @@ onMounted(async () => {
                 <div class="space-y-1.5">
                   <p class="text-xs font-medium text-highlighted">Did Police Attend the Accident? <span class="text-red-400/80">*</span></p>
                   <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
-                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.police_attended === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.police_attended = true">Yes</button>
+                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.police_attended === true ? 'bg-green-600 text-white' : 'text-muted hover:bg-green-500/5'" @click="form.police_attended = true">Yes</button>
                     <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.police_attended === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.police_attended = false">No</button>
                   </div>
                   <p v-if="form.police_attended === false" class="text-xs text-red-500">We're sorry, but we cannot take this transfer — the customer must have police report.</p>
@@ -984,7 +984,7 @@ onMounted(async () => {
                 <div class="space-y-1.5">
                   <p class="text-xs font-medium text-highlighted">Medical Attention Within 2 Weeks? <span class="text-red-400/80">*</span></p>
                   <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
-                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.received_medical_treatment === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.received_medical_treatment = true">Yes</button>
+                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.received_medical_treatment === true ? 'bg-green-600 text-white' : 'text-muted hover:bg-green-500/5'" @click="form.received_medical_treatment = true">Yes</button>
                     <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.received_medical_treatment === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.received_medical_treatment = false">No</button>
                   </div>
                   <p v-if="form.received_medical_treatment === false" class="text-xs text-red-500">We're sorry, but we cannot take this transfer — the customer does not have Medical Attention within the 2 Weeks.</p>
@@ -1024,7 +1024,7 @@ onMounted(async () => {
                 <div class="space-y-1.5">
                   <p class="text-xs font-medium text-highlighted">Is Customer Insured? <span class="text-red-400/80">*</span></p>
                   <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
-                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.insured === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.insured = true">Yes</button>
+                    <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.insured === true ? 'bg-green-600 text-white' : 'text-muted hover:bg-green-500/5'" @click="form.insured = true">Yes</button>
                     <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.insured === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.insured = false">No</button>
                   </div>
                   <p v-if="form.insured === false" class="text-xs text-red-500">We're sorry, but we cannot take this transfer — the customer must be insured.</p>
@@ -1128,7 +1128,7 @@ onMounted(async () => {
                     <div class="flex items-center justify-between">
                       <p class="text-xs font-medium text-highlighted">Has {{ cat.label }}? <span class="text-red-400/80">*</span></p>
                       <div class="flex w-fit shrink-0 overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
-                        <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form[cat.formKey] === true ? 'bg-[var(--ap-accent)] text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form[cat.formKey] = true">Yes</button>
+                        <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form[cat.formKey] === true ? 'bg-green-600 text-white' : 'text-muted hover:bg-green-500/5'" @click="form[cat.formKey] = true">Yes</button>
                         <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form[cat.formKey] === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form[cat.formKey] = false; docFiles[cat.key] = []">No</button>
                       </div>
                     </div>
