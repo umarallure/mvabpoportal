@@ -13,7 +13,7 @@ import {
 } from '../lib/pipeline-filters'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../composables/useAuth'
-import { getSubmissionStageDescription } from '../lib/pipeline-stage-descriptions'
+import { getSubmissionStageDescription, getSubmissionTierDetails } from '../lib/pipeline-stage-descriptions'
 import { usePipelineStages } from '../composables/usePipelineStages'
 
 const { stages: dbStages } = usePipelineStages('submission_portal', { publisherPortalView: true })
@@ -22,7 +22,8 @@ const { stages: dbStages } = usePipelineStages('submission_portal', { publisherP
 const STAGES = computed(() => dbStages.value.map((s) => ({
   key: s.key,
   label: s.label,
-  description: getSubmissionStageDescription(s.key)
+  description: getSubmissionStageDescription(s.key),
+  tierDetails: getSubmissionTierDetails(s.key),
 })))
 
 /* UI helpers: palette for column accents (visual only) */
@@ -667,7 +668,34 @@ onMounted(async () => {
                         <UIcon name="i-lucide-circle-help" class="size-3.5" />
                       </button>
                       <template #content>
-                        <div class="max-w-72 p-3">
+                        <!-- Tier structured card -->
+                        <div v-if="stage.tierDetails" class="w-72 p-3.5">
+                          <div class="flex items-center justify-between gap-2 mb-3 pb-2.5 border-b" style="border-color: var(--dashboard-divider);">
+                            <div>
+                              <div class="text-[11px] uppercase tracking-widest font-semibold" style="color: var(--dashboard-text-muted);">{{ stage.tierDetails.subtitle }}</div>
+                              <div class="text-sm font-bold leading-tight" style="color: var(--dashboard-text-primary);">{{ stage.label }}</div>
+                            </div>
+                            <div class="shrink-0 rounded-md px-2.5 py-1 text-xs font-bold" style="background: rgba(var(--dashboard-accent-rgb, 59,130,246), 0.1); color: var(--ap-col-accent, #3b82f6);">
+                              {{ stage.tierDetails.price }}<span class="font-normal text-[10px] opacity-70"> /case</span>
+                            </div>
+                          </div>
+                          <div class="space-y-2">
+                            <div
+                              v-for="row in stage.tierDetails.rows"
+                              :key="row.label"
+                              class="flex items-start gap-2.5"
+                            >
+                              <UIcon :name="row.icon" class="mt-0.5 size-3.5 shrink-0" style="color: var(--ap-col-accent, #3b82f6); opacity: 0.8;" />
+                              <div class="min-w-0">
+                                <div class="text-[9px] uppercase tracking-widest leading-tight" style="color: var(--dashboard-text-muted);">{{ row.label }}</div>
+                                <div class="text-xs font-semibold leading-snug" style="color: var(--dashboard-text-primary);">{{ row.value }}</div>
+                                <div v-if="row.subtext" class="text-[10px] leading-snug" style="color: var(--dashboard-text-muted);">{{ row.subtext }}</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <!-- Default plain description -->
+                        <div v-else class="max-w-72 p-3">
                           <div class="text-sm font-semibold" style="color: var(--dashboard-text-primary);">
                             {{ stage.label }}
                           </div>

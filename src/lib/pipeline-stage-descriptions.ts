@@ -1,5 +1,61 @@
 const DEFAULT_STAGE_DESCRIPTION = 'No stage description has been added yet.'
 
+export interface TierDetailRow {
+  icon: string
+  label: string
+  value: string
+  subtext?: string
+}
+
+export interface TierDetails {
+  subtitle: string
+  price: string
+  rows: TierDetailRow[]
+}
+
+const SUBMISSION_TIER_DETAILS: Record<string, TierDetails> = {
+  qualified_tier_1: {
+    subtitle: 'Transfer',
+    price: '$1,000',
+    rows: [
+      { icon: 'i-lucide-calendar-clock', label: 'Accident Occurred', value: '12+ Months Ago' },
+      { icon: 'i-lucide-heart-pulse', label: 'Type of Injury', value: 'Minor to Moderate' },
+      { icon: 'i-lucide-file-x', label: 'Documentation', value: 'Minor Documentation', subtext: 'Signed Retainer' },
+      { icon: 'i-lucide-scale', label: 'Liability', value: '100% Accepted', subtext: 'Or Very Strong Proof' },
+    ]
+  },
+  qualified_tier_2: {
+    subtitle: 'Bronze',
+    price: '$1,500',
+    rows: [
+      { icon: 'i-lucide-calendar-clock', label: 'Accident Occurred', value: '6–12 Months Ago' },
+      { icon: 'i-lucide-heart-pulse', label: 'Type of Injury', value: 'Moderate to Severe' },
+      { icon: 'i-lucide-file-check', label: 'Documentation', value: 'Majority Documentation', subtext: 'Signed Retainer, Police Report' },
+      { icon: 'i-lucide-scale', label: 'Liability', value: '100% Accepted', subtext: 'Or Very Strong Proof' },
+    ]
+  },
+  qualified_tier_3: {
+    subtitle: 'Silver',
+    price: '$2,000',
+    rows: [
+      { icon: 'i-lucide-calendar-clock', label: 'Accident Occurred', value: '3–6 Months Ago' },
+      { icon: 'i-lucide-heart-pulse', label: 'Type of Injury', value: 'Moderate to Severe' },
+      { icon: 'i-lucide-file-check-2', label: 'Documentation', value: 'All Documentation', subtext: 'Signed Retainer, Proof of Medical Treatment, Police Report' },
+      { icon: 'i-lucide-scale', label: 'Liability', value: '100% Accepted', subtext: 'Or Very Strong Proof' },
+    ]
+  },
+  qualified_tier_4: {
+    subtitle: 'Gold',
+    price: '$3,000',
+    rows: [
+      { icon: 'i-lucide-calendar-clock', label: 'Accident Occurred', value: '0–3 Months Ago' },
+      { icon: 'i-lucide-heart-pulse', label: 'Type of Injury', value: 'Moderate to Catastrophic' },
+      { icon: 'i-lucide-file-badge', label: 'Documentation', value: 'All Documentation', subtext: 'Insurance, Proof of Medical Treatment, Police Report' },
+      { icon: 'i-lucide-scale', label: 'Liability', value: '100% Accepted', subtext: 'Or Very Strong Proof' },
+    ]
+  },
+}
+
 const TRANSFER_STAGE_DESCRIPTIONS: Record<string, string> = {
   transfer_api: 'Fresh inbound transfer from your center via API or Zapier. Ready for closer review and first action.',
   incomplete_transfer: 'The transfer was started but not completed. It needs follow-up or re-engagement.',
@@ -24,6 +80,10 @@ const SUBMISSION_STAGE_DESCRIPTIONS: Record<string, string> = {
   attorney_approved: 'The attorney accepted the case and it is approved to move forward.',
   qualified_payable: 'The case is approved as payable and is queued for payout processing.',
   paid_to_bpo: 'Payout has been completed to your BPO or publisher side for this case.'
+}
+
+export const getSubmissionTierDetails = (stageKey: string): TierDetails | null => {
+  return SUBMISSION_TIER_DETAILS[stageKey] ?? null
 }
 
 export const getTransferStageDescription = (stageKey: string) => {
