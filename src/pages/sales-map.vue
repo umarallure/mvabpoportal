@@ -282,9 +282,7 @@ const refreshCounts = async () => {
           : 'temporarily_blocked'
 
       const attorneyCount = attorneyCounts.get(s.code)?.size ?? 0
-      const capacity = status === 'unblocked'
-        ? capacityForCount(attorneyCount)
-        : null
+      const capacity = status === 'unblocked' ? 'high' : null
 
       return {
         code: s.code,
@@ -764,9 +762,6 @@ watch([selectedStatus, filteredStates], () => {
                 :label="getStateBadgeLabel(tooltip.state)"
                 size="xs"
               />
-            </div>
-            <div v-if="tooltip.state.attorneyCount > 0" class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-              {{ tooltip.state.attorneyCount }} attorney{{ tooltip.state.attorneyCount !== 1 ? 's' : '' }} covering
             </div>
             <div class="mt-1 text-xs text-gray-400 dark:text-gray-500">
               {{ tooltip.state.notes || tooltip.state.description }}

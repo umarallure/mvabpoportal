@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="12" fill="#0E0E2C"/>
+  <!-- D shape: vertical bar + right semicircle -->
+  <rect x="16" y="14" width="10" height="36" rx="2" fill="white"/>
+  <path d="M24 14h6c9.941 0 18 8.059 18 18s-8.059 18-18 18h-6V14z" fill="white"/>
+  <circle cx="30" cy="32" r="10" fill="#0E0E2C"/>
+</svg>
