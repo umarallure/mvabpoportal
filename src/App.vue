@@ -5,10 +5,21 @@ import { useStorage } from '@vueuse/core'
 import type { NavigationMenuItem } from '@nuxt/ui'
 
 import { useAuth } from './composables/useAuth'
+import { useNotifications } from './composables/useNotifications'
 
 const toast = useToast()
 const route = useRoute()
 const auth = useAuth()
+const { fetchInitialNotifications, initializeRealtimeListener, cleanup } = useNotifications()
+
+watch(() => auth.state.value.user?.id, (userId) => {
+  if (userId) {
+    fetchInitialNotifications(userId)
+    initializeRealtimeListener(userId)
+  } else {
+    cleanup()
+  }
+}, { immediate: true })
 
 const open = ref(false)
 const sidebarCollapsed = ref(false)

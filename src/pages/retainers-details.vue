@@ -554,6 +554,7 @@ const confirmDelete = async () => {
           >
             Refresh
           </UButton>
+          <NotificationBell />
         </template>
       </UDashboardNavbar>
     </template>

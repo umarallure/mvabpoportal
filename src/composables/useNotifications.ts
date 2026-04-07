@@ -1,0 +1,192 @@
+import { ref, computed } from 'vue'
+import { createSharedComposable } from '@vueuse/core'
+import type { RealtimeChannel } from '@supabase/supabase-js'
+import { supabase } from '../lib/supabase'
+import type { AppNotification } from '../types'
+
+const MAX_NOTIFICATIONS = 50
+const POLL_INTERVAL_MS = 5000
+
+const _useNotifications = () => {
+  const notifications = ref<AppNotification[]>([])
+  const unreadCount = computed(() => notifications.value.filter(n => !n.is_read).length)
+
+  let channel: RealtimeChannel | null = null
+  let initialized = false
+  let pollTimer: ReturnType<typeof setInterval> | null = null
+  let latestCreatedAt: string | null = null
+  let currentUserId: string | null = null
+  let visibilityHandler: (() => void) | null = null
+  let isSyncing = false
+
+  const syncLatestCreatedAt = () => {
+    latestCreatedAt = notifications.value[0]?.created_at ?? null
+  }
+
+  const mergeNotifications = (incoming: AppNotification[]) => {
+    if (!incoming.length) return
+
+    const merged = new Map<string, AppNotification>()
+
+    notifications.value.forEach((notification) => {
+      merged.set(notification.id, notification)
+    })
+
+    incoming.forEach((notification) => {
+      merged.set(notification.id, notification)
+    })
+
+    notifications.value = Array.from(merged.values())
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, MAX_NOTIFICATIONS)
+
+    syncLatestCreatedAt()
+  }
+
+  const fetchNotifications = async (userId: string, options: { incremental?: boolean } = {}) => {
+    if (isSyncing) return
+
+    isSyncing = true
+
+    try {
+      let query = supabase
+        .from('notifications')
+        .select('*')
+        .eq('recipient_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(MAX_NOTIFICATIONS)
+
+      if (options.incremental && latestCreatedAt) {
+        query = query.gte('created_at', latestCreatedAt)
+      }
+
+      const { data, error } = await query
+
+      if (error || !data) return
+
+      const rows = data as AppNotification[]
+
+      if (options.incremental) {
+        mergeNotifications(rows)
+        return
+      }
+
+      notifications.value = rows
+      syncLatestCreatedAt()
+    } finally {
+      isSyncing = false
+    }
+  }
+
+  const stopPolling = () => {
+    if (pollTimer) {
+      clearInterval(pollTimer)
+      pollTimer = null
+    }
+  }
+
+  const startPolling = (userId: string) => {
+    if (typeof window === 'undefined') return
+
+    stopPolling()
+
+    const syncIfVisible = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      await fetchNotifications(userId, { incremental: true })
+    }
+
+    pollTimer = window.setInterval(() => {
+      void syncIfVisible()
+    }, POLL_INTERVAL_MS)
+
+    if (typeof document !== 'undefined') {
+      visibilityHandler = () => {
+        if (document.visibilityState === 'visible') {
+          void syncIfVisible()
+        }
+      }
+
+      document.addEventListener('visibilitychange', visibilityHandler)
+    }
+  }
+
+  const fetchInitialNotifications = async (userId: string) => {
+    currentUserId = userId
+    await fetchNotifications(userId)
+  }
+
+  const initializeRealtimeListener = (userId: string) => {
+    if (channel && currentUserId === userId) return
+
+    cleanup()
+    currentUserId = userId
+
+    channel = supabase
+      .channel(`notifications:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `recipient_id=eq.${userId}`
+        },
+        (payload) => {
+          mergeNotifications([payload.new as AppNotification])
+        }
+      )
+      .subscribe()
+
+    startPolling(userId)
+    initialized = true
+  }
+
+  const markAsRead = async (notificationId: string) => {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('id', notificationId)
+
+    if (!error) {
+      const n = notifications.value.find(n => n.id === notificationId)
+      if (n) n.is_read = true
+    }
+  }
+
+  const markAllAsRead = async () => {
+    const unreadIds = notifications.value.filter(n => !n.is_read).map(n => n.id)
+    if (!unreadIds.length) return
+
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .in('id', unreadIds)
+
+    if (!error) {
+      notifications.value.forEach(n => { n.is_read = true })
+    }
+  }
+
+  const cleanup = () => {
+    stopPolling()
+
+    if (visibilityHandler && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', visibilityHandler)
+      visibilityHandler = null
+    }
+
+    if (channel) {
+      supabase.removeChannel(channel)
+      channel = null
+    }
+
+    notifications.value = []
+    latestCreatedAt = null
+    currentUserId = null
+    initialized = false
+  }
+
+  return { notifications, unreadCount, fetchInitialNotifications, initializeRealtimeListener, markAsRead, markAllAsRead, cleanup }
+}
+
+export const useNotifications = createSharedComposable(_useNotifications)

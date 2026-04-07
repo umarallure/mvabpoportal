@@ -137,6 +137,7 @@ const isLast = computed(() => activeStepId.value === steps[steps.length - 1].id)
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
+          <NotificationBell />
           <div class="flex items-center gap-2">
             <span class="text-xs text-muted">Step {{ activeStepId }} of {{ steps.length }}</span>
             <div v-if="activeView === 'videos'" class="flex items-center gap-1">

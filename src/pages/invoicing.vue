@@ -470,6 +470,7 @@ const invoiceLabel = (inv: InvoiceRow) =>
             :loading="loading"
             @click="loadInvoices"
           />
+          <NotificationBell />
         </template>
       </UDashboardNavbar>
     </template>

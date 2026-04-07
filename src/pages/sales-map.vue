@@ -647,6 +647,7 @@ watch([selectedStatus, filteredStates], () => {
           >
             Refresh
           </UButton>
+          <NotificationBell />
         </template>
       </UDashboardNavbar>
     </template>

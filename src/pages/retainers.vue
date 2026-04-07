@@ -314,6 +314,7 @@ const openRow = (row: DailyDealFlow) => {
           >
             Refresh
           </UButton>
+          <NotificationBell />
         </template>
       </UDashboardNavbar>
     </template>
