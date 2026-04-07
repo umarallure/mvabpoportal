@@ -191,7 +191,7 @@ const cancelEditing = async () => {
     :state="profile"
     @submit="onSubmit"
   >
-    <div class="space-y-5 pb-8">
+    <div class="mx-auto w-full max-w-5xl space-y-5 pb-8">
 
       <!-- ═══ Page Header ════════════════════════════════════════════════ -->
       <div class="ap-fade-in ap-delay-1 flex items-center justify-between gap-4">
@@ -241,7 +241,7 @@ const cancelEditing = async () => {
       </div>
 
       <!-- ═══ 3-Column Card Grid ════════════════════════════════════════ -->
-      <div class="ap-fade-in ap-delay-2 grid grid-cols-1 items-stretch gap-5 lg:grid-cols-3">
+      <div class="ap-fade-in ap-delay-2 grid grid-cols-1 items-stretch gap-5">
 
         <!-- ── Card 1: Basic Identity ── -->
         <div class="relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
@@ -265,7 +265,7 @@ const cancelEditing = async () => {
           <div class="relative flex-1 space-y-4 p-4 sm:p-5">
             <div class="space-y-1.5">
               <label class="text-xs font-medium text-highlighted">BPO / Center Name <span class="text-red-400/80">*</span></label>
-              <UInput v-model="profile.centerName" size="sm" placeholder="Acme BPO" autocomplete="organization" :disabled="disabled" class="w-full" />
+              <UInput v-model="profile.centerName" size="sm" placeholder="Acme BPO" autocomplete="organization" disabled class="w-full" />
             </div>
 
             <div class="space-y-1.5">
@@ -337,7 +337,7 @@ const cancelEditing = async () => {
         </div>
 
         <!-- ── Card 3: Pricing ── -->
-        <div class="relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
+        <div v-if="false" class="relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
           <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
 
           <!-- Header -->
