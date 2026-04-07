@@ -23,8 +23,16 @@ const saving = ref(false)
 const deleting = ref<string | null>(null)
 const members = ref<TeamMember[]>([])
 
-const editModal = ref(false)
-const editTarget = ref<TeamMember | null>(null)
+// Add member modal
+const addModal = ref(false)
+
+// Inline edit state
+const editingId = ref<string | null>(null)
+const editForm = reactive({ full_name: '', email: '', phone: '', position: '', position_other: '', shift_availability: '', id: '' })
+
+// Delete confirmation
+const deleteModal = ref(false)
+const deleteTarget = ref<TeamMember | null>(null)
 
 const ownerUserId = computed(() => auth.state.value.user?.id ?? '')
 
@@ -53,7 +61,6 @@ const emptyForm = () => ({
 })
 
 const form = reactive(emptyForm())
-const editForm = reactive({ ...emptyForm(), id: '' })
 
 const resetForm = () => {
   Object.assign(form, emptyForm())
@@ -67,6 +74,15 @@ const positionLabel = (pos: string, other: string | null) => {
 const shiftLabel = (shift: string) => {
   return SHIFT_OPTIONS.find(o => o.value === shift)?.label ?? shift
 }
+
+const getInitials = (name: string) => {
+  return name.split(/\s+/).map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
+}
+
+const memberCountLabel = computed(() => {
+  const n = members.value.length
+  return n === 1 ? '1 member' : `${n} members`
+})
 
 const loadMembers = async () => {
   if (!ownerUserId.value) return
@@ -129,6 +145,7 @@ const addMember = async () => {
     })
 
     resetForm()
+    addModal.value = false
     await loadMembers()
   } catch (err) {
     toast.add({
@@ -143,7 +160,7 @@ const addMember = async () => {
 }
 
 const openEdit = (member: TeamMember) => {
-  editTarget.value = member
+  editingId.value = member.id
   Object.assign(editForm, {
     id: member.id,
     full_name: member.full_name,
@@ -153,7 +170,10 @@ const openEdit = (member: TeamMember) => {
     position_other: member.position_other ?? '',
     shift_availability: member.shift_availability
   })
-  editModal.value = true
+}
+
+const cancelEdit = () => {
+  editingId.value = null
 }
 
 const saveEdit = async () => {
@@ -192,7 +212,7 @@ const saveEdit = async () => {
       color: 'success'
     })
 
-    editModal.value = false
+    editingId.value = null
     await loadMembers()
   } catch (err) {
     toast.add({
@@ -206,8 +226,16 @@ const saveEdit = async () => {
   }
 }
 
-const deleteMember = async (member: TeamMember) => {
+const confirmDelete = (member: TeamMember) => {
+  deleteTarget.value = member
+  deleteModal.value = true
+}
+
+const executeDelete = async () => {
+  if (!deleteTarget.value) return
+  const member = deleteTarget.value
   deleting.value = member.id
+  deleteModal.value = false
   try {
     const { error } = await supabase
       .from('team_members')
@@ -233,6 +261,7 @@ const deleteMember = async (member: TeamMember) => {
     })
   } finally {
     deleting.value = null
+    deleteTarget.value = null
   }
 }
 
@@ -243,207 +272,235 @@ onMounted(async () => {
 </script>
 
 <template>
-  <!-- Add Member Form -->
-  <UPageCard
-    title="Team Profile"
-    description="Add and manage the members of your BPO team."
-    variant="naked"
-    orientation="horizontal"
-    class="mb-4"
-  />
+  <div class="space-y-5 pb-8">
 
-  <UPageCard variant="subtle" class="mb-6">
-    <div class="space-y-6">
-      <h3 class="text-lg font-semibold">
-        Add Team Member
-      </h3>
-
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <UFormField label="Full Name" required>
-          <UInput
-            v-model="form.full_name"
-            placeholder="Jane Smith"
-            autocomplete="name"
-          />
-        </UFormField>
-
-        <UFormField label="Email">
-          <UInput
-            v-model="form.email"
-            type="email"
-            placeholder="jane@example.com"
-            autocomplete="email"
-          />
-        </UFormField>
-
-        <UFormField label="Phone">
-          <UInput
-            v-model="form.phone"
-            placeholder="+1 (555) 000-0000"
-            autocomplete="tel"
-          />
-        </UFormField>
-
-        <UFormField label="Position" required>
-          <USelect
-            v-model="form.position"
-            :items="POSITION_OPTIONS"
-            value-key="value"
-            label-key="label"
-            placeholder="Select position"
-          />
-        </UFormField>
-
-        <UFormField v-if="form.position === 'other'" label="Position (describe)">
-          <UInput
-            v-model="form.position_other"
-            placeholder="e.g., Quality Assurance"
-          />
-        </UFormField>
-
-        <UFormField label="Shift Availability" required>
-          <USelect
-            v-model="form.shift_availability"
-            :items="SHIFT_OPTIONS"
-            value-key="value"
-            label-key="label"
-            placeholder="Select shift"
-          />
-        </UFormField>
+    <!-- ═══ Page Header Row ══════════════════════════════════════════════ -->
+    <div class="ap-fade-in ap-delay-1 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="relative flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--ap-accent)]/10 ring-1 ring-[var(--ap-accent)]/25">
+          <UIcon name="i-lucide-users" class="text-lg text-[var(--ap-accent)]" />
+          <span class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#1a1a1a] bg-emerald-400" />
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-highlighted">Team Profile</h1>
+          <p class="text-[11px] text-muted">Manage the members of your BPO team</p>
+        </div>
       </div>
 
-      <div class="flex justify-end">
-        <UButton
-          label="Add Member"
-          icon="i-lucide-user-plus"
-          color="neutral"
-          :loading="saving"
-          @click="addMember"
-        />
-      </div>
+      <UButton size="sm" @click="addModal = true">
+        <template #leading>
+          <UIcon name="i-lucide-plus" class="text-xs" />
+        </template>
+        Add Member
+      </UButton>
     </div>
-  </UPageCard>
 
-  <!-- Members List -->
-  <UPageCard variant="subtle">
-    <div class="space-y-4">
-      <h3 class="text-lg font-semibold">
-        Team Members
-      </h3>
+    <!-- ═══ Team Members Card ════════════════════════════════════════════ -->
+    <div class="ap-fade-in ap-delay-2 relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
+      <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
 
-      <div v-if="loading" class="space-y-3">
-        <USkeleton v-for="i in 3" :key="i" class="h-16 w-full rounded-xl" />
-      </div>
-
-      <div v-else-if="members.length === 0" class="flex flex-col items-center gap-3 py-10 text-center">
-        <UIcon name="i-lucide-users" class="size-10 text-muted" />
-        <p class="text-sm text-muted">No team members yet. Add one above.</p>
-      </div>
-
-      <div v-else class="divide-y divide-default">
-        <div
-          v-for="member in members"
-          :key="member.id"
-          class="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0"
-        >
-          <div class="flex items-center gap-3 min-w-0">
-            <div class="flex size-9 shrink-0 items-center justify-center rounded-full bg-elevated">
-              <UIcon name="i-lucide-user" class="size-4 text-muted" />
+      <!-- Card Header -->
+      <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
+        <div class="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[var(--ap-accent)]/[0.08] to-transparent" />
+        <div class="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-[var(--ap-accent)] via-[var(--ap-accent)]/60 to-transparent" />
+        <div class="relative flex items-center justify-between gap-3 px-5 py-3.5">
+          <div class="flex items-center gap-3">
+            <div class="flex h-7 w-7 items-center justify-center rounded-lg border-[0.5px] border-[var(--ap-accent)]/45 bg-[var(--ap-accent)]/10">
+              <UIcon name="i-lucide-contact" class="text-xs text-[var(--ap-accent)]" />
             </div>
-            <div class="min-w-0">
-              <p class="truncate text-sm font-medium">{{ member.full_name }}</p>
-              <p class="truncate text-xs text-muted">
-                {{ positionLabel(member.position, member.position_other) }}
-                &middot;
-                {{ shiftLabel(member.shift_availability) }}
-                <template v-if="member.email">
-                  &middot; {{ member.email }}
-                </template>
-              </p>
-            </div>
+            <span class="text-[13px] font-semibold text-highlighted">Team Members</span>
           </div>
+          <span v-if="!loading && members.length > 0" class="rounded-md border border-[var(--ap-accent)]/30 bg-[var(--ap-accent)]/10 px-2 py-0.5 text-[11px] font-medium text-[var(--ap-accent)]">{{ memberCountLabel }}</span>
+        </div>
+      </div>
 
-          <div class="flex shrink-0 items-center gap-2">
-            <UButton
-              icon="i-lucide-pencil"
-              size="sm"
-              color="neutral"
-              variant="ghost"
-              @click="openEdit(member)"
-            />
-            <UButton
-              icon="i-lucide-trash-2"
-              size="sm"
-              color="error"
-              variant="ghost"
-              :loading="deleting === member.id"
-              @click="deleteMember(member)"
-            />
+      <!-- Body -->
+      <div class="relative flex-1">
+
+        <!-- Loading -->
+        <div v-if="loading" class="flex flex-col items-center gap-3 py-14 text-center">
+          <UIcon name="i-lucide-loader-2" class="size-6 animate-spin text-[var(--ap-accent)]" />
+          <p class="text-xs text-muted">Loading team members...</p>
+        </div>
+
+        <!-- Empty -->
+        <div v-else-if="members.length === 0" class="flex flex-col items-center gap-4 py-14 text-center">
+          <div class="flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--ap-accent)]/20 bg-[var(--ap-accent)]/[0.06]">
+            <UIcon name="i-lucide-user-plus" class="size-7 text-[var(--ap-accent)]/60" />
+          </div>
+          <div>
+            <p class="text-sm font-medium text-highlighted">No team members yet</p>
+            <p class="mt-1 text-xs text-muted">Click "Add Member" above to get started.</p>
+          </div>
+          <UButton size="xs" variant="outline" class="mt-1" @click="addModal = true">
+            <template #leading>
+              <UIcon name="i-lucide-plus" class="text-xs" />
+            </template>
+            Add Member
+          </UButton>
+        </div>
+
+        <!-- Populated List -->
+        <div v-else>
+          <div
+            v-for="member in members"
+            :key="member.id"
+            class="border-b border-black/[0.04] last:border-0 dark:border-white/[0.04]"
+          >
+            <!-- ── Display Row ── -->
+            <div
+              v-if="editingId !== member.id"
+              class="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--ap-accent)]/[0.02] sm:px-5"
+            >
+              <!-- Initials Avatar -->
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--ap-accent)]/10 ring-1 ring-[var(--ap-accent)]/20">
+                <span class="text-xs font-bold text-[var(--ap-accent)]">{{ getInitials(member.full_name) }}</span>
+              </div>
+
+              <!-- Info -->
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-medium text-highlighted">{{ member.full_name }}</p>
+                <div class="mt-0.5 flex items-center gap-1.5">
+                  <span v-if="member.email" class="truncate text-xs text-muted">{{ member.email }}</span>
+                  <span v-if="member.phone" class="inline-flex shrink-0 items-center rounded bg-black/[0.03] px-1.5 py-0.5 text-[10px] text-muted dark:bg-white/[0.06]">{{ member.phone }}</span>
+                </div>
+              </div>
+
+              <!-- Badges -->
+              <span class="hidden shrink-0 rounded-md border border-[var(--ap-accent)]/55 bg-[var(--ap-accent)]/20 px-2 py-0.5 text-[11px] font-medium text-white sm:inline-flex">
+                {{ positionLabel(member.position, member.position_other) }}
+              </span>
+              <span class="hidden shrink-0 rounded-md bg-black px-2 py-0.5 text-[11px] font-medium text-white md:inline-flex dark:bg-white/90 dark:text-black">
+                {{ shiftLabel(member.shift_availability) }}
+              </span>
+
+              <!-- Actions -->
+              <div class="flex shrink-0 items-center gap-0.5">
+                <UButton icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" @click="openEdit(member)" />
+                <UButton icon="i-lucide-trash-2" size="xs" variant="ghost" class="text-red-400 hover:text-red-300" :loading="deleting === member.id" @click="confirmDelete(member)" />
+              </div>
+            </div>
+
+            <!-- ── Inline Edit Row ── -->
+            <div
+              v-else
+              class="border-l-2 border-[var(--ap-accent)]/60 bg-[var(--ap-accent)]/[0.03] px-4 py-4 sm:px-5"
+            >
+              <div class="space-y-3">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-highlighted">Full Name <span class="text-red-400/80">*</span></label>
+                    <UInput v-model="editForm.full_name" size="sm" placeholder="Jane Smith" autocomplete="off" class="w-full" />
+                  </div>
+                  <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-highlighted">Email</label>
+                    <UInput v-model="editForm.email" size="sm" type="email" placeholder="jane@example.com" autocomplete="off" class="w-full" />
+                  </div>
+                  <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-highlighted">Phone</label>
+                    <UInput v-model="editForm.phone" size="sm" type="tel" placeholder="+1 (555) 000-0000" autocomplete="off" class="w-full" />
+                  </div>
+                </div>
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-highlighted">Position <span class="text-red-400/80">*</span></label>
+                    <USelect v-model="editForm.position" size="sm" :items="POSITION_OPTIONS" value-key="value" label-key="label" placeholder="Select position" class="w-full" />
+                  </div>
+                  <div v-if="editForm.position === 'other'" class="space-y-1.5">
+                    <label class="text-xs font-medium text-highlighted">Specify Position <span class="text-red-400/80">*</span></label>
+                    <UInput v-model="editForm.position_other" size="sm" placeholder="e.g., Quality Assurance" autocomplete="off" class="w-full" />
+                  </div>
+                  <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-highlighted">Shift Availability <span class="text-red-400/80">*</span></label>
+                    <USelect v-model="editForm.shift_availability" size="sm" :items="SHIFT_OPTIONS" value-key="value" label-key="label" placeholder="Select shift" class="w-full" />
+                  </div>
+                </div>
+                <div class="flex items-center justify-end gap-2 pt-1">
+                  <UButton label="Cancel" size="xs" color="neutral" variant="ghost" :disabled="saving" @click="cancelEdit" />
+                  <UButton size="xs" :loading="saving" @click="saveEdit">
+                    <template #leading>
+                      <UIcon name="i-lucide-check" class="text-xs" />
+                    </template>
+                    Save Member
+                  </UButton>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
-  </UPageCard>
 
-  <!-- Edit Modal -->
-  <UModal v-model:open="editModal" title="Edit Team Member">
+  </div>
+
+  <!-- ═══ Add Member Modal ══════════════════════════════════════════════ -->
+  <UModal v-model:open="addModal" title="Add Team Member">
     <template #body>
       <div class="space-y-4 p-1">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <UFormField label="Full Name" required>
-            <UInput v-model="editForm.full_name" placeholder="Jane Smith" />
-          </UFormField>
-
-          <UFormField label="Email">
-            <UInput v-model="editForm.email" type="email" placeholder="jane@example.com" />
-          </UFormField>
-
-          <UFormField label="Phone">
-            <UInput v-model="editForm.phone" placeholder="+1 (555) 000-0000" />
-          </UFormField>
-
-          <UFormField label="Position" required>
-            <USelect
-              v-model="editForm.position"
-              :items="POSITION_OPTIONS"
-              value-key="value"
-              label-key="label"
-              placeholder="Select position"
-            />
-          </UFormField>
-
-          <UFormField v-if="editForm.position === 'other'" label="Position (describe)">
-            <UInput v-model="editForm.position_other" placeholder="e.g., Quality Assurance" />
-          </UFormField>
-
-          <UFormField label="Shift Availability" required>
-            <USelect
-              v-model="editForm.shift_availability"
-              :items="SHIFT_OPTIONS"
-              value-key="value"
-              label-key="label"
-              placeholder="Select shift"
-            />
-          </UFormField>
+        <!-- Row 1 -->
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div class="space-y-1.5">
+            <label class="text-xs font-medium text-highlighted">Full Name <span class="text-red-400/80">*</span></label>
+            <UInput v-model="form.full_name" size="sm" placeholder="Jane Smith" autocomplete="off" class="w-full" />
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-xs font-medium text-highlighted">Email</label>
+            <UInput v-model="form.email" size="sm" type="email" placeholder="jane@example.com" autocomplete="off" class="w-full" />
+          </div>
+        </div>
+        <!-- Row 2 -->
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div class="space-y-1.5">
+            <label class="text-xs font-medium text-highlighted">Phone</label>
+            <UInput v-model="form.phone" size="sm" type="tel" placeholder="+1 (555) 000-0000" autocomplete="off" class="w-full" />
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-xs font-medium text-highlighted">Position <span class="text-red-400/80">*</span></label>
+            <USelect v-model="form.position" size="sm" :items="POSITION_OPTIONS" value-key="value" label-key="label" placeholder="Select position" class="w-full" />
+          </div>
+        </div>
+        <!-- Row 3 -->
+        <div class="grid gap-3" :class="form.position === 'other' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'">
+          <div v-if="form.position === 'other'" class="space-y-1.5">
+            <label class="text-xs font-medium text-highlighted">Specify Position <span class="text-red-400/80">*</span></label>
+            <UInput v-model="form.position_other" size="sm" placeholder="e.g., Quality Assurance" autocomplete="off" class="w-full" />
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-xs font-medium text-highlighted">Shift Availability <span class="text-red-400/80">*</span></label>
+            <USelect v-model="form.shift_availability" size="sm" :items="SHIFT_OPTIONS" value-key="value" label-key="label" placeholder="Select shift" class="w-full" />
+          </div>
         </div>
       </div>
     </template>
+    <template #footer>
+      <div class="flex items-center justify-between gap-3">
+        <p class="hidden text-[11px] text-muted sm:block">Fields marked with <span class="text-red-400/80">*</span> are required</p>
+        <div class="flex items-center gap-2">
+          <UButton label="Cancel" size="sm" color="neutral" variant="ghost" :disabled="saving" @click="addModal = false; resetForm()" />
+          <UButton size="sm" :loading="saving" @click="addMember">
+            <template #leading>
+              <UIcon name="i-lucide-plus" class="text-xs" />
+            </template>
+            Add Member
+          </UButton>
+        </div>
+      </div>
+    </template>
+  </UModal>
 
+  <!-- ═══ Delete Confirmation Modal ═════════════════════════════════════ -->
+  <UModal v-model:open="deleteModal" title="Remove Team Member" :dismissible="false">
+    <template #body>
+      <div class="p-1">
+        <p class="text-sm text-muted">
+          Are you sure you want to remove <span class="font-medium text-highlighted">{{ deleteTarget?.full_name }}</span>? This action cannot be undone.
+        </p>
+      </div>
+    </template>
     <template #footer>
       <div class="flex justify-end gap-2">
-        <UButton
-          label="Cancel"
-          color="neutral"
-          variant="ghost"
-          :disabled="saving"
-          @click="editModal = false"
-        />
-        <UButton
-          label="Save changes"
-          color="neutral"
-          :loading="saving"
-          @click="saveEdit"
-        />
+        <UButton label="Cancel" color="neutral" variant="ghost" @click="deleteModal = false" />
+        <UButton label="Remove" color="error" :loading="deleting === deleteTarget?.id" @click="executeDelete" />
       </div>
     </template>
   </UModal>
