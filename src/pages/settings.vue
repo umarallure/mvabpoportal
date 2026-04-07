@@ -7,6 +7,12 @@ const links = [[
     icon: 'i-lucide-building-2',
     to: '/settings/bpo-profile',
     exact: true
+  },
+  {
+    label: 'Team Profile',
+    icon: 'i-lucide-users',
+    to: '/settings/team-profile',
+    exact: true
   }
 ]] satisfies NavigationMenuItem[][]
 

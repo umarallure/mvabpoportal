@@ -30,75 +30,58 @@ const links = computed(() => [[{
   label: 'Dashboard',
   icon: 'i-lucide-house',
   to: '/dashboard',
-  onSelect: () => {
-    open.value = false
-  }
-}, {
-  label: 'Lead Intake',
-  icon: 'i-lucide-clipboard-pen',
-  to: '/lead-intake',
-  onSelect: () => {
-    open.value = false
-  }
-}, {
-  label: 'Transfer Pipeline',
-  icon: 'i-lucide-arrow-right-left',
-  to: '/transfers',
-  onSelect: () => {
-    open.value = false
-  }
-},
-// {
-//   label: 'Invoicing',
-//   icon: 'i-lucide-receipt',
-//   to: '/invoicing',
-//   onSelect: () => {
-//     open.value = false
-//   }
-// },
-...([] as NavigationMenuItem[]), {
-  label: 'Submission Pipeline',
-  icon: 'i-lucide-layout-dashboard',
-  to: '/submission-portal',
-  onSelect: () => {
-    open.value = false
-  }
+  onSelect: () => { open.value = false }
 }, {
   label: 'Sales Map',
   icon: 'i-lucide-map',
   to: '/sales-map',
-  onSelect: () => {
-    open.value = false
-  }
-}, ...(auth.state.value.profile?.role === 'super_admin' ? [{
-  label: 'Users',
-  icon: 'i-lucide-users',
-  to: '/users',
-  onSelect: () => {
-    open.value = false
-  }
-}] : []), ...(['admin', 'super_admin'].includes(auth.state.value.profile?.role ?? '') ? [{
-  label: 'Product Guide',
-  icon: 'i-lucide-play-circle',
-  to: '/product-guide',
-  onSelect: () => {
-    open.value = false
-  }
-}] : []), {
+  onSelect: () => { open.value = false }
+}, {
+  label: 'Lead Intake',
+  icon: 'i-lucide-clipboard-pen',
+  to: '/lead-intake',
+  onSelect: () => { open.value = false }
+}, {
+  label: 'Transfer Pipeline',
+  icon: 'i-lucide-arrow-right-left',
+  to: '/transfers',
+  onSelect: () => { open.value = false }
+}, {
+  label: 'Submission Pipeline',
+  icon: 'i-lucide-layout-dashboard',
+  to: '/submission-portal',
+  onSelect: () => { open.value = false }
+}, {
+  label: 'Invoicing',
+  icon: 'i-lucide-receipt',
+  to: '/invoicing',
+  onSelect: () => { open.value = false }
+}, {
+  label: 'Deel',
+  icon: 'i-lucide-landmark',
+  to: '/deel',
+  onSelect: () => { open.value = false }
+}, {
   label: 'Inbox',
   icon: 'i-lucide-inbox',
   to: '/inbox',
-  onSelect: () => {
-    open.value = false
-  }
+  onSelect: () => { open.value = false }
 }, {
   label: 'Product Offering',
   icon: 'i-lucide-package',
   to: '/product-offering',
-  onSelect: () => {
-    open.value = false
-  }
-}, {
+  onSelect: () => { open.value = false }
+}, ...(auth.state.value.profile?.role === 'super_admin' ? [{
+  label: 'Users',
+  icon: 'i-lucide-users',
+  to: '/users',
+  onSelect: () => { open.value = false }
+}] : []), ...(['admin', 'super_admin'].includes(auth.state.value.profile?.role ?? '') ? [{
+  label: 'Product Guide',
+  icon: 'i-lucide-play-circle',
+  to: '/product-guide',
+  onSelect: () => { open.value = false }
+}] : []), {
   label: 'Settings',
   to: '/settings',
   icon: 'i-lucide-settings',
@@ -107,6 +90,13 @@ const links = computed(() => [[{
   children: [{
     label: 'BPO Profile',
     to: '/settings/bpo-profile',
+    exact: true,
+    onSelect: () => {
+      open.value = false
+    }
+  }, {
+    label: 'Team Profile',
+    to: '/settings/team-profile',
     exact: true,
     onSelect: () => {
       open.value = false
@@ -129,6 +119,7 @@ const links = computed(() => [[{
 }]] satisfies NavigationMenuItem[][])
 
 const isPublicPage = computed(() => ['/login', '/', '/get-started'].includes(route.path))
+const isStandalonePage = computed(() => Boolean(route.meta.standalone))
 
 const groups = computed(() => [{
   id: 'links',
@@ -161,7 +152,7 @@ if (cookie.value !== 'accepted') {
 <template>
   <Suspense>
     <UApp>
-      <template v-if="isPublicPage">
+      <template v-if="isPublicPage || isStandalonePage">
         <RouterView />
       </template>
 

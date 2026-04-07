@@ -20,6 +20,9 @@ const router = createRouter({
     { path: '/retainers', component: () => import('./pages/retainers.vue') },
     { path: '/retainers/:id', component: () => import('./pages/retainers-details.vue') },
     { path: '/invoicing', component: () => import('./pages/invoicing.vue') },
+    { path: '/invoicing/:id', redirect: (to) => `/invoicing/${encodeURIComponent(String(to.params.id ?? ''))}/pdf` },
+    { path: '/invoicing/:id/pdf', component: () => import('./pages/invoice-details.vue'), meta: { standalone: true } },
+    { path: '/deel', component: () => import('./pages/deel.vue') },
     { path: '/sales-map', component: () => import('./pages/sales-map.vue') },
     { path: '/submission-portal', component: () => import('./pages/submission-portal.vue') },
     { path: '/lead-intake', component: () => import('./pages/lead-intake.vue') },
@@ -31,6 +34,7 @@ const router = createRouter({
       children: [
         { path: '', redirect: '/settings/bpo-profile' },
         { path: 'bpo-profile', component: () => import('./pages/settings/bpo-profile.vue') },
+        { path: 'team-profile', component: () => import('./pages/settings/team-profile.vue') },
         { path: 'sales-map-admin', component: () => import('./pages/settings/sales-map-admin.vue') },
         { path: 'export-sheets', component: () => import('./pages/settings/export-sheets.vue') }
       ]
