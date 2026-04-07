@@ -246,7 +246,7 @@ const basicInfoFields = computed(() => {
       ? [{ key: 'lead_vendor', label: 'Lead Vendor', value: row.value.lead_vendor }]
       : []),
     { key: 'assigned_attorney', label: 'Assigned Attorney', value: assignedAttorneyName.value },
-    { key: 'submission_date', label: 'Submission Date', value: row.value.submission_date || row.value.created_at }
+    { key: 'submission_date', label: 'Submission Date', value: formatDateTime(row.value.submission_date || row.value.created_at) }
   ]
 })
 
@@ -579,62 +579,106 @@ const confirmDelete = async () => {
           :ui="{ list: 'flex w-full', trigger: 'flex-1 justify-center' }"
         >
           <template #content="{ item }">
-            <UCard v-if="item.value === 'basic'">
-              <div class="grid gap-4 md:grid-cols-2">
-                <div
-                  v-for="field in basicInfoFields"
-                  :key="field.key"
-                  class="rounded-lg border border-default bg-elevated/20 p-3"
-                >
-                  <div class="text-xs uppercase tracking-wide text-muted">
-                    {{ field.label }}
+
+            <!-- ═══ Basic Information ═══════════════════════════════════ -->
+            <div v-if="item.value === 'basic'" class="ap-fade-in ap-delay-1 relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#111111]/90">
+              <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
+              <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
+                <div class="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[var(--ap-accent)]/[0.08] to-transparent" />
+                <div class="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-[var(--ap-accent)] via-[var(--ap-accent)]/60 to-transparent" />
+                <div class="relative flex items-center gap-3 px-5 py-3.5">
+                  <div class="flex h-7 w-7 items-center justify-center rounded-lg border-[0.5px] border-[var(--ap-accent)]/45 bg-[var(--ap-accent)]/10">
+                    <UIcon name="i-lucide-user" class="text-xs text-[var(--ap-accent)]" />
                   </div>
-                  <div class="mt-1 text-sm text-highlighted wrap-break-word">
-                    {{ formatValue(field.value) }}
+                  <span class="text-[13px] font-semibold text-highlighted">Basic Information</span>
+                </div>
+              </div>
+              <div class="relative flex-1 p-4 sm:p-5">
+                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div
+                    v-for="field in basicInfoFields"
+                    :key="field.key"
+                    class="rounded-lg border border-[var(--ap-accent)]/15 bg-[var(--ap-accent)]/[0.02] p-3 transition-colors hover:bg-[var(--ap-accent)]/[0.05]"
+                  >
+                    <p class="text-[10px] font-semibold uppercase tracking-wider text-[var(--ap-accent)]">{{ field.label }}</p>
+                    <p class="mt-1.5 text-sm font-medium text-highlighted break-all">{{ formatValue(field.value) }}</p>
                   </div>
                 </div>
               </div>
-            </UCard>
+            </div>
 
-            <UCard v-else-if="item.value === 'accident'">
-              <div class="grid gap-4 md:grid-cols-2">
-                <div
-                  v-for="field in accidentDetailsFields"
-                  :key="field.key"
-                  class="rounded-lg border border-default bg-elevated/20 p-3"
-                >
-                  <div class="text-xs uppercase tracking-wide text-muted">
-                    {{ field.label }}
+            <!-- ═══ Accident Details ════════════════════════════════════ -->
+            <div v-else-if="item.value === 'accident'" class="ap-fade-in ap-delay-1 relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#111111]/90">
+              <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
+              <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
+                <div class="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[var(--ap-accent)]/[0.08] to-transparent" />
+                <div class="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-[var(--ap-accent)] via-[var(--ap-accent)]/60 to-transparent" />
+                <div class="relative flex items-center gap-3 px-5 py-3.5">
+                  <div class="flex h-7 w-7 items-center justify-center rounded-lg border-[0.5px] border-[var(--ap-accent)]/45 bg-[var(--ap-accent)]/10">
+                    <UIcon name="i-lucide-car" class="text-xs text-[var(--ap-accent)]" />
                   </div>
-                  <div class="mt-1 text-sm text-highlighted wrap-break-word">
-                    {{ formatValue(field.value) }}
+                  <span class="text-[13px] font-semibold text-highlighted">Accident Details</span>
+                </div>
+              </div>
+              <div class="relative flex-1 p-4 sm:p-5">
+                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div
+                    v-for="field in accidentDetailsFields"
+                    :key="field.key"
+                    class="rounded-lg border border-[var(--ap-accent)]/15 bg-[var(--ap-accent)]/[0.02] p-3 transition-colors hover:bg-[var(--ap-accent)]/[0.05]"
+                  >
+                    <p class="text-[10px] font-semibold uppercase tracking-wider text-[var(--ap-accent)]">{{ field.label }}</p>
+                    <p class="mt-1.5 text-sm font-medium text-highlighted break-all">{{ formatValue(field.value) }}</p>
                   </div>
                 </div>
               </div>
-            </UCard>
+            </div>
 
-            <UCard v-else-if="item.value === 'notes'">
-              <div v-if="noteRows.length === 0" class="py-8 text-center text-muted">
-                No notes found
-              </div>
-              <div v-else class="space-y-3">
-                <div
-                  v-for="n in noteRows"
-                  :key="n.id"
-                  class="rounded-lg border border-default bg-elevated/20 p-3"
-                >
-                  <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
-                    <div class="font-medium text-highlighted">{{ n.agent }}</div>
-                    <div>{{ n.created_at }}</div>
+            <!-- ═══ Notes ═══════════════════════════════════════════════ -->
+            <div v-else-if="item.value === 'notes'" class="ap-fade-in ap-delay-1 relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#111111]/90">
+              <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
+              <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
+                <div class="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[var(--ap-accent)]/[0.08] to-transparent" />
+                <div class="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-[var(--ap-accent)] via-[var(--ap-accent)]/60 to-transparent" />
+                <div class="relative flex items-center justify-between gap-3 px-5 py-3.5">
+                  <div class="flex items-center gap-3">
+                    <div class="flex h-7 w-7 items-center justify-center rounded-lg border-[0.5px] border-[var(--ap-accent)]/45 bg-[var(--ap-accent)]/10">
+                      <UIcon name="i-lucide-sticky-note" class="text-xs text-[var(--ap-accent)]" />
+                    </div>
+                    <span class="text-[13px] font-semibold text-highlighted">Notes</span>
                   </div>
-                  <div class="mt-2 whitespace-pre-wrap text-sm text-highlighted">
-                    {{ n.note }}
+                  <span v-if="noteRows.length > 0" class="rounded-md border border-[var(--ap-accent)]/30 bg-[var(--ap-accent)]/10 px-2 py-0.5 text-[11px] font-medium text-[var(--ap-accent)]">{{ noteRows.length }} {{ noteRows.length === 1 ? 'note' : 'notes' }}</span>
+                </div>
+              </div>
+              <div class="relative flex-1">
+                <div v-if="noteRows.length === 0" class="flex flex-col items-center gap-3 py-14 text-center">
+                  <div class="flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--ap-accent)]/20 bg-[var(--ap-accent)]/[0.06]">
+                    <UIcon name="i-lucide-sticky-note" class="size-6 text-[var(--ap-accent)]/50" />
+                  </div>
+                  <p class="text-sm text-muted">No notes found</p>
+                </div>
+                <div v-else>
+                  <div
+                    v-for="n in noteRows"
+                    :key="n.id"
+                    class="border-b border-black/[0.04] px-4 py-3.5 transition-colors last:border-0 hover:bg-[var(--ap-accent)]/[0.02] dark:border-white/[0.04] sm:px-5"
+                  >
+                    <div class="flex items-center justify-between gap-3">
+                      <div class="flex items-center gap-2">
+                        <div class="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--ap-accent)]/10">
+                          <UIcon name="i-lucide-user" class="text-[10px] text-[var(--ap-accent)]" />
+                        </div>
+                        <span class="text-xs font-semibold text-highlighted">{{ n.agent }}</span>
+                      </div>
+                      <span class="text-[10px] text-muted">{{ n.created_at }}</span>
+                    </div>
+                    <p class="mt-2 whitespace-pre-wrap pl-8 text-sm leading-relaxed text-highlighted/80">{{ n.note }}</p>
                   </div>
                 </div>
               </div>
-            </UCard>
+            </div>
 
-            <!-- ── Documents Tab ─────────────────────────────────────────── -->
+            <!-- ═══ Documents ═══════════════════════════════════════════ -->
             <div v-else-if="item.value === 'documents'" class="space-y-4">
 
               <!-- Category selector -->
@@ -643,47 +687,39 @@ const confirmDelete = async () => {
                   v-for="cat in DOC_CATEGORIES"
                   :key="cat.value"
                   type="button"
-                  class="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors"
+                  class="flex items-center gap-2 rounded-lg border px-3.5 py-2 text-xs font-medium transition-all"
                   :class="activeDocCategory === cat.value
-                    ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-300'
-                    : 'border-default hover:bg-muted text-muted'"
+                    ? 'border-[var(--ap-accent)]/60 bg-[var(--ap-accent)]/15 text-[var(--ap-accent)] shadow-sm'
+                    : 'border-[var(--ap-accent)]/15 text-muted hover:border-[var(--ap-accent)]/30 hover:bg-[var(--ap-accent)]/[0.04]'"
                   @click="activeDocCategory = cat.value"
                 >
-                  <UIcon :name="cat.icon" class="size-4" />
+                  <UIcon :name="cat.icon" class="size-3.5" />
                   {{ cat.label }}
-                  <UBadge
-                    :label="String(docs[cat.value].length)"
-                    color="neutral"
-                    variant="soft"
-                    size="sm"
-                  />
+                  <span class="rounded bg-black/[0.06] px-1.5 py-0.5 text-[10px] font-semibold dark:bg-white/[0.08]">{{ docs[cat.value].length }}</span>
                 </button>
               </div>
 
-              <!-- Upload area -->
-              <UCard>
-                <div class="space-y-4">
-                  <div class="flex items-center gap-2">
-                    <UIcon name="i-lucide-upload" class="text-primary-500 size-4" />
-                    <h4 class="text-sm font-semibold">
-                      Upload to {{ DOC_CATEGORIES.find(c => c.value === activeDocCategory)?.label }}
-                    </h4>
+              <!-- Upload area card -->
+              <div class="relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#111111]/90">
+                <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
+                <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
+                  <div class="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[var(--ap-accent)]/[0.08] to-transparent" />
+                  <div class="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-[var(--ap-accent)] via-[var(--ap-accent)]/60 to-transparent" />
+                  <div class="relative flex items-center gap-3 px-5 py-3.5">
+                    <div class="flex h-7 w-7 items-center justify-center rounded-lg border-[0.5px] border-[var(--ap-accent)]/45 bg-[var(--ap-accent)]/10">
+                      <UIcon name="i-lucide-upload" class="text-xs text-[var(--ap-accent)]" />
+                    </div>
+                    <span class="text-[13px] font-semibold text-highlighted">Upload to {{ DOC_CATEGORIES.find(c => c.value === activeDocCategory)?.label }}</span>
+                  </div>
+                </div>
+                <div class="relative flex-1 space-y-4 p-4 sm:p-5">
+                  <div v-if="activeDocCategory === 'others'" class="space-y-1.5">
+                    <label class="text-xs font-medium text-highlighted">Document Name <span class="text-red-400/80">*</span></label>
+                    <UInput v-model="docUploadName" size="sm" placeholder="e.g. Repair Estimate v2" autocomplete="off" class="w-full sm:max-w-sm" />
                   </div>
 
-                  <!-- Document name input (others only) -->
-                  <div v-if="activeDocCategory === 'others'">
-                    <UFormField label="Document Name" required>
-                      <UInput
-                        v-model="docUploadName"
-                        placeholder="e.g. Repair Estimate v2"
-                        class="w-full sm:max-w-sm"
-                      />
-                    </UFormField>
-                  </div>
-
-                  <!-- File picker -->
                   <div
-                    class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-default p-6 text-center transition-colors hover:border-primary-400"
+                    class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[var(--ap-accent)]/25 p-8 text-center transition-all hover:border-[var(--ap-accent)]/50 hover:bg-[var(--ap-accent)]/[0.03]"
                     @click="docFileInputEl?.click()"
                   >
                     <input
@@ -693,33 +729,35 @@ const confirmDelete = async () => {
                       accept=".pdf,.png,.jpg,.jpeg"
                       @change="onDocFileChange"
                     >
-                    <UIcon name="i-lucide-file-plus" class="text-muted size-7" />
+                    <div class="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--ap-accent)]/20 bg-[var(--ap-accent)]/[0.06]">
+                      <UIcon name="i-lucide-file-plus" class="size-5 text-[var(--ap-accent)]/60" />
+                    </div>
                     <div v-if="docUploadFile" class="text-sm font-medium text-highlighted">
                       {{ docUploadFile.name }}
                       <span class="ml-1 text-xs text-muted">({{ formatBytes(docUploadFile.size) }})</span>
                     </div>
-                    <div v-else class="space-y-1">
-                      <p class="text-sm text-muted">
-                        Click to browse or drag and drop
-                      </p>
-                      <p class="text-xs text-dimmed">
-                        PDF, PNG, JPEG · max 10 MB
-                      </p>
+                    <div v-else class="space-y-0.5">
+                      <p class="text-xs font-medium text-muted">Click to browse or drag and drop</p>
+                      <p class="text-[10px] text-muted/60">PDF, PNG, JPEG &middot; max 10 MB</p>
                     </div>
                   </div>
 
-                  <div class="flex items-center gap-3">
+                  <div class="flex items-center gap-2">
                     <UButton
-                      label="Upload Document"
-                      icon="i-lucide-upload"
-                      color="primary"
+                      size="sm"
                       :loading="docUploading"
                       :disabled="!docUploadFile || docUploading"
                       @click="uploadDocument"
-                    />
+                    >
+                      <template #leading>
+                        <UIcon name="i-lucide-upload" class="text-xs" />
+                      </template>
+                      Upload Document
+                    </UButton>
                     <UButton
                       v-if="docUploadFile"
                       label="Clear"
+                      size="sm"
                       color="neutral"
                       variant="ghost"
                       :disabled="docUploading"
@@ -727,118 +765,90 @@ const confirmDelete = async () => {
                     />
                   </div>
                 </div>
-              </UCard>
+              </div>
 
-              <!-- Document list for active category -->
-              <UCard>
-                <div class="space-y-3">
-                  <div class="flex items-center justify-between">
-                    <h4 class="text-sm font-semibold">
-                      {{ DOC_CATEGORIES.find(c => c.value === activeDocCategory)?.label }} — {{ docs[activeDocCategory].length }} file(s)
-                    </h4>
+              <!-- Document list card -->
+              <div class="relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#111111]/90">
+                <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
+                <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
+                  <div class="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[var(--ap-accent)]/[0.08] to-transparent" />
+                  <div class="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-[var(--ap-accent)] via-[var(--ap-accent)]/60 to-transparent" />
+                  <div class="relative flex items-center justify-between gap-3 px-5 py-3.5">
+                    <div class="flex items-center gap-3">
+                      <div class="flex h-7 w-7 items-center justify-center rounded-lg border-[0.5px] border-[var(--ap-accent)]/45 bg-[var(--ap-accent)]/10">
+                        <UIcon name="i-lucide-folder-open" class="text-xs text-[var(--ap-accent)]" />
+                      </div>
+                      <span class="text-[13px] font-semibold text-highlighted">{{ DOC_CATEGORIES.find(c => c.value === activeDocCategory)?.label }}</span>
+                      <span class="rounded-md border border-[var(--ap-accent)]/30 bg-[var(--ap-accent)]/10 px-2 py-0.5 text-[11px] font-medium text-[var(--ap-accent)]">{{ docs[activeDocCategory].length }} file{{ docs[activeDocCategory].length !== 1 ? 's' : '' }}</span>
+                    </div>
                     <UButton
                       icon="i-lucide-refresh-cw"
                       color="neutral"
                       variant="ghost"
-                      size="sm"
+                      size="xs"
                       :loading="docsLoading"
                       @click="refreshCategory(activeDocCategory)"
                     />
                   </div>
+                </div>
 
-                  <!-- Loading skeleton -->
-                  <div v-if="docsLoading" class="space-y-2">
-                    <div
-                      v-for="i in 3"
-                      :key="i"
-                      class="h-12 animate-pulse rounded-lg bg-elevated/40"
-                    />
+                <div class="relative flex-1">
+                  <!-- Loading -->
+                  <div v-if="docsLoading" class="flex flex-col items-center gap-3 py-12 text-center">
+                    <UIcon name="i-lucide-loader-2" class="size-5 animate-spin text-[var(--ap-accent)]" />
+                    <p class="text-xs text-muted">Loading documents...</p>
                   </div>
 
-                  <!-- Empty state -->
-                  <div
-                    v-else-if="docs[activeDocCategory].length === 0"
-                    class="flex flex-col items-center gap-2 py-10 text-center text-muted"
-                  >
-                    <UIcon name="i-lucide-folder-open" class="size-8" />
-                    <p class="text-sm">
-                      No documents uploaded yet
-                    </p>
+                  <!-- Empty -->
+                  <div v-else-if="docs[activeDocCategory].length === 0" class="flex flex-col items-center gap-3 py-12 text-center">
+                    <div class="flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--ap-accent)]/20 bg-[var(--ap-accent)]/[0.06]">
+                      <UIcon name="i-lucide-folder-open" class="size-6 text-[var(--ap-accent)]/50" />
+                    </div>
+                    <p class="text-sm text-muted">No documents uploaded yet</p>
                   </div>
 
                   <!-- File rows -->
-                  <div v-else class="divide-y divide-default">
+                  <div v-else>
                     <div
                       v-for="doc in docs[activeDocCategory]"
                       :key="doc.id"
-                      class="space-y-2 py-3 first:pt-0 last:pb-0"
+                      class="border-b border-black/[0.04] last:border-0 dark:border-white/[0.04]"
                     >
-                      <!-- Normal row -->
-                      <div class="flex items-center gap-3">
-                        <UIcon
-                          :name="doc.fileName.endsWith('.pdf') ? 'i-lucide-file-text' : 'i-lucide-image'"
-                          class="shrink-0 text-muted size-5"
-                        />
-                        <div class="min-w-0 flex-1">
-                          <p class="truncate text-sm font-medium text-highlighted">
-                            {{ doc.fileName }}
-                          </p>
-                          <p class="text-xs text-muted">
-                            {{ formatBytes(doc.fileSize) }} · {{ formatDateTime(doc.createdAt) }}
-                          </p>
+                      <div class="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--ap-accent)]/[0.02] sm:px-5">
+                        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--ap-accent)]/20 bg-[var(--ap-accent)]/[0.06]">
+                          <UIcon
+                            :name="doc.fileName.endsWith('.pdf') ? 'i-lucide-file-text' : 'i-lucide-image'"
+                            class="size-4 text-[var(--ap-accent)]"
+                          />
                         </div>
-                        <div class="flex shrink-0 items-center gap-1">
-                          <UButton
-                            icon="i-lucide-eye"
-                            color="neutral"
-                            variant="ghost"
-                            size="xs"
-                            title="View document"
-                            @click="viewDocument(doc)"
-                          />
-                          <UButton
-                            icon="i-lucide-trash-2"
-                            color="error"
-                            variant="ghost"
-                            size="xs"
-                            title="Delete document"
-                            :disabled="deleteTarget?.id === doc.id"
-                            @click="requestDelete(doc)"
-                          />
+                        <div class="min-w-0 flex-1">
+                          <p class="truncate text-sm font-medium text-highlighted">{{ doc.fileName }}</p>
+                          <p class="mt-0.5 text-[10px] text-muted">{{ formatBytes(doc.fileSize) }} &middot; {{ formatDateTime(doc.createdAt) }}</p>
+                        </div>
+                        <div class="flex shrink-0 items-center gap-0.5">
+                          <UButton icon="i-lucide-eye" size="xs" color="neutral" variant="ghost" title="View document" @click="viewDocument(doc)" />
+                          <UButton icon="i-lucide-trash-2" size="xs" variant="ghost" class="text-red-400 hover:text-red-300" title="Delete document" :disabled="deleteTarget?.id === doc.id" @click="requestDelete(doc)" />
                         </div>
                       </div>
 
                       <!-- Inline delete confirmation -->
                       <div
                         v-if="deleteTarget?.id === doc.id"
-                        class="flex items-center gap-3 rounded-lg border border-error-200 bg-error-50 px-4 py-2.5 dark:border-error-800 dark:bg-error-950"
+                        class="mx-4 mb-3 flex items-center gap-3 rounded-lg border border-red-500/30 bg-red-500/[0.06] px-4 py-2.5 sm:mx-5"
                       >
-                        <UIcon name="i-lucide-triangle-alert" class="shrink-0 text-error-500 size-4" />
-                        <p class="flex-1 text-sm text-error-700 dark:text-error-300">
-                          Delete <strong>{{ doc.fileName }}</strong>? This cannot be undone.
+                        <UIcon name="i-lucide-triangle-alert" class="shrink-0 text-red-400 size-4" />
+                        <p class="flex-1 text-xs text-muted">
+                          Delete <strong class="text-highlighted">{{ doc.fileName }}</strong>? This cannot be undone.
                         </p>
-                        <div class="flex gap-2">
-                          <UButton
-                            label="Delete"
-                            color="error"
-                            size="xs"
-                            :loading="deleting"
-                            @click="confirmDelete"
-                          />
-                          <UButton
-                            label="Cancel"
-                            color="neutral"
-                            variant="ghost"
-                            size="xs"
-                            :disabled="deleting"
-                            @click="cancelDelete"
-                          />
+                        <div class="flex gap-1.5">
+                          <UButton label="Delete" color="error" size="xs" :loading="deleting" @click="confirmDelete" />
+                          <UButton label="Cancel" color="neutral" variant="ghost" size="xs" :disabled="deleting" @click="cancelDelete" />
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </UCard>
+              </div>
             </div>
           </template>
         </UTabs>
