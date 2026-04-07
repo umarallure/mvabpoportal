@@ -125,7 +125,9 @@ watch(selectedCategory, () => {
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
-
+        <template #right>
+          <NotificationBell />
+        </template>
       </UDashboardNavbar>
     </template>
 

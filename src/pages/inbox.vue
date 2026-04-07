@@ -48,6 +48,7 @@ const selectMessage = (message: Message) => {
             variant="subtle"
             :label="`${unreadCount} unread`"
           />
+          <NotificationBell />
         </template>
       </UDashboardNavbar>
     </template>
