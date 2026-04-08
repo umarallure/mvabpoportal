@@ -435,13 +435,20 @@ const fmtDate = (d: string) => {
 }
 
 const boardReady = ref(false)
+const isBoardDragAndDropEnabled = false
 
 // ── Drag & Drop ──
 
 const draggedLead = ref<TransferLead | null>(null)
 const dragOverStage = ref('')
 
+const clearDragState = () => {
+  draggedLead.value = null
+  dragOverStage.value = ''
+}
+
 const onDragStart = (e: DragEvent, lead: TransferLead) => {
+  if (!isBoardDragAndDropEnabled) return
   if (!e.dataTransfer) return
   draggedLead.value = lead
   e.dataTransfer.effectAllowed = 'move'
@@ -470,17 +477,18 @@ const onDragEnd = (e: DragEvent) => {
   const target = e.currentTarget as HTMLElement
   target.style.opacity = ''
   target.style.transform = ''
-  draggedLead.value = null
-  dragOverStage.value = ''
+  clearDragState()
 }
 
 const onColumnDragOver = (e: DragEvent, stageKey: string) => {
+  if (!isBoardDragAndDropEnabled) return
   e.preventDefault()
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
   dragOverStage.value = stageKey
 }
 
 const onColumnDragLeave = (e: DragEvent, stageKey: string) => {
+  if (!isBoardDragAndDropEnabled) return
   const related = e.relatedTarget as HTMLElement | null
   const current = e.currentTarget as HTMLElement
   if (related && current.contains(related)) return
@@ -488,6 +496,7 @@ const onColumnDragLeave = (e: DragEvent, stageKey: string) => {
 }
 
 const onColumnDrop = async (e: DragEvent, stageKey: string) => {
+  if (!isBoardDragAndDropEnabled) return
   e.preventDefault()
   dragOverStage.value = ''
   if (!draggedLead.value) return
@@ -986,7 +995,7 @@ void sourceTypeOptions.value
               v-for="(stage, stageIdx) in STAGES"
               :key="stage.key"
               class="ap-column flex h-full shrink-0 flex-col"
-              :class="{ 'ap-column-dragover': dragOverStage === stage.key && draggedLead?.stage !== stage.key }"
+              :class="{ 'ap-column-dragover': isBoardDragAndDropEnabled && dragOverStage === stage.key && draggedLead?.stage !== stage.key }"
               :style="{
                 '--ap-col-accent': getStageColor(stage.key, stageIdx).accent,
                 '--ap-col-accent-rgb': getStageColor(stage.key, stageIdx).rgb,
@@ -1059,7 +1068,7 @@ void sourceTypeOptions.value
                   v-for="lead in (leadsByStage.get(stage.key) ?? [])"
                   :key="lead.id"
                   class="ap-kanban-card"
-                  draggable="true"
+                  :draggable="isBoardDragAndDropEnabled"
                   tabindex="0"
                   @dragstart="onDragStart($event, lead)"
                   @dragend="onDragEnd"
@@ -1387,7 +1396,7 @@ void sourceTypeOptions.value
   border-radius: 0.5rem;
   border: 1px solid var(--dashboard-surface-border);
   background: var(--dashboard-surface);
-  cursor: grab;
+  cursor: default;
   transition: all 200ms ease;
   position: relative;
 }
@@ -1416,7 +1425,7 @@ void sourceTypeOptions.value
 }
 
 .ap-kanban-card:active {
-  cursor: grabbing;
+  cursor: default;
 }
 
 /* Dragging state applied via JS */
