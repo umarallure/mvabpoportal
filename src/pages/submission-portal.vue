@@ -88,6 +88,7 @@ const deriveStageKey = (row: SubmissionPortalRow): string => {
 const auth = useAuth()
 const route = useRoute()
 const router = useRouter()
+const isBoardDragAndDropEnabled = false
 
 const loading = ref(false)
 const refreshing = ref(false)
@@ -595,6 +596,9 @@ onMounted(async () => {
   await fetchAttorneys()
   await fetchData()
 })
+
+void stageFilterOptions.value
+void sourceTypeOptions.value
 </script>
 
 <template>
@@ -1019,6 +1023,7 @@ onMounted(async () => {
                   v-for="row in (leadsByStage.get(stage.key) ?? [])"
                   :key="row.id"
                   class="ap-kanban-card"
+                  :draggable="isBoardDragAndDropEnabled"
                   tabindex="0"
                   @click="handleView(row)"
                   @keydown.enter="handleView(row)"
@@ -1305,7 +1310,7 @@ onMounted(async () => {
       border-radius: 0.5rem;
       border: 1px solid var(--dashboard-surface-border);
       background: var(--dashboard-surface);
-      cursor: grab;
+      cursor: pointer;
       transition: all 200ms ease;
       position: relative;
     }
@@ -1334,7 +1339,7 @@ onMounted(async () => {
     }
 
     .ap-kanban-card:active {
-      cursor: grabbing;
+      cursor: pointer;
     }
 
     /* Dragging state applied via JS */

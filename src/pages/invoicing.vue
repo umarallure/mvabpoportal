@@ -54,6 +54,7 @@ const centerNotFound = ref(false)
 const loadError = ref('')
 const statusUpdateError = ref('')
 const viewMode = ref<'board' | 'list'>('board')
+const isBoardDragAndDropEnabled = false
 const draggedInvoiceId = ref<string | null>(null)
 const dropTargetColumnKey = ref<BoardColumnKey | null>(null)
 const updatingInvoiceIds = ref<string[]>([])
@@ -327,6 +328,7 @@ const clearDragState = () => {
 }
 
 const beginDrag = (event: DragEvent, invoiceId: string) => {
+  if (!isBoardDragAndDropEnabled) return
   if (isUpdatingInvoice(invoiceId)) return
 
   draggedInvoiceId.value = invoiceId
@@ -339,11 +341,13 @@ const beginDrag = (event: DragEvent, invoiceId: string) => {
 }
 
 const handleDragEnd = () => {
+  if (!isBoardDragAndDropEnabled) return
   suppressOpenUntil.value = Date.now() + 200
   clearDragState()
 }
 
 const handleColumnDragOver = (event: DragEvent, columnKey: BoardColumnKey) => {
+  if (!isBoardDragAndDropEnabled) return
   if (!draggedInvoiceId.value) return
 
   event.preventDefault()
@@ -355,11 +359,13 @@ const handleColumnDragOver = (event: DragEvent, columnKey: BoardColumnKey) => {
 }
 
 const handleColumnDragEnter = (columnKey: BoardColumnKey) => {
+  if (!isBoardDragAndDropEnabled) return
   if (!draggedInvoiceId.value) return
   dropTargetColumnKey.value = columnKey
 }
 
 const handleColumnDragLeave = (event: DragEvent, columnKey: BoardColumnKey) => {
+  if (!isBoardDragAndDropEnabled) return
   const currentTarget = event.currentTarget
   const relatedTarget = event.relatedTarget
 
@@ -369,6 +375,7 @@ const handleColumnDragLeave = (event: DragEvent, columnKey: BoardColumnKey) => {
 }
 
 const moveInvoiceToColumn = async (columnKey: BoardColumnKey) => {
+  if (!isBoardDragAndDropEnabled) return
   const invoiceId = draggedInvoiceId.value
   suppressOpenUntil.value = Date.now() + 200
   clearDragState()
@@ -532,7 +539,7 @@ const invoiceLabel = (inv: InvoiceRow) =>
                 class="w-60"
               />
               <span class="text-xs" style="color: var(--dashboard-text-muted);">
-                Drag cards between columns to update invoice status.
+                Open a card to review the invoice.
               </span>
             </div>
 
@@ -579,7 +586,7 @@ const invoiceLabel = (inv: InvoiceRow) =>
               v-for="col in KANBAN_COLUMNS"
               :key="col.key"
               class="inv-col flex min-w-70 flex-1 flex-col"
-              :class="{ 'inv-col-drop-active': dropTargetColumnKey === col.key }"
+              :class="{ 'inv-col-drop-active': isBoardDragAndDropEnabled && dropTargetColumnKey === col.key }"
               :style="{ '--col-color': col.color, '--col-rgb': col.rgb }"
             >
               <!-- Column header -->
@@ -635,7 +642,7 @@ const invoiceLabel = (inv: InvoiceRow) =>
                       'inv-card-dragging': draggedInvoiceId === inv.id,
                       'inv-card-updating': isUpdatingInvoice(inv.id),
                     }"
-                    :draggable="!isUpdatingInvoice(inv.id)"
+                    :draggable="isBoardDragAndDropEnabled && !isUpdatingInvoice(inv.id)"
                     tabindex="0"
                     role="button"
                     @dragstart="beginDrag($event, inv.id)"
@@ -888,7 +895,7 @@ const invoiceLabel = (inv: InvoiceRow) =>
   border: 1px solid var(--dashboard-surface-border);
   box-shadow: var(--dashboard-surface-shadow);
   transition: box-shadow 200ms ease, transform 200ms ease, border-color 200ms ease;
-  cursor: grab;
+  cursor: pointer;
 }
 
 .inv-card:hover {
@@ -898,7 +905,7 @@ const invoiceLabel = (inv: InvoiceRow) =>
 }
 
 .inv-card:active {
-  cursor: grabbing;
+  cursor: pointer;
 }
 
 .inv-card-dragging {
