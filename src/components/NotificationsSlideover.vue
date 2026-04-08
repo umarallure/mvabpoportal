@@ -8,7 +8,7 @@ import NotificationItem from './notifications/NotificationItem.vue'
 
 const router = useRouter()
 const { isNotificationsSlideoverOpen } = useDashboard()
-const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications()
+const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification } = useNotifications()
 const recent = computed(() => notifications.value.filter(notification => !notification.is_read))
 
 const handleClick = async (notification: AppNotification) => {
@@ -16,6 +16,14 @@ const handleClick = async (notification: AppNotification) => {
 
   if (!notification.is_read) await markAsRead(notification.id)
   if (notification.redirect_url) router.push(notification.redirect_url)
+}
+
+const handleDelete = async (notification: AppNotification) => {
+  await deleteNotification(notification.id)
+}
+
+const handleMarkRead = async (notification: AppNotification) => {
+  await markAsRead(notification.id)
 }
 
 const handleShowAll = () => {
@@ -59,11 +67,14 @@ const handleShowAll = () => {
 
         <div v-else class="notification-sheet__list">
           <NotificationItem
-            v-for="notification in recent"
+            v-for="(notification, idx) in recent"
             :key="notification.id"
             :notification="notification"
+            :index="idx"
             compact
             @select="handleClick"
+            @delete="handleDelete"
+            @mark-read="handleMarkRead"
           />
         </div>
 

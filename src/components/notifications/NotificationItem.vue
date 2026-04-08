@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { formatTimeAgo } from '@vueuse/core'
 import type { AppNotification } from '../../types'
 import {
@@ -11,199 +11,145 @@ import {
 const props = withDefaults(defineProps<{
   notification: AppNotification
   compact?: boolean
+  index?: number
 }>(), {
-  compact: false
+  compact: false,
+  index: 0
 })
 
 const emit = defineEmits<{
   select: [notification: AppNotification]
+  delete: [notification: AppNotification]
+  'mark-read': [notification: AppNotification]
 }>()
 
 const meta = computed(() => getNotificationMeta(props.notification.category))
 const preview = computed(() => getNotificationMessage(props.notification) || getNotificationPreview(props.notification))
 const relativeTime = computed(() => formatTimeAgo(new Date(props.notification.created_at)))
 
-const themeVars = computed(() => ({
-  '--notification-accent': meta.value.accent,
-  '--notification-icon-bg': meta.value.iconBg
-}))
+const menuOpen = ref(false)
 
 const handleSelect = () => {
   emit('select', props.notification)
 }
+
+const handleDelete = () => {
+  menuOpen.value = false
+  emit('delete', props.notification)
+}
+
+const handleMarkRead = () => {
+  menuOpen.value = false
+  emit('mark-read', props.notification)
+}
+
+const animDelay = computed(() => `${Math.min(props.index * 40, 400)}ms`)
 </script>
 
 <template>
-  <button
-    type="button"
-    class="notification-item"
-    :data-compact="compact"
+  <div
+    class="notification-row"
+    :style="{ animationDelay: animDelay }"
     :data-unread="!notification.is_read"
-    :style="themeVars"
-    @click="handleSelect"
   >
-    <span v-if="!notification.is_read" class="notification-item__dot" />
+    <button
+      type="button"
+      class="group flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-[var(--ap-accent)]/[0.02] sm:px-5"
+      @click="handleSelect"
+    >
+      <!-- Unread dot -->
+      <span
+        v-if="!notification.is_read"
+        class="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full"
+        :style="{ background: meta.accent }"
+      />
+      <span v-else class="mt-2.5 h-1.5 w-1.5 shrink-0" />
 
-    <div class="notification-item__icon">
-      <UIcon :name="meta.icon" class="h-4 w-4" />
-    </div>
-
-    <div class="min-w-0 flex-1">
-      <div class="notification-item__header">
-        <div class="min-w-0">
-          <div class="notification-item__badges">
-            <span class="notification-item__badge">{{ meta.label }}</span>
-          </div>
-
-          <p class="notification-item__title">
-            {{ notification.title }}
-          </p>
-        </div>
-
-        <time :datetime="notification.created_at" class="notification-item__time">
-          {{ relativeTime }}
-        </time>
+      <!-- Icon -->
+      <div
+        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+        :style="{ background: meta.iconBg, color: meta.accent }"
+      >
+        <UIcon :name="meta.icon" class="size-3.5" />
       </div>
 
-      <p class="notification-item__preview">
-        {{ preview }}
-      </p>
+      <!-- Content -->
+      <div class="min-w-0 flex-1">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <span
+                class="rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-none"
+                :style="{ background: meta.iconBg, color: meta.accent }"
+              >{{ meta.label }}</span>
+              <time :datetime="notification.created_at" class="text-[10px] text-muted">{{ relativeTime }}</time>
+            </div>
+            <p class="mt-1 text-[13px] font-medium leading-snug text-highlighted" :class="{ 'font-semibold': !notification.is_read }">
+              {{ notification.title }}
+            </p>
+          </div>
+        </div>
+        <p class="mt-0.5 text-xs leading-relaxed text-muted line-clamp-2">{{ preview }}</p>
+      </div>
+    </button>
+
+    <!-- 3-dot menu -->
+    <div class="absolute right-3 top-3.5 sm:right-4">
+      <UPopover v-model:open="menuOpen" :popper="{ placement: 'bottom-end' }">
+        <UButton
+          icon="i-lucide-ellipsis"
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          class="opacity-0 transition-opacity group-hover:opacity-100"
+          :class="{ '!opacity-100': menuOpen }"
+          @click.stop
+        />
+        <template #content>
+          <div class="w-40 py-1">
+            <button
+              v-if="!notification.is_read"
+              type="button"
+              class="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-highlighted transition-colors hover:bg-[var(--ap-accent)]/[0.06]"
+              @click.stop="handleMarkRead"
+            >
+              <UIcon name="i-lucide-check" class="size-3.5 text-muted" />
+              Mark as read
+            </button>
+            <button
+              type="button"
+              class="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-500/[0.06]"
+              @click.stop="handleDelete"
+            >
+              <UIcon name="i-lucide-trash-2" class="size-3.5" />
+              Delete
+            </button>
+          </div>
+        </template>
+      </UPopover>
     </div>
-  </button>
+  </div>
 </template>
 
 <style scoped>
-.notification-item {
+.notification-row {
   position: relative;
-  display: flex;
-  width: 100%;
-  align-items: flex-start;
-  gap: 0.9rem;
-  border: 1px solid var(--dashboard-surface-border);
-  border-radius: 1rem;
-  background: var(--dashboard-surface);
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  padding: 1rem;
-  text-align: left;
-  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  animation: notification-fade-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.notification-item:hover {
-  border-color: var(--dashboard-surface-border-strong);
-  background: color-mix(in srgb, var(--dashboard-surface) 88%, white);
-  box-shadow: var(--dashboard-surface-shadow);
-  transform: translateY(-1px);
-}
-
-.notification-item:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 4px var(--dashboard-focus-ring), var(--dashboard-surface-shadow);
-}
-
-.notification-item[data-unread='true'] {
-  border-color: color-mix(in srgb, var(--notification-accent) 22%, var(--dashboard-surface-border));
-}
-
-.notification-item__dot {
-  position: absolute;
-  left: 0.95rem;
-  top: 1rem;
-  height: 0.45rem;
-  width: 0.45rem;
-  border-radius: 999px;
-  background: var(--notification-accent);
-}
-
-.notification-item__icon {
-  display: flex;
-  height: 2.5rem;
-  width: 2.5rem;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.85rem;
-  background: var(--notification-icon-bg);
-  color: var(--notification-accent);
-}
-
-.notification-item__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.9rem;
-}
-
-.notification-item__badges {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.45rem;
-}
-
-.notification-item__badge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--notification-accent) 12%, var(--dashboard-surface-strong));
-  color: var(--notification-accent);
-  font-size: 0.72rem;
-  font-weight: 600;
-  line-height: 1;
-  padding: 0.42rem 0.62rem;
-}
-
-.notification-item__title {
-  color: var(--dashboard-text-primary);
-  font-size: 0.94rem;
-  font-weight: 650;
-  line-height: 1.45;
-  margin-top: 0.45rem;
-}
-
-.notification-item__time {
-  flex: none;
-  color: var(--dashboard-text-muted);
-  font-size: 0.75rem;
-  white-space: nowrap;
-}
-
-.notification-item__preview {
-  color: var(--dashboard-text-secondary);
-  font-size: 0.86rem;
-  line-height: 1.55;
-  margin-top: 0.4rem;
-}
-
-.notification-item[data-compact='true'] {
-  gap: 0.75rem;
-  padding: 0.85rem;
-}
-
-.notification-item[data-compact='true'] .notification-item__icon {
-  height: 2.15rem;
-  width: 2.15rem;
-}
-
-.notification-item[data-compact='true'] .notification-item__title {
-  font-size: 0.88rem;
-  margin-top: 0.45rem;
-}
-
-.notification-item[data-compact='true'] .notification-item__preview {
-  font-size: 0.8rem;
-  margin-top: 0.35rem;
-}
-
-@media (max-width: 640px) {
-  .notification-item__header {
-    flex-direction: column;
-    gap: 0.5rem;
+@keyframes notification-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
   }
-
-  .notification-item__time {
-    white-space: normal;
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
+}
+
+/* Make the 3-dot button visible on row hover */
+.notification-row:hover :deep(.opacity-0) {
+  opacity: 1;
 }
 </style>

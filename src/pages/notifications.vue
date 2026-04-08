@@ -17,7 +17,7 @@ type FilterOption = {
 }
 
 const router = useRouter()
-const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications()
+const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification } = useNotifications()
 
 const activeFilter = ref<NotificationFilter>('all')
 const searchQuery = ref('')
@@ -104,6 +104,14 @@ const handleClick = async (notification: AppNotification) => {
   if (!notification.is_read) await markAsRead(notification.id)
   if (notification.redirect_url) router.push(notification.redirect_url)
 }
+
+const handleDelete = async (notification: AppNotification) => {
+  await deleteNotification(notification.id)
+}
+
+const handleMarkRead = async (notification: AppNotification) => {
+  await markAsRead(notification.id)
+}
 </script>
 
 <template>
@@ -129,377 +137,95 @@ const handleClick = async (notification: AppNotification) => {
     </template>
 
     <template #body>
-      <div class="mx-auto w-full max-w-6xl py-5">
-        <div class="notifications-layout">
-          <aside class="notifications-sidebar">
-            <section class="notifications-sidebar-card">
-              <div class="notifications-sidebar-card__eyebrow">Notification Center</div>
-              <h1 class="notifications-sidebar-card__title">All notifications</h1>
-              <p class="notifications-sidebar-card__copy">
-                Keep up with new leads, status updates, assignments, and note activity.
-              </p>
+      <div class="mx-auto w-full max-w-3xl space-y-4 py-5">
 
-              <div class="notifications-sidebar-card__stats">
-                <div class="notifications-sidebar-card__stat">
-                  <span class="notifications-sidebar-card__stat-label">Total</span>
-                  <strong class="notifications-sidebar-card__stat-value">{{ notifications.length }}</strong>
-                </div>
-                <div class="notifications-sidebar-card__stat">
-                  <span class="notifications-sidebar-card__stat-label">Unread</span>
-                  <strong class="notifications-sidebar-card__stat-value">{{ unreadCount }}</strong>
-                </div>
-              </div>
-            </section>
+        <!-- ═══ Search + Filters ═══════════════════════════════════════ -->
+        <div class="ap-fade-in ap-delay-1 space-y-3">
+          <!-- Search bar -->
+          <div class="flex items-center gap-2">
+            <UInput
+              v-model="searchQuery"
+              icon="i-lucide-search"
+              placeholder="Search notifications..."
+              size="sm"
+              class="flex-1"
+            />
+            <UButton
+              v-if="searchQuery"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              @click="searchQuery = ''"
+            >
+              Clear
+            </UButton>
+          </div>
 
-            <section class="notifications-sidebar-card">
-              <div class="notifications-sidebar-card__section-title">Filters</div>
-
-              <div class="notifications-filter-list">
-                <button
-                  v-for="option in filterOptions"
-                  :key="option.value"
-                  type="button"
-                  class="notifications-filter-item"
-                  :class="{ 'notifications-filter-item--active': activeFilter === option.value }"
-                  :style="{ '--filter-accent': option.accent }"
-                  @click="activeFilter = option.value"
-                >
-                  <span class="notifications-filter-item__left">
-                    <span class="notifications-filter-item__icon">
-                      <UIcon :name="option.icon" class="h-4 w-4" />
-                    </span>
-                    <span class="notifications-filter-item__label">{{ option.label }}</span>
-                  </span>
-                  <span class="notifications-filter-item__count">{{ option.count }}</span>
-                </button>
-              </div>
-            </section>
-          </aside>
-
-          <section class="notifications-feed-card">
-            <div class="notifications-feed-card__toolbar">
-              <UInput
-                v-model="searchQuery"
-                icon="i-lucide-search"
-                placeholder="Search notifications..."
-                class="notifications-feed-card__search"
-              />
-
-              <UButton
-                v-if="searchQuery"
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                @click="searchQuery = ''"
-              >
-                Clear
-              </UButton>
-            </div>
-
-            <div class="notifications-feed-card__header">
-              <div>
-                <div class="notifications-feed-card__eyebrow">{{ activeFilterMeta.label }}</div>
-                <p class="notifications-feed-card__summary">{{ resultSummary }}</p>
-              </div>
-
-              <span class="notifications-feed-card__chip">
-                {{ activeFilterMeta.label }}
-              </span>
-            </div>
-
-            <div v-if="visibleNotifications.length === 0" class="notifications-empty">
-              <div class="notifications-empty__icon">
-                <UIcon name="i-lucide-bell-off" class="h-4 w-4" />
-              </div>
-              <p class="notifications-empty__title">No notifications found</p>
-              <p class="notifications-empty__copy">
-                Try another filter or refine your search to find the notification you need.
-              </p>
-            </div>
-
-            <div v-else class="notifications-list">
-              <NotificationItem
-                v-for="notification in visibleNotifications"
-                :key="notification.id"
-                :notification="notification"
-                @select="handleClick"
-              />
-            </div>
-          </section>
+          <!-- Inline filter pills -->
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button
+              v-for="option in filterOptions"
+              :key="option.value"
+              type="button"
+              class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all"
+              :class="activeFilter === option.value
+                ? 'border-[var(--ap-accent)]/50 bg-[var(--ap-accent)]/10 text-[var(--ap-accent)]'
+                : 'border-transparent text-muted hover:bg-white/[0.04]'"
+              @click="activeFilter = option.value"
+            >
+              <UIcon :name="option.icon" class="size-3" />
+              {{ option.label }}
+              <span
+                class="rounded-full px-1.5 py-px text-[10px] font-semibold"
+                :class="activeFilter === option.value
+                  ? 'bg-[var(--ap-accent)]/20 text-[var(--ap-accent)]'
+                  : 'bg-white/[0.06] text-muted'"
+              >{{ option.count }}</span>
+            </button>
+          </div>
         </div>
+
+        <!-- ═══ Result summary ═════════════════════════════════════════ -->
+        <div class="ap-fade-in ap-delay-2 flex items-center justify-between px-1">
+          <p class="text-[11px] text-muted">{{ resultSummary }}</p>
+        </div>
+
+        <!-- ═══ Notifications List ═════════════════════════════════════ -->
+        <div class="ap-fade-in ap-delay-2 relative overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm dark:bg-[#111111]/90">
+          <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
+
+          <!-- Empty state -->
+          <div v-if="visibleNotifications.length === 0" class="relative flex flex-col items-center gap-3 py-16 text-center">
+            <div class="flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--ap-accent)]/20 bg-[var(--ap-accent)]/[0.06]">
+              <UIcon name="i-lucide-bell-off" class="size-5 text-[var(--ap-accent)]/50" />
+            </div>
+            <div>
+              <p class="text-sm font-medium text-highlighted">No notifications found</p>
+              <p class="mt-0.5 text-xs text-muted">Try another filter or refine your search.</p>
+            </div>
+          </div>
+
+          <!-- Notification rows -->
+          <div v-else class="relative">
+            <template v-for="(notification, idx) in visibleNotifications" :key="notification.id">
+              <!-- Fading separator -->
+              <div
+                v-if="idx > 0"
+                class="mx-auto h-px w-[85%]"
+                style="background: linear-gradient(90deg, transparent 0%, var(--ap-accent) 30%, var(--ap-accent) 70%, transparent 100%); opacity: 0.1;"
+              />
+              <NotificationItem
+                :notification="notification"
+                :index="idx"
+                @select="handleClick"
+                @delete="handleDelete"
+                @mark-read="handleMarkRead"
+              />
+            </template>
+          </div>
+        </div>
+
       </div>
     </template>
   </UDashboardPanel>
 </template>
-
-<style scoped>
-.notifications-layout {
-  display: grid;
-  gap: 1.25rem;
-  grid-template-columns: minmax(15rem, 18rem) minmax(0, 1fr);
-}
-
-.notifications-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.notifications-sidebar-card,
-.notifications-feed-card {
-  border: 1px solid var(--dashboard-surface-border);
-  border-radius: 1.25rem;
-  background: var(--dashboard-surface);
-  box-shadow: var(--dashboard-surface-shadow);
-}
-
-.notifications-sidebar-card {
-  padding: 1rem;
-}
-
-.notifications-sidebar-card:first-child {
-  position: sticky;
-  top: 1rem;
-}
-
-.notifications-sidebar-card__eyebrow,
-.notifications-feed-card__eyebrow {
-  color: var(--dashboard-accent-primary);
-  font-size: 0.73rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.notifications-sidebar-card__title {
-  color: var(--dashboard-text-primary);
-  font-size: 1.1rem;
-  font-weight: 700;
-  margin-top: 0.45rem;
-}
-
-.notifications-sidebar-card__copy,
-.notifications-feed-card__summary {
-  color: var(--dashboard-text-muted);
-  font-size: 0.84rem;
-  line-height: 1.6;
-  margin-top: 0.45rem;
-}
-
-.notifications-sidebar-card__stats {
-  display: grid;
-  gap: 0.7rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 1rem;
-}
-
-.notifications-sidebar-card__stat {
-  border: 1px solid var(--dashboard-surface-border);
-  border-radius: 1rem;
-  padding: 0.85rem 0.9rem;
-}
-
-.notifications-sidebar-card__stat-label,
-.notifications-sidebar-card__section-title {
-  color: var(--dashboard-text-muted);
-  font-size: 0.73rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.notifications-sidebar-card__stat-value {
-  color: var(--dashboard-text-primary);
-  display: block;
-  font-size: 1.15rem;
-  line-height: 1.1;
-  margin-top: 0.45rem;
-}
-
-.notifications-sidebar-card__section-title {
-  margin-bottom: 0.8rem;
-}
-
-.notifications-filter-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-
-.notifications-filter-item {
-  align-items: center;
-  border: 1px solid transparent;
-  border-radius: 1rem;
-  background: transparent;
-  color: var(--dashboard-text-secondary);
-  cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.75rem 0.8rem;
-  text-align: left;
-  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
-}
-
-.notifications-filter-item:hover {
-  background: color-mix(in srgb, var(--dashboard-surface) 84%, white);
-  border-color: var(--dashboard-surface-border);
-  transform: translateY(-1px);
-}
-
-.notifications-filter-item--active {
-  border-color: color-mix(in srgb, var(--filter-accent) 28%, var(--dashboard-surface-border));
-  background: color-mix(in srgb, var(--filter-accent) 10%, transparent);
-  color: var(--dashboard-text-primary);
-}
-
-.notifications-filter-item__left {
-  align-items: center;
-  display: flex;
-  gap: 0.7rem;
-  min-width: 0;
-}
-
-.notifications-filter-item__icon {
-  align-items: center;
-  background: color-mix(in srgb, var(--filter-accent) 12%, transparent);
-  border-radius: 0.8rem;
-  color: var(--filter-accent);
-  display: inline-flex;
-  flex: none;
-  height: 2rem;
-  justify-content: center;
-  width: 2rem;
-}
-
-.notifications-filter-item__label {
-  font-size: 0.84rem;
-  font-weight: 600;
-}
-
-.notifications-filter-item__count,
-.notifications-feed-card__chip {
-  align-items: center;
-  border-radius: 999px;
-  display: inline-flex;
-  font-size: 0.78rem;
-  font-weight: 600;
-  justify-content: center;
-  line-height: 1;
-}
-
-.notifications-filter-item__count {
-  border: 1px solid var(--dashboard-surface-border);
-  color: var(--dashboard-text-primary);
-  min-width: 2rem;
-  padding: 0.35rem 0.55rem;
-}
-
-.notifications-feed-card {
-  min-width: 0;
-  padding: 1rem;
-}
-
-.notifications-feed-card__toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.notifications-feed-card__search {
-  flex: 1;
-}
-
-.notifications-feed-card__header {
-  align-items: center;
-  border-bottom: 1px solid var(--dashboard-divider);
-  display: flex;
-  gap: 1rem;
-  justify-content: space-between;
-  margin-top: 1rem;
-  padding-bottom: 1rem;
-}
-
-.notifications-feed-card__chip {
-  border: 1px solid var(--dashboard-surface-border);
-  color: var(--dashboard-text-primary);
-  padding: 0.45rem 0.7rem;
-}
-
-.notifications-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-  margin-top: 1rem;
-}
-
-.notifications-empty {
-  border: 1px dashed var(--dashboard-surface-border-strong);
-  border-radius: 1.25rem;
-  margin-top: 1rem;
-  padding: 2.25rem 1rem;
-  text-align: center;
-}
-
-.notifications-empty__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 2rem;
-  width: 2rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--dashboard-accent-primary) 10%, transparent);
-  color: var(--dashboard-accent-primary);
-}
-
-.notifications-empty__title {
-  color: var(--dashboard-text-primary);
-  font-size: 0.92rem;
-  font-weight: 600;
-  margin-top: 0.8rem;
-}
-
-.notifications-empty__copy {
-  color: var(--dashboard-text-muted);
-  font-size: 0.82rem;
-  line-height: 1.6;
-  margin-top: 0.35rem;
-}
-
-@media (max-width: 640px) {
-  .notifications-feed-card__toolbar,
-  .notifications-feed-card__header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
-
-@media (max-width: 960px) {
-  .notifications-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .notifications-sidebar-card:first-child {
-    position: static;
-  }
-
-  .notifications-sidebar-card__stats {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-@media (max-width: 640px) {
-  .notifications-sidebar-card__stats {
-    grid-template-columns: 1fr;
-  }
-
-  .notifications-filter-item {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .notifications-filter-item__count {
-    align-self: flex-start;
-  }
-}
-</style>
