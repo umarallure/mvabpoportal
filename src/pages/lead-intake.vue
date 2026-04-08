@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import LeadIntakeDncDisclaimerRequiredCard from '../components/lead-intake/DncDisclaimerRequiredCard.vue'
+import LeadIntakeTcpaLitigatorModal from '../components/lead-intake/TcpaLitigatorModal.vue'
 import { useAuth } from '../composables/useAuth'
+import { DncLookupError, formatUsPhone, lookupDncScreening, normalizeUsPhone, type DncCallStatus, type DncLookupResponse } from '../lib/dnc-lookup'
 import { supabase } from '../lib/supabase'
 
 const auth = useAuth()
@@ -10,13 +13,126 @@ const route = useRoute()
 const toast = useToast()
 const dncRawPhone = ref('')
 const dncChecking = ref(false)
-const dncVerified = ref(false)
-const dncBlocked = ref(false)
-const dncStatus = ref<'idle' | 'clean' | 'blocked' | 'error'>('idle')
+const dncLookupResult = ref<DncLookupResponse | null>(null)
+const dncScreenedPhone = ref('')
+const tcpaModalOpen = ref(false)
+
+type DncVerificationStatus = 'idle' | 'clean' | 'warning' | 'danger' | 'invalid' | 'error'
+
+const buildDncErrorResult = (message: string): DncLookupResponse => ({
+  callStatus: 'ERROR',
+  message,
+  flags: {
+    isTcpa: false,
+    isDnc: false,
+    isInvalid: false,
+    isClean: false
+  },
+  matchedLists: [],
+  leadDeactivated: false,
+  providers: []
+})
+
+const mapDncCallStatusToUiStatus = (callStatus: DncCallStatus | null): DncVerificationStatus => {
+  switch (callStatus) {
+    case 'SAFE':
+      return 'clean'
+    case 'WARNING':
+      return 'warning'
+    case 'DANGER':
+      return 'danger'
+    case 'INVALID':
+      return 'invalid'
+    case 'ERROR':
+      return 'error'
+    default:
+      return 'idle'
+  }
+}
+
+const normalizedDncPhone = computed(() => normalizeUsPhone(dncRawPhone.value))
+
+const dncStatus = computed<DncVerificationStatus>(() => {
+  return mapDncCallStatusToUiStatus(dncLookupResult.value?.callStatus ?? null)
+})
+
+const dncVerified = computed(() => {
+  return dncScreenedPhone.value.length === 10 &&
+    dncScreenedPhone.value === normalizedDncPhone.value &&
+    (dncStatus.value === 'clean' || dncStatus.value === 'warning')
+})
+
+const dncRequiresConsent = computed(() => dncStatus.value === 'warning')
+
+const dncDisplayPhone = computed(() => {
+  const formatted = formatUsPhone(dncScreenedPhone.value || normalizedDncPhone.value)
+
+  if (formatted) return formatted
+
+  const raw = dncRawPhone.value.trim()
+  return raw || undefined
+})
+
+const hasCurrentDncResult = computed(() => {
+  return Boolean(dncLookupResult.value) &&
+    dncScreenedPhone.value.length === 10 &&
+    dncScreenedPhone.value === normalizedDncPhone.value
+})
+
+const disableDncVerify = computed(() => {
+  if (dncChecking.value || !normalizedDncPhone.value) return true
+  if (!hasCurrentDncResult.value) return false
+  return dncStatus.value !== 'error'
+})
+
+const dncVerifyButtonLabel = computed(() => {
+  if (dncVerified.value) return 'Verified'
+  if (dncStatus.value === 'error' && hasCurrentDncResult.value) return 'Retry Check'
+  return 'Verify Number'
+})
+
+const dncVerifyButtonIcon = computed(() => {
+  if (dncVerified.value) return 'i-lucide-check'
+  if (dncStatus.value === 'error' && hasCurrentDncResult.value) return 'i-lucide-rotate-cw'
+  return 'i-lucide-shield-check'
+})
+
+const dncVerifyButtonColor = computed(() => {
+  if (dncVerified.value) return 'success'
+  return 'warning'
+})
+
+const resetDncScreening = (options: { clearPhone?: boolean } = {}) => {
+  dncLookupResult.value = null
+  dncScreenedPhone.value = ''
+  form.phone_number = ''
+  tcpaModalOpen.value = false
+
+  if (options.clearPhone) {
+    dncRawPhone.value = ''
+  }
+}
+
+watch(normalizedDncPhone, (nextPhone) => {
+  if (!dncLookupResult.value) return
+  if (nextPhone === dncScreenedPhone.value) return
+
+  resetDncScreening()
+})
+
+const ensureSubmissionId = () => {
+  if (submissionId.value) return submissionId.value
+
+  submissionId.value = generateSubmissionId()
+  router.replace({ query: { ...route.query, sid: submissionId.value } })
+
+  return submissionId.value
+}
 
 const verifyDNC = async () => {
-  const digits = dncRawPhone.value.replace(/\D/g, '')
-  if (digits.length !== 10) {
+  const digits = normalizedDncPhone.value
+
+  if (!digits) {
     toast.add({
       title: 'Invalid phone number',
       description: 'Please enter a valid 10-digit US phone number.',
@@ -27,69 +143,55 @@ const verifyDNC = async () => {
   }
 
   dncChecking.value = true
-  dncVerified.value = false
-  dncBlocked.value = false
-  dncStatus.value = 'idle'
+  resetDncScreening()
 
   try {
-    const res = await fetch(
-      'https://yfivkhczzywgttbgwtgr.supabase.co/functions/v1/dnc-lookup',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY as string
-        },
-        body: JSON.stringify({ mobileNumber: digits })
-      }
-    )
+    const result = await lookupDncScreening(digits)
 
-    const data = await res.json()
+    dncLookupResult.value = result
+    dncScreenedPhone.value = digits
 
-    if (!res.ok) {
-      throw new Error(data?.error || `DNC check failed (${res.status})`)
+    if (result.callStatus === 'SAFE' || result.callStatus === 'WARNING') {
+      form.phone_number = digits
+      ensureSubmissionId()
+    } else {
+      form.phone_number = ''
     }
 
-    const results: unknown[] = Array.isArray(data)
-      ? data
-      : Array.isArray(data?.results)
-        ? data.results
-        : Array.isArray(data?.data?.results)
-          ? data.data.results
-          : data?.data
-            ? [data.data]
-            : [data]
+    if (result.callStatus === 'WARNING') {
+      toast.add({
+        title: 'DNC Consent Required',
+        description: 'This number is on a DNC list. Read the disclaimer below and get clear verbal consent before continuing.',
+        icon: 'i-lucide-alert-triangle',
+        color: 'warning'
+      })
+    }
 
-    const entry = results[0] as Record<string, unknown> | undefined
-    const isOnDnc =
-      entry?.is_dnc === true ||
-      entry?.dnc === true ||
-      entry?.status === 'dnc' ||
-      entry?.registered === true ||
-      entry?.blocked === true
-
-    if (isOnDnc) {
-      dncBlocked.value = true
-      dncStatus.value = 'blocked'
-      form.phone_number = ''
-    } else {
-      dncVerified.value = true
-      dncStatus.value = 'clean'
-      form.phone_number = dncRawPhone.value
-
-      if (!submissionId.value) {
-        submissionId.value = generateSubmissionId()
-      }
-      router.replace({ query: { ...route.query, sid: submissionId.value } })
+    if (result.callStatus === 'DANGER' || result.flags.isTcpa) {
+      tcpaModalOpen.value = true
     }
   } catch (err) {
-    dncStatus.value = 'error'
-    const msg = err instanceof Error ? err.message : 'DNC check failed. Please try again.'
-    toast.add({ title: 'DNC Check Error', description: msg, icon: 'i-lucide-x', color: 'error' })
+    const responseError = err instanceof DncLookupError ? err.response : null
+    const msg = responseError?.message || (err instanceof Error ? err.message : 'DNC/TCPA screening failed. Please try again.')
+
+    dncLookupResult.value = responseError ?? buildDncErrorResult(msg)
+    dncScreenedPhone.value = digits
+    form.phone_number = ''
+
+    toast.add({
+      title: responseError?.callStatus === 'INVALID' ? 'Invalid phone number' : 'DNC/TCPA Check Error',
+      description: msg,
+      icon: 'i-lucide-x',
+      color: 'error'
+    })
   } finally {
     dncChecking.value = false
   }
+}
+
+const acknowledgeTcpaAndRefresh = () => {
+  tcpaModalOpen.value = false
+  window.location.reload()
 }
 
 const submissionId = ref<string>(
@@ -596,7 +698,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const validate = (): string | null => {
   Object.keys(fieldErrors).forEach(k => delete fieldErrors[k])
 
-  if (!dncVerified.value) return 'Please verify the phone number via DNC check first.'
+  if (!dncVerified.value) return 'Please complete the DNC/TCPA screening first.'
   if (!form.first_name.trim()) { fieldErrors.first_name = 'First name is required.'; return 'Please fix the errors before submitting.' }
   if (!form.last_name.trim()) { fieldErrors.last_name = 'Last name is required.'; return 'Please fix the errors before submitting.' }
   if (!form.email.trim()) { fieldErrors.email = 'Email is required.'; return 'Please fix the errors before submitting.' }
@@ -659,7 +761,7 @@ const onSubmit = async () => {
     const payload = {
       submission_id: sid,
       customer_full_name: `${form.first_name.trim()} ${form.last_name.trim()}`,
-      phone_number: dncRawPhone.value.replace(/\D/g, ''),
+      phone_number: dncScreenedPhone.value || normalizedDncPhone.value,
       can_receive_texts: form.can_receive_texts === null ? null : (form.can_receive_texts ? 'yes' : 'no'),
       email: form.email.trim() || null,
       date_of_birth: form.date_of_birth || null,
@@ -797,19 +899,40 @@ onMounted(async () => {
               </div>
             </div>
             <div class="relative space-y-4 p-5">
-              <p class="text-sm text-muted">Enter the customer's phone number and verify it against the Do Not Call registry before proceeding.</p>
+              <p class="text-sm text-muted">Enter the customer's phone number and verify it against the DNC/TCPA screening service before proceeding.</p>
               <div class="flex flex-wrap items-end gap-3">
                 <div class="min-w-60 flex-1 space-y-1.5">
                   <label class="text-xs font-medium text-highlighted">Customer Phone Number</label>
-                  <UInput v-model="dncRawPhone" placeholder="(000) 000-0000" :disabled="dncVerified" class="w-full" @keyup.enter="verifyDNC" />
+                  <UInput v-model="dncRawPhone" placeholder="(000) 000-0000" :disabled="dncVerified || dncStatus === 'danger'" class="w-full" @keyup.enter="verifyDNC" />
                 </div>
-                <UButton :label="dncVerified ? 'Verified' : 'Verify Number'" :icon="dncVerified ? 'i-lucide-check' : 'i-lucide-shield-check'" :color="dncVerified ? 'success' : 'warning'" :loading="dncChecking" :disabled="dncVerified || dncChecking || !dncRawPhone" @click="verifyDNC" />
+                <UButton :label="dncVerifyButtonLabel" :icon="dncVerifyButtonIcon" :color="dncVerifyButtonColor" :loading="dncChecking" :disabled="disableDncVerify" @click="verifyDNC" />
+                <UButton v-if="dncVerified" label="Change Number" color="neutral" variant="ghost" :disabled="dncChecking || submitting" @click="resetDncScreening()" />
               </div>
               <div v-if="dncStatus === 'clean'" class="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-800 dark:bg-green-950">
                 <UIcon name="i-lucide-check-circle" class="size-5 shrink-0 text-green-600 dark:text-green-400" />
+                <p class="text-sm font-medium text-green-700 dark:text-green-300">Phone number verified — not flagged by the DNC/TCPA screening. You may now complete the intake form.</p>
+              </div>
+              <div v-if="false && dncStatus === 'clean'" class="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-800 dark:bg-green-950">
+                <UIcon name="i-lucide-check-circle" class="size-5 shrink-0 text-green-600 dark:text-green-400" />
                 <p class="text-sm font-medium text-green-700 dark:text-green-300">Phone number verified — not on the DNC registry. You may now complete the intake form.</p>
               </div>
-              <div v-if="dncStatus === 'blocked'" class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950">
+              <div v-if="dncStatus === 'warning'" class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-700/60 dark:bg-amber-950/40">
+                <UIcon name="i-lucide-alert-triangle" class="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-300" />
+                <p class="text-sm font-medium text-amber-900 dark:text-amber-100">This number appears on a DNC list. Read the disclaimer below and get a clear verbal consent before continuing.</p>
+              </div>
+              <div v-if="dncStatus === 'danger'" class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950">
+                <UIcon name="i-lucide-ban" class="size-5 shrink-0 text-red-600 dark:text-red-400" />
+                <p class="text-sm font-medium text-red-700 dark:text-red-300">TCPA litigator detected. Continuing this call is not permitted.</p>
+              </div>
+              <div v-if="dncStatus === 'invalid'" class="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950">
+                <UIcon name="i-lucide-alert-circle" class="mt-0.5 size-5 shrink-0 text-red-600 dark:text-red-400" />
+                <p class="text-sm font-medium text-red-700 dark:text-red-300">This phone number appears invalid. Please confirm the number and run the screening again.</p>
+              </div>
+              <div v-if="dncStatus === 'error'" class="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950">
+                <UIcon name="i-lucide-alert-circle" class="mt-0.5 size-5 shrink-0 text-red-600 dark:text-red-400" />
+                <p class="text-sm font-medium text-red-700 dark:text-red-300">DNC/TCPA screening could not be completed. Do not continue until the number is successfully checked.</p>
+              </div>
+              <div v-if="false && dncStatus === 'blocked'" class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950">
                 <UIcon name="i-lucide-ban" class="size-5 shrink-0 text-red-600 dark:text-red-400" />
                 <p class="text-sm font-medium text-red-700 dark:text-red-300">This number is on the Do Not Call registry. This lead cannot be submitted.</p>
               </div>
@@ -817,6 +940,8 @@ onMounted(async () => {
           </div>
 
         <!-- ═══ Locked form area ═════════════════════════════════════════ -->
+        <LeadIntakeDncDisclaimerRequiredCard v-if="dncRequiresConsent || !dncRequiresConsent" :phone-number="dncDisplayPhone" />
+
         <div :class="formDisabled ? 'pointer-events-none select-none opacity-40' : ''" class="space-y-5 transition-opacity duration-300">
 
           <!-- ═══ Customer Personal Information ═══════════════════════════ -->
@@ -1248,6 +1373,13 @@ onMounted(async () => {
           </div>
 
         </div>
+
+        <LeadIntakeTcpaLitigatorModal
+          :open="tcpaModalOpen"
+          :phone-number="dncDisplayPhone"
+          @update:open="tcpaModalOpen = $event"
+          @acknowledge="acknowledgeTcpaAndRefresh"
+        />
       </div>
     </template>
   </UDashboardPanel>
