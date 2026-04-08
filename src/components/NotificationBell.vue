@@ -20,55 +20,6 @@ const handleClick = async (notification: AppNotification) => {
 
 const handleDelete = async (notification: AppNotification) => {
   await deleteNotification(notification.id)
-interface NotificationGroup {
-  key: string
-  lead_id: string | null
-  lead_name: string | null
-  items: AppNotification[]
-  groupUnreadCount: number
-  latestAt: string
-}
-
-const grouped = computed((): NotificationGroup[] => {
-  const map = new Map<string, NotificationGroup>()
-
-  for (const n of notifications.value) {
-    const key = n.lead_id ?? `_ungrouped_${n.id}`
-
-    if (!map.has(key)) {
-      map.set(key, {
-        key,
-        lead_id: n.lead_id,
-        lead_name: n.lead_name ?? null,
-        items: [],
-        groupUnreadCount: 0,
-        latestAt: n.created_at,
-      })
-    }
-
-    const group = map.get(key)!
-    group.items.push(n)
-    if (!n.is_read) group.groupUnreadCount++
-    if (n.created_at > group.latestAt) group.latestAt = n.created_at
-  }
-
-  return Array.from(map.values())
-    .sort((a, b) => new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime())
-    .slice(0, 8)
-})
-
-const isExpanded = (key: string) => expandedLeadIds.value.includes(key)
-
-const toggleGroup = (key: string) => {
-  const idx = expandedLeadIds.value.indexOf(key)
-  if (idx === -1) expandedLeadIds.value.push(key)
-  else expandedLeadIds.value.splice(idx, 1)
-}
-
-const handleNotificationClick = async (n: AppNotification) => {
-  isOpen.value = false
-  if (!n.is_read) await markAsRead(n.id)
-  if (n.redirect_url) router.push(n.redirect_url)
 }
 
 const handleMarkRead = async (notification: AppNotification) => {
