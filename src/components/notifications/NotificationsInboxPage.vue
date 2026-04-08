@@ -1,8 +1,13 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, nextTick, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useNotifications } from '../../composables/useNotifications'
-import { getNotificationMessage, getNotificationMeta, notificationCategoryOrder } from '../../lib/notifications'
+import {
+  getNotificationMessage,
+  getNotificationMeta,
+  INBOX_NOTIFICATION_QUERY_KEY,
+  notificationCategoryOrder
+} from '../../lib/notifications'
 import type { AppNotification, NotificationCategory } from '../../types'
 import NotificationItem from './NotificationItem.vue'
 
@@ -17,6 +22,7 @@ type FilterOption = {
 }
 
 const router = useRouter()
+const route = useRoute()
 const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification } = useNotifications()
 
 const PAGE_SIZE = 10
@@ -63,6 +69,10 @@ const filterOptions = computed<FilterOption[]>(() => {
 })
 
 const activeFilterMeta = computed(() => filterOptions.value.find(option => option.value === activeFilter.value) ?? filterOptions.value[0])
+const selectedNotificationId = computed(() => {
+  const value = route.query[INBOX_NOTIFICATION_QUERY_KEY]
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+})
 
 const getFilterButtonStyle = (option: FilterOption) => {
   if (activeFilter.value !== option.value) return undefined
@@ -150,6 +160,38 @@ watch(pageCount, (nextPageCount) => {
     currentPage.value = nextPageCount
   }
 })
+
+const syncSelectedNotificationFromRoute = async () => {
+  const notificationId = selectedNotificationId.value
+  if (!notificationId) return
+
+  if (activeFilter.value !== 'all') {
+    activeFilter.value = 'all'
+  }
+
+  if (searchQuery.value) {
+    searchQuery.value = ''
+  }
+
+  await nextTick()
+
+  const notificationIndex = notifications.value.findIndex(notification => notification.id === notificationId)
+  if (notificationIndex === -1) return
+
+  currentPage.value = Math.floor(notificationIndex / PAGE_SIZE) + 1
+
+  await nextTick()
+
+  if (typeof document === 'undefined') return
+
+  document
+    .getElementById(`notification-${notificationId}`)
+    ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+}
+
+watch([selectedNotificationId, notifications], () => {
+  void syncSelectedNotificationFromRoute()
+}, { immediate: true })
 
 const handleClick = async (notification: AppNotification) => {
   if (!notification.is_read) await markAsRead(notification.id)
@@ -254,6 +296,8 @@ const handleMarkRead = async (notification: AppNotification) => {
                 class="notifications-feed__separator mx-auto h-px w-[85%]"
               />
               <NotificationItem
+                :id="`notification-${notification.id}`"
+                :data-selected="notification.id === selectedNotificationId ? 'true' : undefined"
                 :notification="notification"
                 :index="idx"
                 @select="handleClick"
