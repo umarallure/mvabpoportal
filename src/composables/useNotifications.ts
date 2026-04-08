@@ -167,6 +167,18 @@ const _useNotifications = () => {
     }
   }
 
+  const deleteNotification = async (notificationId: string) => {
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('id', notificationId)
+
+    if (!error) {
+      notifications.value = notifications.value.filter(n => n.id !== notificationId)
+      syncLatestCreatedAt()
+    }
+  }
+
   const cleanup = () => {
     stopPolling()
 
@@ -186,7 +198,7 @@ const _useNotifications = () => {
     initialized = false
   }
 
-  return { notifications, unreadCount, fetchInitialNotifications, initializeRealtimeListener, markAsRead, markAllAsRead, cleanup }
+  return { notifications, unreadCount, fetchInitialNotifications, initializeRealtimeListener, markAsRead, markAllAsRead, deleteNotification, cleanup }
 }
 
 export const useNotifications = createSharedComposable(_useNotifications)
