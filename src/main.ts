@@ -27,7 +27,7 @@ const router = createRouter({
     { path: '/sales-map', component: () => import('./pages/sales-map.vue') },
     { path: '/submission-portal', component: () => import('./pages/submission-portal.vue') },
     { path: '/lead-intake', component: () => import('./pages/lead-intake.vue') },
-    { path: '/notifications', component: () => import('./pages/notifications.vue') },
+    { path: '/notifications', redirect: '/inbox' },
     { path: '/users', component: () => import('./pages/users.vue'), meta: { requiresSuperAdmin: true } },
     { path: '/product-guide', component: () => import('./pages/product-guide.vue'), meta: { requiresAdminOrSuperAdmin: true } },
     {

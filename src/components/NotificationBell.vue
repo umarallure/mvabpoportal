@@ -28,7 +28,7 @@ const handleMarkRead = async (notification: AppNotification) => {
 
 const handleShowAll = () => {
   isOpen.value = false
-  router.push('/notifications')
+  router.push('/inbox')
 }
 </script>
 
@@ -73,7 +73,7 @@ const handleShowAll = () => {
           </div>
           <p class="notification-popover__empty-title">You're all caught up</p>
           <p class="notification-popover__empty-copy">
-            Only unread notifications show in this menu. Open all notifications to review your full history.
+            Only unread notifications show in this menu. Open inbox to review your full history.
           </p>
         </div>
 
@@ -96,7 +96,7 @@ const handleShowAll = () => {
             class="notification-popover__footer-button"
             @click="handleShowAll"
           >
-            All notifications
+            Open inbox
           </button>
         </div>
       </div>

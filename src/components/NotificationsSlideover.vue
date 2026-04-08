@@ -28,7 +28,7 @@ const handleMarkRead = async (notification: AppNotification) => {
 
 const handleShowAll = () => {
   isNotificationsSlideoverOpen.value = false
-  router.push('/notifications')
+  router.push('/inbox')
 }
 </script>
 
@@ -83,7 +83,7 @@ const handleShowAll = () => {
           class="notification-sheet__footer"
           @click="handleShowAll"
         >
-          Open all notifications
+          Open inbox
         </button>
       </div>
     </template>

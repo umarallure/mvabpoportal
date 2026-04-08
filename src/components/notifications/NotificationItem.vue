@@ -26,6 +26,7 @@ const emit = defineEmits<{
 const meta = computed(() => getNotificationMeta(props.notification.category))
 const preview = computed(() => getNotificationMessage(props.notification) || getNotificationPreview(props.notification))
 const relativeTime = computed(() => formatTimeAgo(new Date(props.notification.created_at)))
+const rowHoverBg = computed(() => `color-mix(in srgb, ${meta.value.accent} 10%, transparent)`)
 
 const menuOpen = ref(false)
 
@@ -49,12 +50,12 @@ const animDelay = computed(() => `${Math.min(props.index * 40, 400)}ms`)
 <template>
   <div
     class="notification-row"
-    :style="{ animationDelay: animDelay }"
+    :style="{ animationDelay: animDelay, '--notification-hover-bg': rowHoverBg }"
     :data-unread="!notification.is_read"
   >
     <button
       type="button"
-      class="group flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-[var(--ap-accent)]/[0.02] sm:px-5"
+      class="notification-row__button group flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors sm:px-5"
       @click="handleSelect"
     >
       <!-- Unread dot -->
@@ -74,15 +75,15 @@ const animDelay = computed(() => `${Math.min(props.index * 40, 400)}ms`)
       </div>
 
       <!-- Content -->
-      <div class="min-w-0 flex-1">
+      <div class="min-w-0 flex-1 pr-8 sm:pr-10">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
+            <div class="notification-row__meta flex items-start justify-between gap-3">
               <span
                 class="rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-none"
                 :style="{ background: meta.iconBg, color: meta.accent }"
               >{{ meta.label }}</span>
-              <time :datetime="notification.created_at" class="text-[10px] text-muted">{{ relativeTime }}</time>
+              <time :datetime="notification.created_at" class="notification-row__time text-[10px] text-muted">{{ relativeTime }}</time>
             </div>
             <p class="mt-1 text-[13px] font-medium leading-snug text-highlighted" :class="{ 'font-semibold': !notification.is_read }">
               {{ notification.title }}
@@ -135,6 +136,20 @@ const animDelay = computed(() => `${Math.min(props.index * 40, 400)}ms`)
 .notification-row {
   position: relative;
   animation: notification-fade-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.notification-row__button {
+  transition: background-color 180ms ease;
+}
+
+.notification-row:hover .notification-row__button {
+  background: var(--notification-hover-bg);
+}
+
+.notification-row__time {
+  flex-shrink: 0;
+  text-align: right;
+  white-space: nowrap;
 }
 
 @keyframes notification-fade-up {

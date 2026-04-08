@@ -40,14 +40,14 @@ const META: Record<NotificationCategory, NotificationMeta> = {
   pipeline_changed: {
     label: 'Pipeline Changed',
     icon: 'i-lucide-arrow-left-right',
-    accent: 'var(--dashboard-accent-amber)',
-    iconBg: 'color-mix(in srgb, var(--dashboard-accent-amber) 12%, transparent)'
+    accent: 'var(--dashboard-accent-purple)',
+    iconBg: 'color-mix(in srgb, var(--dashboard-accent-purple) 12%, transparent)'
   },
   note_added: {
     label: 'Note Added',
     icon: 'i-lucide-message-square',
-    accent: 'var(--dashboard-text-secondary)',
-    iconBg: 'color-mix(in srgb, var(--dashboard-text-secondary) 10%, transparent)'
+    accent: 'var(--dashboard-accent-orange)',
+    iconBg: 'color-mix(in srgb, var(--dashboard-accent-orange) 12%, transparent)'
   }
 }
 
