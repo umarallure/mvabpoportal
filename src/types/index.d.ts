@@ -69,6 +69,8 @@ export interface AppNotification {
   redirect_url: string | null
   is_read: boolean
   created_at: string
+  lead_id: string | null
+  lead_name: string | null
 }
 
 export type Period = 'daily' | 'weekly' | 'monthly'
