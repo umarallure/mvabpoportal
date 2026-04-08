@@ -866,7 +866,7 @@ onMounted(async () => {
                       <p class="text-[11px] text-muted">Verified from DNC check above.</p>
                     </div>
                     <div class="space-y-2">
-                      <label class="text-xs font-medium text-highlighted">Can They Receive Text Messages? <span class="text-red-400/80">*</span></label>
+                      <label class="text-xs font-medium text-highlighted">Can Customer Receive Text Messages? <span class="text-red-400/80">*</span></label>
                       <div class="flex w-fit overflow-hidden rounded-lg border border-[var(--ap-accent)]/20">
                         <button type="button" class="border-r border-[var(--ap-accent)]/20 px-4 py-1.5 text-xs font-medium transition-colors" :class="form.can_receive_texts === true ? 'bg-green-600 text-white' : 'text-muted hover:bg-green-500/5'" @click="form.can_receive_texts = true">Yes</button>
                         <button type="button" class="px-4 py-1.5 text-xs font-medium transition-colors" :class="form.can_receive_texts === false ? 'bg-error-600 text-white' : 'text-muted hover:bg-[var(--ap-accent)]/5'" @click="form.can_receive_texts = false">No</button>
