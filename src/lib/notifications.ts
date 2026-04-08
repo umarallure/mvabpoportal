@@ -56,6 +56,23 @@ const normalize = (value: string | null | undefined) => {
   return text.length ? text : null
 }
 
+export const INBOX_NOTIFICATION_QUERY_KEY = 'notificationId'
+
+export const getInboxNotificationLocation = (notificationId?: string | null) => {
+  const normalizedId = normalize(notificationId)
+
+  if (!normalizedId) {
+    return { path: '/inbox' }
+  }
+
+  return {
+    path: '/inbox',
+    query: {
+      [INBOX_NOTIFICATION_QUERY_KEY]: normalizedId
+    }
+  }
+}
+
 const toLabel = (value: string | null | undefined) => {
   const text = normalize(value)
   if (!text) return null

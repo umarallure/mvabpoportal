@@ -50,7 +50,7 @@ const animDelay = computed(() => `${Math.min(props.index * 40, 400)}ms`)
 <template>
   <div
     class="notification-row"
-    :style="{ animationDelay: animDelay, '--notification-hover-bg': rowHoverBg }"
+    :style="{ animationDelay: animDelay, '--notification-hover-bg': rowHoverBg, '--notification-accent': meta.accent }"
     :data-unread="!notification.is_read"
   >
     <button
@@ -136,6 +136,7 @@ const animDelay = computed(() => `${Math.min(props.index * 40, 400)}ms`)
 .notification-row {
   position: relative;
   animation: notification-fade-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  scroll-margin-top: 1rem;
 }
 
 .notification-row__button {
@@ -144,6 +145,11 @@ const animDelay = computed(() => `${Math.min(props.index * 40, 400)}ms`)
 
 .notification-row:hover .notification-row__button {
   background: var(--notification-hover-bg);
+}
+
+.notification-row[data-selected="true"] .notification-row__button {
+  background: var(--notification-hover-bg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--notification-accent) 26%, transparent);
 }
 
 .notification-row__time {

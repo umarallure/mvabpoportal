@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useNotifications } from '../composables/useNotifications'
+import { getInboxNotificationLocation } from '../lib/notifications'
 import type { AppNotification } from '../types'
 import NotificationItem from './notifications/NotificationItem.vue'
 
@@ -15,7 +16,7 @@ const handleClick = async (notification: AppNotification) => {
   isOpen.value = false
 
   if (!notification.is_read) await markAsRead(notification.id)
-  if (notification.redirect_url) router.push(notification.redirect_url)
+  router.push(getInboxNotificationLocation(notification.id))
 }
 
 const handleDelete = async (notification: AppNotification) => {
@@ -28,7 +29,7 @@ const handleMarkRead = async (notification: AppNotification) => {
 
 const handleShowAll = () => {
   isOpen.value = false
-  router.push('/inbox')
+  router.push(getInboxNotificationLocation())
 }
 </script>
 
