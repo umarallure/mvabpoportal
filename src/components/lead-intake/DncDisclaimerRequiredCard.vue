@@ -62,7 +62,7 @@ const displayPhoneNumber = computed(() => {
           </div>
 
           <div class="rounded-md border border-amber-200/70 bg-white px-3.5 py-2.5 text-[13px] leading-relaxed text-slate-700 dark:border-amber-500/25 dark:bg-[#18181b] dark:text-slate-200">
-            Sir/Ma'am, even if your phone number is on the Federal National or State Do Not Call List, do we still have your permission to call you and submit your application to Accident Payments via your phone number
+            Sir/Ma'am, even if your phone number is on the Federal National or State Do Not Call List, do we still have your permission to call you and submit your application to Accident Claims Helpline via your phone number
             <span class="inline-flex rounded-full bg-amber-100 px-2 py-0.5 align-baseline text-[12px] font-semibold text-amber-800 dark:bg-amber-500/20 dark:text-amber-200">
               {{ displayPhoneNumber }}
             </span><span>? And do we have your permission to call you on the same phone number in the future if needed?</span>
