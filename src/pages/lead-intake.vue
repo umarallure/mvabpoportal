@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import LeadIntakeDncDisclaimerRequiredCard from '../components/lead-intake/DncDisclaimerRequiredCard.vue'
+import LeadIntakeTransferSuccessModal from '../components/lead-intake/TransferSuccessModal.vue'
 import LeadIntakeTcpaLitigatorModal from '../components/lead-intake/TcpaLitigatorModal.vue'
 import { useAuth } from '../composables/useAuth'
 import { DncLookupError, formatUsPhone, lookupDncScreening, normalizeUsPhone, type DncCallStatus, type DncLookupResponse } from '../lib/dnc-lookup'
@@ -16,6 +17,8 @@ const dncChecking = ref(false)
 const dncLookupResult = ref<DncLookupResponse | null>(null)
 const dncScreenedPhone = ref('')
 const tcpaModalOpen = ref(false)
+const transferSuccessModalOpen = ref(false)
+const submittedLeadPhoneNumber = ref('')
 
 type DncVerificationStatus = 'idle' | 'clean' | 'warning' | 'danger' | 'invalid' | 'error'
 
@@ -192,6 +195,12 @@ const verifyDNC = async () => {
 const acknowledgeTcpaAndRefresh = () => {
   tcpaModalOpen.value = false
   window.location.reload()
+}
+
+const refreshLeadIntake = () => {
+  transferSuccessModalOpen.value = false
+  const target = router.resolve({ path: '/lead-intake', query: {} })
+  window.location.assign(target.href)
 }
 
 const submissionId = ref<string>(
@@ -822,14 +831,8 @@ const onSubmit = async () => {
       })
     }).catch(err => console.warn('[lead-intake] Slack notification failed silently:', err))
 
-    toast.add({
-      title: 'Lead Submitted',
-      description: `Lead ${sid} has been successfully saved.`,
-      icon: 'i-lucide-check',
-      color: 'success'
-    })
-
-    await router.push('/transfers')
+    submittedLeadPhoneNumber.value = payload.phone_number ?? ''
+    transferSuccessModalOpen.value = true
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to submit lead. Please try again.'
     toast.add({ title: 'Submission Error', description: msg, icon: 'i-lucide-x', color: 'error' })
@@ -1058,8 +1061,10 @@ onMounted(async () => {
 
                 <!-- Date of Accident -->
                 <div class="space-y-1.5">
-                  <label class="text-xs font-medium text-highlighted">Date of Accident <span class="text-red-400/80">*</span></label>
-                  <UInput v-model="form.accident_date" type="date" class="w-full" @blur="touchField('accident_date')" />
+                  <label class="block text-xs font-medium text-highlighted">Date of Accident <span class="text-red-400/80">*</span></label>
+                  <div class="max-w-35">
+                    <UInput v-model="form.accident_date" type="date" class="w-full" @blur="touchField('accident_date')" />
+                  </div>
                   <p v-if="fieldErrors.accident_date" class="text-xs text-red-500">{{ fieldErrors.accident_date }}</p>
                 </div>
 
@@ -1379,6 +1384,13 @@ onMounted(async () => {
           :phone-number="dncDisplayPhone"
           @update:open="tcpaModalOpen = $event"
           @acknowledge="acknowledgeTcpaAndRefresh"
+        />
+
+        <LeadIntakeTransferSuccessModal
+          :open="transferSuccessModalOpen"
+          :lead-phone-number="submittedLeadPhoneNumber"
+          @update:open="transferSuccessModalOpen = $event"
+          @refresh="refreshLeadIntake"
         />
       </div>
     </template>
