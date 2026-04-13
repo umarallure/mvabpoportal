@@ -78,6 +78,15 @@ router.beforeEach(async (to) => {
     return { path: '/get-started', query: { redirect: to.fullPath } }
   }
 
+  // publisher_closer can only access /lead-intake
+  if (isLoggedIn && auth.isPublisherCloser.value) {
+    const allowed = ['/lead-intake', '/login', '/get-started']
+    if (!allowed.includes(to.path)) {
+      return { path: '/lead-intake' }
+    }
+    return true
+  }
+
   if (requiresAdmin) {
     if (!isLoggedIn) {
       return { path: '/login', query: { redirect: to.fullPath } }

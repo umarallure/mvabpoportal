@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 
 const AUTH_CONTEXT_STORAGE_KEY = 'ap-auth-context-v1'
 
-export type AppRole = 'super_admin' | 'admin' | 'lawyer' | 'agent' | 'accounts'
+export type AppRole = 'super_admin' | 'admin' | 'lawyer' | 'agent' | 'accounts' | 'publisher_admin' | 'publisher_closer'
 
 export type AppUserProfile = {
   user_id: string
@@ -233,6 +233,15 @@ const _useAuth = () => {
     return role === 'super_admin' || role === 'admin' || Boolean(state.value.profile?.is_super_admin)
   })
 
+  const isPublisherRole = computed(() => {
+    const role = state.value.profile?.role
+    return role === 'publisher_admin' || role === 'publisher_closer'
+  })
+
+  const isPublisherCloser = computed(() => {
+    return state.value.profile?.role === 'publisher_closer'
+  })
+
   const resolvedLeadVendor = computed(() => {
     if (canSeeAll.value) return null
     return normalizeString(state.value.centerContext?.lead_vendor)
@@ -242,6 +251,8 @@ const _useAuth = () => {
     state: readonly(state),
     init,
     canSeeAll,
+    isPublisherRole,
+    isPublisherCloser,
     resolvedLeadVendor,
     refreshProfile: loadContext,
     signInWithPassword,

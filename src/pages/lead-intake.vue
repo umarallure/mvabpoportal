@@ -737,6 +737,17 @@ const validate = (): string | null => {
 const submitting = ref(false)
 
 const onSubmit = async () => {
+  const leadVendor = auth.state.value.centerContext?.lead_vendor?.trim() || null
+  if (!leadVendor) {
+    toast.add({
+      title: 'Missing Lead Vendor',
+      description: 'Your center does not have a lead vendor configured. Please contact an administrator.',
+      icon: 'i-lucide-alert-circle',
+      color: 'error'
+    })
+    return
+  }
+
   const validationError = validate()
   if (validationError) {
     toast.add({ title: 'Validation Error', description: validationError, icon: 'i-lucide-alert-circle', color: 'error' })
@@ -804,7 +815,7 @@ const onSubmit = async () => {
       police_report: policeReportUrl,
       additional_notes: additionalNotes,
       user_id: auth.state.value.user?.id ?? null,
-      lead_vendor: auth.state.value.centerContext?.lead_vendor ?? null,
+      lead_vendor: leadVendor,
       status: 'transfer_api'
     }
 
