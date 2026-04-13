@@ -37,97 +37,111 @@ onMounted(() => {
   })
 })
 
-const links = computed(() => [[{
-  label: 'Dashboard',
-  icon: 'i-lucide-house',
-  to: '/dashboard',
-  onSelect: () => { open.value = false }
-}, {
-  label: 'Sales Map',
-  icon: 'i-lucide-map',
-  to: '/sales-map',
-  onSelect: () => { open.value = false }
-}, {
-  label: 'Lead Intake',
-  icon: 'i-lucide-clipboard-pen',
-  to: '/lead-intake',
-  onSelect: () => { open.value = false }
-}, {
-  label: 'Transfer Pipeline',
-  icon: 'i-lucide-arrow-right-left',
-  to: '/transfers',
-  onSelect: () => { open.value = false }
-}, {
-  label: 'Submission Pipeline',
-  icon: 'i-lucide-layout-dashboard',
-  to: '/submission-portal',
-  onSelect: () => { open.value = false }
-}, {
-  label: 'Invoicing',
-  icon: 'i-lucide-receipt',
-  to: '/invoicing',
-  onSelect: () => { open.value = false }
-}, {
-  label: 'Deel',
-  icon: 'i-lucide-landmark',
-  to: '/deel',
-  onSelect: () => { open.value = false }
-}, {
-  label: 'Inbox',
-  icon: 'i-lucide-inbox',
-  to: '/inbox',
-  onSelect: () => { open.value = false }
-}, {
-  label: 'Product Offering',
-  icon: 'i-lucide-package',
-  to: '/product-offering',
-  onSelect: () => { open.value = false }
-}, ...(auth.state.value.profile?.role === 'super_admin' ? [{
-  label: 'Users',
-  icon: 'i-lucide-users',
-  to: '/users',
-  onSelect: () => { open.value = false }
-}] : []), ...(['admin', 'super_admin'].includes(auth.state.value.profile?.role ?? '') ? [{
-  label: 'Product Guide',
-  icon: 'i-lucide-play-circle',
-  to: '/product-guide',
-  onSelect: () => { open.value = false }
-}] : []), {
-  label: 'Settings',
-  to: '/settings',
-  icon: 'i-lucide-settings',
-  defaultOpen: false,
-  type: 'trigger',
-  children: [{
-    label: 'BPO Profile',
-    to: '/settings/bpo-profile',
-    exact: true,
-    onSelect: () => {
-      open.value = false
-    }
+const links = computed(() => {
+  const role = auth.state.value.profile?.role ?? ''
+
+  // publisher_closer only sees Lead Intake
+  if (role === 'publisher_closer') {
+    return [[{
+      label: 'Lead Intake',
+      icon: 'i-lucide-clipboard-pen',
+      to: '/lead-intake',
+      onSelect: () => { open.value = false }
+    }]] satisfies NavigationMenuItem[][]
+  }
+
+  return [[{
+    label: 'Dashboard',
+    icon: 'i-lucide-house',
+    to: '/dashboard',
+    onSelect: () => { open.value = false }
   }, {
-    label: 'Team Profile',
-    to: '/settings/team-profile',
-    exact: true,
-    onSelect: () => {
-      open.value = false
-    }
-  }, ...(auth.state.value.profile?.role === 'super_admin' ? [{
-    label: 'Sales Map Admin',
-    to: '/settings/sales-map-admin',
-    exact: true,
-    onSelect: () => {
-      open.value = false
-    }
+    label: 'Sales Map',
+    icon: 'i-lucide-map',
+    to: '/sales-map',
+    onSelect: () => { open.value = false }
   }, {
-    label: 'Export Sheets',
-    to: '/settings/export-sheets',
-    exact: true,
-    onSelect: () => {
-      open.value = false
-    }
-  }] : [])]
-}]] satisfies NavigationMenuItem[][])
+    label: 'Lead Intake',
+    icon: 'i-lucide-clipboard-pen',
+    to: '/lead-intake',
+    onSelect: () => { open.value = false }
+  }, {
+    label: 'Transfer Pipeline',
+    icon: 'i-lucide-arrow-right-left',
+    to: '/transfers',
+    onSelect: () => { open.value = false }
+  }, {
+    label: 'Submission Pipeline',
+    icon: 'i-lucide-layout-dashboard',
+    to: '/submission-portal',
+    onSelect: () => { open.value = false }
+  }, {
+    label: 'Invoicing',
+    icon: 'i-lucide-receipt',
+    to: '/invoicing',
+    onSelect: () => { open.value = false }
+  }, {
+    label: 'Deel',
+    icon: 'i-lucide-landmark',
+    to: '/deel',
+    onSelect: () => { open.value = false }
+  }, {
+    label: 'Inbox',
+    icon: 'i-lucide-inbox',
+    to: '/inbox',
+    onSelect: () => { open.value = false }
+  }, {
+    label: 'Product Offering',
+    icon: 'i-lucide-package',
+    to: '/product-offering',
+    onSelect: () => { open.value = false }
+  }, ...(role === 'super_admin' ? [{
+    label: 'Users',
+    icon: 'i-lucide-users',
+    to: '/users',
+    onSelect: () => { open.value = false }
+  }] : []), ...(['admin', 'super_admin'].includes(role) ? [{
+    label: 'Product Guide',
+    icon: 'i-lucide-play-circle',
+    to: '/product-guide',
+    onSelect: () => { open.value = false }
+  }] : []), {
+    label: 'Settings',
+    to: '/settings',
+    icon: 'i-lucide-settings',
+    defaultOpen: false,
+    type: 'trigger',
+    children: [{
+      label: 'BPO Profile',
+      to: '/settings/bpo-profile',
+      exact: true,
+      onSelect: () => {
+        open.value = false
+      }
+    }, {
+      label: 'Team Profile',
+      to: '/settings/team-profile',
+      exact: true,
+      onSelect: () => {
+        open.value = false
+      }
+    }, ...(role === 'super_admin' ? [{
+      label: 'Sales Map Admin',
+      to: '/settings/sales-map-admin',
+      exact: true,
+      onSelect: () => {
+        open.value = false
+      }
+    }, {
+      label: 'Export Sheets',
+      to: '/settings/export-sheets',
+      exact: true,
+      onSelect: () => {
+        open.value = false
+      }
+    }] : [])]
+  }]] satisfies NavigationMenuItem[][]
+})
 
 const isPublicPage = computed(() => ['/login', '/', '/get-started'].includes(route.path))
 const isStandalonePage = computed(() => Boolean(route.meta.standalone))

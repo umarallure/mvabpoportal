@@ -1,10 +1,11 @@
-export type ManageUserRole = 'super_admin' | 'admin' | 'lawyer' | 'agent'
+export type ManageUserRole = 'super_admin' | 'admin' | 'lawyer' | 'agent' | 'publisher_admin' | 'publisher_closer'
 
 export type ManageUserRow = {
   user_id: string
   email: string
   display_name: string | null
   role: ManageUserRole | null
+  center_id: string | null
   created_at: string
   updated_at: string
 }
@@ -67,12 +68,14 @@ export const createUser = (token: string, body: {
   email: string
   role: ManageUserRole | null
   password: string
+  center_id?: string | null
 }) =>
   callEdge<{ user: ManageUserRow }>({ method: 'POST', token, body })
 
 export const updateUser = (token: string, body: {
   user_id: string
   role: ManageUserRole | null
+  center_id?: string | null
 }) =>
   callEdge<{ user: ManageUserRow }>({ method: 'PATCH', token, body })
 

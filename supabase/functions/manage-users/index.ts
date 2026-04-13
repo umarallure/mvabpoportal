@@ -2,13 +2,14 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0'
 
-type Role = 'super_admin' | 'admin' | 'lawyer' | 'agent'
+type Role = 'super_admin' | 'admin' | 'lawyer' | 'agent' | 'publisher_admin' | 'publisher_closer'
 
 type AppUserRow = {
   user_id: string
   email: string
   display_name: string | null
   role: Role | null
+  center_id: string | null
   created_at: string
   updated_at: string
 }
@@ -41,9 +42,10 @@ const getBearerToken = (req: Request) => {
 }
 
 const validateRole = (role: unknown): role is Role =>
-  role === 'super_admin' || role === 'admin' || role === 'lawyer' || role === 'agent'
+  role === 'super_admin' || role === 'admin' || role === 'lawyer' || role === 'agent' || role === 'publisher_admin' || role === 'publisher_closer'
 
-const requireSuperAdmin = async (req: Request) => {
+// CHANGED: allow both admin + super_admin
+const requireAdminOrSuperAdmin = async (req: Request) => {
   const supabaseUrl = getEnv('SUPABASE_URL')
   const anonKey = getEnv('SUPABASE_ANON_KEY')
   const serviceKey = getEnv('SUPABASE_SERVICE_ROLE_KEY')
@@ -64,7 +66,7 @@ const requireSuperAdmin = async (req: Request) => {
 
   const adminClient = createClient(supabaseUrl, serviceKey)
 
-  console.log('[manage-users] checking super admin role for', userData.user.id)
+  console.log('[manage-users] checking admin/super_admin role for', userData.user.id)
   const { data: roleRow, error: roleErr } = await adminClient
     .from('app_users')
     .select('role')
@@ -76,9 +78,9 @@ const requireSuperAdmin = async (req: Request) => {
     return { ok: false as const, res: json(500, { error: roleErr.message }) }
   }
 
-  if (!roleRow || roleRow.role !== 'super_admin') {
-    console.log('[manage-users] forbidden for non-super-admin', userData.user.email)
-    return { ok: false as const, res: json(403, { error: 'Super admin access required' }) }
+  if (!roleRow || (roleRow.role !== 'super_admin' && roleRow.role !== 'admin')) {
+    console.log('[manage-users] forbidden for non-admin', userData.user.email)
+    return { ok: false as const, res: json(403, { error: 'Admin access required' }) }
   }
 
   return { ok: true as const, adminClient }
@@ -92,12 +94,12 @@ Deno.serve(async (req) => {
   try {
     console.log('[manage-users] request', req.method, new URL(req.url).pathname)
 
-    const ctx = await requireSuperAdmin(req)
+    // CHANGED: was requireSuperAdmin(req)
+    const ctx = await requireAdminOrSuperAdmin(req)
     if (!ctx.ok) return ctx.res
     const supabaseAdmin = ctx.adminClient
 
     if (req.method === 'GET') {
-      console.log('[manage-users] listing users')
       const { data, error } = await supabaseAdmin
         .from('app_users')
         .select('*')
@@ -109,15 +111,15 @@ Deno.serve(async (req) => {
 
     if (req.method === 'POST') {
       const body = await req.json().catch(() => ({}))
-      console.log('[manage-users] create body', body)
 
       const email = String(body?.email ?? '').trim().toLowerCase()
       const password = String(body?.password ?? '')
-      const role = body?.role === undefined || body?.role === null ? null : String(body.role)
+      const roleRaw = body?.role === undefined || body?.role === null ? null : String(body.role)
+      const centerId = body?.center_id === undefined || body?.center_id === null ? null : String(body.center_id)
 
       if (!email) return json(400, { error: 'email is required' })
       if (!password) return json(400, { error: 'password is required' })
-      if (role !== null && !validateRole(role)) return json(400, { error: 'invalid role' })
+      if (roleRaw !== null && !validateRole(roleRaw)) return json(400, { error: 'invalid role' })
 
       const created = await supabaseAdmin.auth.admin.createUser({
         email,
@@ -130,18 +132,58 @@ Deno.serve(async (req) => {
       }
 
       const userId = created.data.user.id
+      const role = roleRaw as Role | null
 
+      // 1. Upsert into app_users
       const { error: upsertErr } = await supabaseAdmin
         .from('app_users')
         .upsert({
           user_id: userId,
           email,
           display_name: null,
-          role: role as Role | null
+          role,
+          center_id: centerId
         })
 
       if (upsertErr) return json(500, { error: upsertErr.message })
 
+      // 2. Upsert into profiles (Graceful Fallback)
+      const { error: profileErr } = await supabaseAdmin
+        .from('profiles')
+        .upsert(
+          {
+            user_id: userId,
+            display_name: null
+          },
+          { onConflict: 'user_id' }
+        )
+
+      // If profile sync fails, log it but DO NOT return an error. Let the process continue.
+      if (profileErr) {
+        console.log('[manage-users] WARNING: failed to sync profile, but proceeding.', profileErr.message)
+      }
+
+      // 3. Upsert into attorney_profiles (Graceful Fallback)
+      // Only create for lawyers (so we don't create attorney profiles for agents/admins)
+      if (role === 'lawyer') {
+        const { error: attorneyErr } = await supabaseAdmin
+          .from('attorney_profiles')
+          .upsert(
+            {
+              user_id: userId,
+              primary_email: email,
+              full_name: null
+            },
+            { onConflict: 'user_id' }
+          )
+
+        // If attorney profile sync fails, log it but DO NOT return an error. Let the process continue.
+        if (attorneyErr) {
+          console.log('[manage-users] WARNING: failed to sync attorney profile, but proceeding.', attorneyErr.message)
+        }
+      }
+
+      // 4. Fetch final user row to return
       const { data: row, error: rowErr } = await supabaseAdmin
         .from('app_users')
         .select('*')
@@ -154,17 +196,22 @@ Deno.serve(async (req) => {
 
     if (req.method === 'PATCH') {
       const body = await req.json().catch(() => ({}))
-      console.log('[manage-users] patch body', body)
 
       const userId = String(body?.user_id ?? '').trim()
-      const role = body?.role === undefined || body?.role === null ? null : String(body.role)
+      const roleRaw = body?.role === undefined || body?.role === null ? null : String(body.role)
+      const centerId =
+        body?.center_id === undefined ? undefined : body?.center_id === null ? null : String(body.center_id)
 
       if (!userId) return json(400, { error: 'user_id is required' })
-      if (role !== null && !validateRole(role)) return json(400, { error: 'invalid role' })
+      if (roleRaw !== null && !validateRole(roleRaw)) return json(400, { error: 'invalid role' })
+
+      const patch: Record<string, unknown> = {}
+      patch.role = roleRaw as Role | null
+      if (centerId !== undefined) patch.center_id = centerId
 
       const { error: updateErr } = await supabaseAdmin
         .from('app_users')
-        .update({ role: role as Role | null })
+        .update(patch)
         .eq('user_id', userId)
 
       if (updateErr) return json(500, { error: updateErr.message })
@@ -181,15 +228,23 @@ Deno.serve(async (req) => {
 
     if (req.method === 'DELETE') {
       const body = await req.json().catch(() => ({}))
-      console.log('[manage-users] delete body', body)
-
       const userId = String(body?.user_id ?? '').trim()
       if (!userId) return json(400, { error: 'user_id is required' })
 
       const del = await supabaseAdmin.auth.admin.deleteUser(userId)
       if (del.error) return json(500, { error: del.error.message })
 
-      await supabaseAdmin.from('app_users').delete().eq('user_id', userId)
+      // delete related rows (do not fail the whole request if one delete fails)
+      const { error: attorneyDelErr } = await supabaseAdmin.from('attorney_profiles').delete().eq('user_id', userId)
+      if (attorneyDelErr) {
+        console.log('[manage-users] WARNING: failed to delete attorney_profiles row, but proceeding.', attorneyDelErr.message)
+      }
+
+      const { error: appUserDelErr } = await supabaseAdmin.from('app_users').delete().eq('user_id', userId)
+      if (appUserDelErr) {
+        console.log('[manage-users] WARNING: failed to delete app_users row, but proceeding.', appUserDelErr.message)
+      }
+
       return json(200, { ok: true })
     }
 

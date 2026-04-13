@@ -94,8 +94,8 @@ const openCreate = () => {
 
 const handleUserSubmit = async (
   payload:
-    | { mode: 'create'; email: string; password: string; role: Role | null }
-    | { mode: 'edit'; user_id: string; role: Role | null }
+    | { mode: 'create'; email: string; password: string; role: Role | null; center_id: string | null }
+    | { mode: 'edit'; user_id: string; role: Role | null; center_id: string | null }
 ) => {
   loading.value = true
   errorMessage.value = null
@@ -105,7 +105,8 @@ const handleUserSubmit = async (
       await createUser(token.value, {
         email: payload.email,
         password: payload.password,
-        role: payload.role
+        role: payload.role,
+        center_id: payload.center_id
       })
 
       isCreateOpen.value = false
@@ -119,7 +120,8 @@ const handleUserSubmit = async (
 
     await updateUser(token.value, {
       user_id: payload.user_id,
-      role: payload.role
+      role: payload.role,
+      center_id: payload.center_id
     })
 
     isCreateOpen.value = false
