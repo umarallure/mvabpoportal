@@ -1,40 +1,54 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useAuth } from '../../composables/useAuth'
-import { supabase } from '../../lib/supabase'
-
-interface TeamMember {
-  id: string
-  lawyer_id: string
-  publisher_id: string | null
-  full_name: string
-  email: string | null
-  phone: string | null
-  position: string
-  position_other: string | null
-  shift_availability: string
-}
+import {
+  listTeamMembers,
+  createTeamMember,
+  updateTeamMember,
+  deleteTeamMember,
+  type TeamMemberRow
+} from '../../lib/manage-team-members'
 
 const auth = useAuth()
 const toast = useToast()
 
 const loading = ref(false)
-const saving = ref(false)
+const creatingMember = ref(false)
+const savingMemberId = ref<string | null>(null)
 const deleting = ref<string | null>(null)
-const members = ref<TeamMember[]>([])
+const members = ref<TeamMemberRow[]>([])
 
 // Add member modal
 const addModal = ref(false)
 
 // Inline edit state
 const editingId = ref<string | null>(null)
-const editForm = reactive({ full_name: '', email: '', phone: '', position: '', position_other: '', shift_availability: '', id: '' })
+const editForm = reactive({ full_name: '', phone: '', position: '', position_other: '', shift_availability: '', role: '' as string, id: '' })
 
 // Delete confirmation
 const deleteModal = ref(false)
-const deleteTarget = ref<TeamMember | null>(null)
+const deleteTarget = ref<TeamMemberRow | null>(null)
 
-const ownerUserId = computed(() => auth.state.value.user?.id ?? '')
+const accessToken = computed(() => auth.state.value.session?.access_token ?? '')
+const currentUserId = computed(() => auth.state.value.user?.id ?? '')
+const callerRole = computed(() => auth.state.value.profile?.role ?? '')
+
+const canEditRole = computed(() =>
+  callerRole.value === 'publisher_admin' || callerRole.value === 'super_admin' || callerRole.value === 'admin'
+)
+
+const roleOptions = computed(() => {
+  if (callerRole.value === 'publisher_admin' || callerRole.value === 'super_admin' || callerRole.value === 'admin') {
+    return [
+      { label: 'Publisher Admin', value: 'publisher_admin' },
+      { label: 'Publisher Closer', value: 'publisher_closer' }
+    ]
+  }
+  // publisher_closer can only create publisher_closer
+  return [
+    { label: 'Publisher Closer', value: 'publisher_closer' }
+  ]
+})
 
 const POSITION_OPTIONS = [
   { label: 'Accounting', value: 'accounting' },
@@ -54,6 +68,9 @@ const SHIFT_OPTIONS = [
 const emptyForm = () => ({
   full_name: '',
   email: '',
+  password: '',
+  confirm_password: '',
+  role: 'publisher_closer' as 'publisher_admin' | 'publisher_closer',
   phone: '',
   position: '',
   position_other: '',
@@ -79,22 +96,22 @@ const getInitials = (name: string) => {
   return name.split(/\s+/).map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
 }
 
+const roleLabel = (role: string | null) => {
+  if (role === 'publisher_admin') return 'Admin'
+  if (role === 'publisher_closer') return 'Closer'
+  return null
+}
+
 const memberCountLabel = computed(() => {
   const n = members.value.length
   return n === 1 ? '1 member' : `${n} members`
 })
 
 const loadMembers = async () => {
-  if (!ownerUserId.value) return
+  if (!accessToken.value) return
   loading.value = true
   try {
-    const { data, error } = await supabase
-      .from('team_members')
-      .select('*')
-      .or(`publisher_id.eq.${ownerUserId.value},lawyer_id.eq.${ownerUserId.value}`)
-      .order('full_name', { ascending: true })
-
-    if (error) throw error
+    const { members: data } = await listTeamMembers(accessToken.value)
     members.value = data ?? []
   } catch (err) {
     toast.add({
@@ -109,37 +126,64 @@ const loadMembers = async () => {
 }
 
 const addMember = async () => {
-  if (!form.full_name.trim() || !form.position || !form.shift_availability) {
+  if (!form.full_name.trim() || !form.email.trim() || !form.password || !form.position || !form.shift_availability) {
     toast.add({
       title: 'Missing fields',
-      description: 'Full name, position, and shift are required.',
+      description: 'Full name, email, password, position, and shift are required.',
       icon: 'i-lucide-alert-circle',
       color: 'warning'
     })
     return
   }
 
-  if (!ownerUserId.value) return
+  if (form.password.length < 6) {
+    toast.add({
+      title: 'Password too short',
+      description: 'Password must be at least 6 characters.',
+      icon: 'i-lucide-alert-circle',
+      color: 'warning'
+    })
+    return
+  }
 
-  saving.value = true
+  if (form.password !== form.confirm_password) {
+    toast.add({
+      title: 'Passwords do not match',
+      description: 'Please make sure both password fields match.',
+      icon: 'i-lucide-alert-circle',
+      color: 'warning'
+    })
+    return
+  }
+
+  if (form.position === 'other' && !form.position_other.trim()) {
+    toast.add({
+      title: 'Missing fields',
+      description: 'Please specify the position.',
+      icon: 'i-lucide-alert-circle',
+      color: 'warning'
+    })
+    return
+  }
+
+  if (!accessToken.value) return
+
+  creatingMember.value = true
   try {
-    const payload = {
-      lawyer_id: ownerUserId.value,
-      publisher_id: ownerUserId.value,
+    await createTeamMember(accessToken.value, {
+      email: form.email.trim(),
+      password: form.password,
       full_name: form.full_name.trim(),
-      email: form.email.trim() || null,
+      role: form.role,
       phone: form.phone.trim() || null,
       position: form.position,
-      position_other: form.position === 'other' ? (form.position_other.trim() || null) : null,
+      position_other: form.position === 'other' ? form.position_other.trim() : null,
       shift_availability: form.shift_availability
-    }
-
-    const { error } = await supabase.from('team_members').insert(payload)
-    if (error) throw error
+    })
 
     toast.add({
       title: 'Member added',
-      description: `${payload.full_name} has been added to the team.`,
+      description: `${form.full_name.trim()} has been added to the team with portal access.`,
       icon: 'i-lucide-check',
       color: 'success'
     })
@@ -155,20 +199,20 @@ const addMember = async () => {
       color: 'error'
     })
   } finally {
-    saving.value = false
+    creatingMember.value = false
   }
 }
 
-const openEdit = (member: TeamMember) => {
+const openEdit = (member: TeamMemberRow) => {
   editingId.value = member.id
   Object.assign(editForm, {
     id: member.id,
     full_name: member.full_name,
-    email: member.email ?? '',
     phone: member.phone ?? '',
     position: member.position,
     position_other: member.position_other ?? '',
-    shift_availability: member.shift_availability
+    shift_availability: member.shift_availability,
+    role: member.portal_role ?? ''
   })
 }
 
@@ -187,27 +231,37 @@ const saveEdit = async () => {
     return
   }
 
-  saving.value = true
+  if (editForm.position === 'other' && !editForm.position_other.trim()) {
+    toast.add({
+      title: 'Missing fields',
+      description: 'Please specify the position.',
+      icon: 'i-lucide-alert-circle',
+      color: 'warning'
+    })
+    return
+  }
+
+  if (!accessToken.value) return
+
+  const memberId = editForm.id
+  savingMemberId.value = memberId
   try {
-    const payload = {
+    const updatePayload: Parameters<typeof updateTeamMember>[1] = {
+      id: editForm.id,
       full_name: editForm.full_name.trim(),
-      email: editForm.email.trim() || null,
       phone: editForm.phone.trim() || null,
       position: editForm.position,
-      position_other: editForm.position === 'other' ? (editForm.position_other.trim() || null) : null,
+      position_other: editForm.position === 'other' ? editForm.position_other.trim() : null,
       shift_availability: editForm.shift_availability
     }
-
-    const { error } = await supabase
-      .from('team_members')
-      .update(payload)
-      .eq('id', editForm.id)
-
-    if (error) throw error
+    if (canEditRole.value && editForm.role) {
+      updatePayload.role = editForm.role as 'publisher_admin' | 'publisher_closer'
+    }
+    await updateTeamMember(accessToken.value, updatePayload)
 
     toast.add({
       title: 'Member updated',
-      description: `${payload.full_name} has been updated.`,
+      description: `${editForm.full_name.trim()} has been updated.`,
       icon: 'i-lucide-check',
       color: 'success'
     })
@@ -222,31 +276,30 @@ const saveEdit = async () => {
       color: 'error'
     })
   } finally {
-    saving.value = false
+    if (savingMemberId.value === memberId) {
+      savingMemberId.value = null
+    }
   }
 }
 
-const confirmDelete = (member: TeamMember) => {
+const confirmDelete = (member: TeamMemberRow) => {
   deleteTarget.value = member
   deleteModal.value = true
 }
 
 const executeDelete = async () => {
-  if (!deleteTarget.value) return
+  if (!deleteTarget.value || !accessToken.value) return
   const member = deleteTarget.value
   deleting.value = member.id
   deleteModal.value = false
   try {
-    const { error } = await supabase
-      .from('team_members')
-      .delete()
-      .eq('id', member.id)
-
-    if (error) throw error
+    await deleteTeamMember(accessToken.value, member.id)
 
     toast.add({
       title: 'Member removed',
-      description: `${member.full_name} has been removed.`,
+      description: member.has_portal_access
+        ? `${member.full_name} and their portal account have been removed.`
+        : `${member.full_name} has been removed.`,
       icon: 'i-lucide-check',
       color: 'success'
     })
@@ -265,6 +318,20 @@ const executeDelete = async () => {
   }
 }
 
+const isSelf = (member: TeamMemberRow) => member.publisher_id === currentUserId.value
+
+const canEdit = (member: TeamMemberRow) => {
+  if (isSelf(member)) return true
+  if (callerRole.value === 'publisher_closer' && member.portal_role === 'publisher_admin') return false
+  return true
+}
+
+const canDelete = (member: TeamMemberRow) => {
+  if (isSelf(member)) return false
+  if (callerRole.value === 'publisher_closer' && member.portal_role === 'publisher_admin') return false
+  return true
+}
+
 onMounted(async () => {
   await auth.init()
   await loadMembers()
@@ -274,7 +341,7 @@ onMounted(async () => {
 <template>
   <div class="space-y-5 pb-8">
 
-    <!-- ═══ Page Header Row ══════════════════════════════════════════════ -->
+    <!-- Page Header Row -->
     <div class="ap-fade-in ap-delay-1 flex items-center justify-between gap-4">
       <div class="flex items-center gap-3">
         <div class="relative flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--ap-accent)]/10 ring-1 ring-[var(--ap-accent)]/25">
@@ -295,7 +362,7 @@ onMounted(async () => {
       </UButton>
     </div>
 
-    <!-- ═══ Team Members Card ════════════════════════════════════════════ -->
+    <!-- Team Members Card -->
     <div class="ap-fade-in ap-delay-2 relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
       <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
 
@@ -347,19 +414,36 @@ onMounted(async () => {
             :key="member.id"
             class="border-b border-black/[0.04] last:border-0 dark:border-white/[0.04]"
           >
-            <!-- ── Display Row ── -->
+            <!-- Display Row -->
             <div
               v-if="editingId !== member.id"
               class="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--ap-accent)]/[0.02] sm:px-5"
             >
               <!-- Initials Avatar -->
-              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--ap-accent)]/10 ring-1 ring-[var(--ap-accent)]/20">
+              <div class="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--ap-accent)]/10 ring-1 ring-[var(--ap-accent)]/20">
                 <span class="text-xs font-bold text-[var(--ap-accent)]">{{ getInitials(member.full_name) }}</span>
+                <span
+                  v-if="member.has_portal_access"
+                  class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#1a1a1a] bg-emerald-400"
+                  title="Has portal access"
+                />
               </div>
 
               <!-- Info -->
               <div class="min-w-0 flex-1">
-                <p class="truncate text-sm font-medium text-highlighted">{{ member.full_name }}</p>
+                <div class="flex min-w-0 items-center gap-2">
+                  <p class="truncate text-sm font-medium text-highlighted">{{ member.full_name }}</p>
+                  <span
+                    v-if="roleLabel(member.portal_role)"
+                    class="shrink-0 rounded px-1.5 py-px text-[10px] font-medium"
+                    :class="member.portal_role === 'publisher_admin'
+                      ? 'border border-amber-500/50 bg-amber-500/15 text-amber-400'
+                      : 'border border-sky-500/50 bg-sky-500/15 text-sky-400'"
+                  >
+                    {{ roleLabel(member.portal_role) }}
+                  </span>
+                  <span v-if="isSelf(member)" class="shrink-0 rounded bg-[var(--ap-accent)]/15 px-1.5 py-0.5 text-[10px] font-medium text-[var(--ap-accent)]">You</span>
+                </div>
                 <div class="mt-0.5 flex items-center gap-1.5">
                   <span v-if="member.email" class="truncate text-xs text-muted">{{ member.email }}</span>
                   <span v-if="member.phone" class="inline-flex shrink-0 items-center rounded bg-black/[0.03] px-1.5 py-0.5 text-[10px] text-muted dark:bg-white/[0.06]">{{ member.phone }}</span>
@@ -375,26 +459,26 @@ onMounted(async () => {
               </span>
 
               <!-- Actions -->
-              <div class="flex shrink-0 items-center gap-0.5">
-                <UButton icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" @click="openEdit(member)" />
-                <UButton icon="i-lucide-trash-2" size="xs" variant="ghost" class="text-red-400 hover:text-red-300" :loading="deleting === member.id" @click="confirmDelete(member)" />
+              <div v-if="canEdit(member) || canDelete(member)" class="flex shrink-0 items-center gap-0.5">
+                <UButton v-if="canEdit(member)" icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" @click="openEdit(member)" />
+                <UButton v-if="canDelete(member)" icon="i-lucide-trash-2" size="xs" variant="ghost" class="text-red-400 hover:text-red-300" :loading="deleting === member.id" @click="confirmDelete(member)" />
               </div>
             </div>
 
-            <!-- ── Inline Edit Row ── -->
+            <!-- Inline Edit Row -->
             <div
               v-else
               class="border-l-2 border-[var(--ap-accent)]/60 bg-[var(--ap-accent)]/[0.03] px-4 py-4 sm:px-5"
             >
               <div class="space-y-3">
-                <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div class="grid grid-cols-1 gap-3" :class="canEditRole ? 'sm:grid-cols-3' : 'sm:grid-cols-2'">
                   <div class="space-y-1.5">
                     <label class="text-xs font-medium text-highlighted">Full Name <span class="text-red-400/80">*</span></label>
                     <UInput v-model="editForm.full_name" size="sm" placeholder="Jane Smith" autocomplete="off" class="w-full" />
                   </div>
-                  <div class="space-y-1.5">
-                    <label class="text-xs font-medium text-highlighted">Email</label>
-                    <UInput v-model="editForm.email" size="sm" type="email" placeholder="jane@example.com" autocomplete="off" class="w-full" />
+                  <div v-if="canEditRole" class="space-y-1.5">
+                    <label class="text-xs font-medium text-highlighted">Role</label>
+                    <USelect v-model="editForm.role" size="sm" :items="roleOptions" value-key="value" label-key="label" class="w-full" />
                   </div>
                   <div class="space-y-1.5">
                     <label class="text-xs font-medium text-highlighted">Phone</label>
@@ -416,12 +500,15 @@ onMounted(async () => {
                   </div>
                 </div>
                 <div class="flex items-center justify-end gap-2 pt-1">
-                  <UButton label="Cancel" size="xs" color="neutral" variant="ghost" :disabled="saving" @click="cancelEdit" />
-                  <UButton size="xs" :loading="saving" @click="saveEdit">
-                    <template #leading>
-                      <UIcon name="i-lucide-check" class="text-xs" />
-                    </template>
-                    Save Member
+                  <UButton label="Cancel" size="xs" color="neutral" variant="ghost" :disabled="savingMemberId === member.id" @click="cancelEdit" />
+                  <UButton
+                    size="xs"
+                    icon="i-lucide-check"
+                    :loading="savingMemberId === member.id"
+                    :disabled="savingMemberId === member.id"
+                    @click="saveEdit"
+                  >
+                    {{ savingMemberId === member.id ? 'Saving...' : 'Save Member' }}
                   </UButton>
                 </div>
               </div>
@@ -433,42 +520,61 @@ onMounted(async () => {
 
   </div>
 
-  <!-- ═══ Add Member Modal ══════════════════════════════════════════════ -->
+  <!-- Add Member Modal -->
   <UModal v-model:open="addModal" title="Add Team Member">
     <template #body>
       <div class="space-y-4 p-1">
-        <!-- Row 1 -->
+        <div class="rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2">
+          <p class="text-xs text-blue-400">This will create a portal account for the new member. They will be able to sign in with the email and password you set below.</p>
+        </div>
+        <!-- Row 1: Name + Email -->
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div class="space-y-1.5">
             <label class="text-xs font-medium text-highlighted">Full Name <span class="text-red-400/80">*</span></label>
             <UInput v-model="form.full_name" size="sm" placeholder="Jane Smith" autocomplete="off" class="w-full" />
           </div>
           <div class="space-y-1.5">
-            <label class="text-xs font-medium text-highlighted">Email</label>
+            <label class="text-xs font-medium text-highlighted">Email <span class="text-red-400/80">*</span></label>
             <UInput v-model="form.email" size="sm" type="email" placeholder="jane@example.com" autocomplete="off" class="w-full" />
           </div>
         </div>
-        <!-- Row 2 -->
+        <!-- Row 2: Password + Confirm Password -->
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div class="space-y-1.5">
+            <label class="text-xs font-medium text-highlighted">Password <span class="text-red-400/80">*</span></label>
+            <UInput v-model="form.password" size="sm" type="password" placeholder="Min. 6 characters" autocomplete="new-password" class="w-full" />
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-xs font-medium text-highlighted">Confirm Password <span class="text-red-400/80">*</span></label>
+            <UInput v-model="form.confirm_password" size="sm" type="password" placeholder="Re-enter password" autocomplete="new-password" class="w-full" />
+          </div>
+        </div>
+        <!-- Row 3: Role + Phone -->
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div class="space-y-1.5">
+            <label class="text-xs font-medium text-highlighted">Role <span class="text-red-400/80">*</span></label>
+            <USelect v-model="form.role" size="sm" :items="roleOptions" value-key="value" label-key="label" :disabled="roleOptions.length === 1" class="w-full" />
+          </div>
           <div class="space-y-1.5">
             <label class="text-xs font-medium text-highlighted">Phone</label>
             <UInput v-model="form.phone" size="sm" type="tel" placeholder="+1 (555) 000-0000" autocomplete="off" class="w-full" />
           </div>
+        </div>
+        <!-- Row 4: Position + Shift -->
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div class="space-y-1.5">
             <label class="text-xs font-medium text-highlighted">Position <span class="text-red-400/80">*</span></label>
             <USelect v-model="form.position" size="sm" :items="POSITION_OPTIONS" value-key="value" label-key="label" placeholder="Select position" class="w-full" />
-          </div>
-        </div>
-        <!-- Row 3 -->
-        <div class="grid gap-3" :class="form.position === 'other' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'">
-          <div v-if="form.position === 'other'" class="space-y-1.5">
-            <label class="text-xs font-medium text-highlighted">Specify Position <span class="text-red-400/80">*</span></label>
-            <UInput v-model="form.position_other" size="sm" placeholder="e.g., Quality Assurance" autocomplete="off" class="w-full" />
           </div>
           <div class="space-y-1.5">
             <label class="text-xs font-medium text-highlighted">Shift Availability <span class="text-red-400/80">*</span></label>
             <USelect v-model="form.shift_availability" size="sm" :items="SHIFT_OPTIONS" value-key="value" label-key="label" placeholder="Select shift" class="w-full" />
           </div>
+        </div>
+        <!-- Row 4: Position Other (conditional) -->
+        <div v-if="form.position === 'other'" class="space-y-1.5">
+          <label class="text-xs font-medium text-highlighted">Specify Position <span class="text-red-400/80">*</span></label>
+          <UInput v-model="form.position_other" size="sm" placeholder="e.g., Quality Assurance" autocomplete="off" class="w-full" />
         </div>
       </div>
     </template>
@@ -476,24 +582,40 @@ onMounted(async () => {
       <div class="flex items-center justify-between gap-3">
         <p class="hidden text-[11px] text-muted sm:block">Fields marked with <span class="text-red-400/80">*</span> are required</p>
         <div class="flex items-center gap-2">
-          <UButton label="Cancel" size="sm" color="neutral" variant="ghost" :disabled="saving" @click="addModal = false; resetForm()" />
-          <UButton size="sm" :loading="saving" @click="addMember">
-            <template #leading>
-              <UIcon name="i-lucide-plus" class="text-xs" />
-            </template>
-            Add Member
+          <UButton
+            label="Cancel"
+            size="sm"
+            color="neutral"
+            variant="ghost"
+            :disabled="creatingMember"
+            @click="addModal = false; resetForm()"
+          />
+          <UButton
+            size="sm"
+            icon="i-lucide-plus"
+            :loading="creatingMember"
+            :disabled="creatingMember"
+            @click="addMember"
+          >
+            {{ creatingMember ? 'Creating Member...' : 'Add Member' }}
           </UButton>
         </div>
       </div>
     </template>
   </UModal>
 
-  <!-- ═══ Delete Confirmation Modal ═════════════════════════════════════ -->
+  <!-- Delete Confirmation Modal -->
   <UModal v-model:open="deleteModal" title="Remove Team Member" :dismissible="false">
     <template #body>
       <div class="p-1">
         <p class="text-sm text-muted">
-          Are you sure you want to remove <span class="font-medium text-highlighted">{{ deleteTarget?.full_name }}</span>? This action cannot be undone.
+          Are you sure you want to remove <span class="font-medium text-highlighted">{{ deleteTarget?.full_name }}</span>?
+        </p>
+        <p v-if="deleteTarget?.has_portal_access" class="mt-2 text-xs text-red-400/80">
+          This will also permanently delete their portal account. They will no longer be able to sign in.
+        </p>
+        <p v-else class="mt-2 text-xs text-muted">
+          This action cannot be undone.
         </p>
       </div>
     </template>

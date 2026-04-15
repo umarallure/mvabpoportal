@@ -1,20 +1,32 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { NavigationMenuItem } from '@nuxt/ui'
+import { useAuth } from '../composables/useAuth'
 
-const links = [[
-  {
-    label: 'BPO Profile',
-    icon: 'i-lucide-building-2',
-    to: '/settings/bpo-profile',
-    exact: true
-  },
-  {
+const auth = useAuth()
+
+const links = computed(() => {
+  const items: NavigationMenuItem[] = []
+
+  // publisher_closer only sees Team Profile
+  if (!auth.isPublisherCloser.value) {
+    items.push({
+      label: 'BPO Profile',
+      icon: 'i-lucide-building-2',
+      to: '/settings/bpo-profile',
+      exact: true
+    })
+  }
+
+  items.push({
     label: 'Team Profile',
     icon: 'i-lucide-users',
     to: '/settings/team-profile',
     exact: true
-  }
-]] satisfies NavigationMenuItem[][]
+  })
+
+  return [items] satisfies NavigationMenuItem[][]
+})
 
 </script>
 
