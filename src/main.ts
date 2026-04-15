@@ -78,9 +78,13 @@ router.beforeEach(async (to) => {
     return { path: '/get-started', query: { redirect: to.fullPath } }
   }
 
-  // publisher_closer can only access /lead-intake
+  // publisher_closer can access /lead-intake and /settings/team-profile
   if (isLoggedIn && auth.isPublisherCloser.value) {
-    const allowed = ['/lead-intake', '/login', '/get-started']
+    // Redirect bare /settings to team-profile (instead of default bpo-profile)
+    if (to.path === '/settings' || to.path === '/settings/bpo-profile') {
+      return { path: '/settings/team-profile' }
+    }
+    const allowed = ['/lead-intake', '/login', '/get-started', '/settings/team-profile']
     if (!allowed.includes(to.path)) {
       return { path: '/lead-intake' }
     }
