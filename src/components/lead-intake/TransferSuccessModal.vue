@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { formatUsPhone } from '../../lib/dnc-lookup'
 
 const props = defineProps<{
@@ -15,14 +15,52 @@ const emit = defineEmits<{
 const toast = useToast()
 const copied = ref(false)
 const copying = ref(false)
+const refreshDelaySeconds = 5
+const refreshCountdown = ref(refreshDelaySeconds)
+const autoRefreshStarted = ref(false)
+let refreshTimer: number | null = null
 
 const displayPhoneNumber = computed(() => {
   const formatted = formatUsPhone(props.leadPhoneNumber)
   return formatted || props.leadPhoneNumber
 })
 
+const clearRefreshTimer = () => {
+  if (!refreshTimer) return
+
+  window.clearInterval(refreshTimer)
+  refreshTimer = null
+}
+
+const refreshLeadIntake = () => {
+  clearRefreshTimer()
+  emit('refresh')
+}
+
+const startRefreshCountdown = () => {
+  clearRefreshTimer()
+  refreshCountdown.value = refreshDelaySeconds
+  autoRefreshStarted.value = false
+
+  refreshTimer = window.setInterval(() => {
+    refreshCountdown.value -= 1
+
+    if (refreshCountdown.value > 0 || autoRefreshStarted.value) return
+
+    autoRefreshStarted.value = true
+    refreshLeadIntake()
+  }, 1000)
+}
+
 watch(() => props.open, (isOpen) => {
-  if (isOpen) copied.value = false
+  if (!isOpen) return
+
+  copied.value = false
+  startRefreshCountdown()
+})
+
+onBeforeUnmount(() => {
+  clearRefreshTimer()
 })
 
 const handleUpdateOpen = (value: boolean) => {
@@ -78,7 +116,7 @@ const copyLeadPhoneNumber = async () => {
                 The transfer has been saved.
               </p>
               <p class="text-sm leading-6 text-emerald-900/85 dark:text-emerald-100/85">
-                Copy the lead number below, then refresh to open a clean lead intake form.
+                Copy the lead number below. Reloading in {{ refreshCountdown }} seconds.
               </p>
             </div>
           </div>
@@ -115,9 +153,9 @@ const copyLeadPhoneNumber = async () => {
             color="primary"
             icon="i-lucide-refresh-cw"
             class="justify-center"
-            @click="emit('refresh')"
+            @click="refreshLeadIntake"
           >
-            Refresh
+            Refresh now
           </UButton>
         </div>
       </div>
