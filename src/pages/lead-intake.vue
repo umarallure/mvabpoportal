@@ -19,6 +19,7 @@ const dncScreenedPhone = ref('')
 const tcpaModalOpen = ref(false)
 const transferSuccessModalOpen = ref(false)
 const submittedLeadPhoneNumber = ref('')
+const leadSubmitted = ref(false)
 
 type DncVerificationStatus = 'idle' | 'clean' | 'warning' | 'danger' | 'invalid' | 'error'
 
@@ -127,7 +128,6 @@ const ensureSubmissionId = () => {
   if (submissionId.value) return submissionId.value
 
   submissionId.value = generateSubmissionId()
-  router.replace({ query: { ...route.query, sid: submissionId.value } })
 
   return submissionId.value
 }
@@ -203,14 +203,21 @@ const refreshLeadIntake = () => {
   window.location.assign(target.href)
 }
 
-const submissionId = ref<string>(
-  typeof route.query.sid === 'string' ? route.query.sid : ''
-)
+const submissionId = ref('')
 
 const generateSubmissionId = (): string => {
   const ts = Date.now().toString()
   const rand = Math.floor(Math.random() * 1_000_000).toString().padStart(6, '0')
   return ts + rand
+}
+
+const clearStaleSubmissionIdFromUrl = () => {
+  if (!('sid' in route.query)) return
+
+  const nextQuery = { ...route.query }
+  delete nextQuery.sid
+
+  router.replace({ query: nextQuery }).catch(() => {})
 }
 
 const form = reactive({
@@ -658,7 +665,7 @@ const countries = [
   { label: 'Zimbabwe', value: 'ZW' }
 ]
 
-const formDisabled = computed(() => !dncVerified.value)
+const formDisabled = computed(() => !dncVerified.value || leadSubmitted.value)
 
 const allowedStateCodes = ref<Set<string>>(new Set())
 const statesLoaded = ref(false)
@@ -737,6 +744,19 @@ const validate = (): string | null => {
 const submitting = ref(false)
 
 const onSubmit = async () => {
+  if (submitting.value) return
+
+  if (leadSubmitted.value) {
+    toast.add({
+      title: 'Lead Already Submitted',
+      description: 'Reloading a fresh intake form.',
+      icon: 'i-lucide-refresh-cw',
+      color: 'warning'
+    })
+    refreshLeadIntake()
+    return
+  }
+
   const leadVendor = auth.state.value.centerContext?.lead_vendor?.trim() || null
   if (!leadVendor) {
     toast.add({
@@ -757,7 +777,7 @@ const onSubmit = async () => {
   submitting.value = true
 
   try {
-    const sid = submissionId.value
+    const sid = ensureSubmissionId()
 
     const [medicalProofUrl, insuranceDocUrl, policeReportUrl] = await Promise.all([
       uploadCategoryFiles(docFiles.value.medical_report,     'medical_report',     sid),
@@ -820,7 +840,25 @@ const onSubmit = async () => {
     }
 
     const { error } = await supabase.from('leads').insert(payload)
-    if (error) throw new Error(error.message)
+    if (error) {
+      if (error.code === '23505' && error.message.includes('leads_submission_id_key')) {
+        leadSubmitted.value = true
+        submissionId.value = ''
+        clearStaleSubmissionIdFromUrl()
+
+        toast.add({
+          title: 'Lead Already Submitted',
+          description: 'This intake form used an old submission ID. Reloading a fresh form.',
+          icon: 'i-lucide-refresh-cw',
+          color: 'warning'
+        })
+
+        window.setTimeout(refreshLeadIntake, 1500)
+        return
+      }
+
+      throw new Error(error.message)
+    }
 
     const edgeBase = String(import.meta.env.VITE_SUPABASE_FUNCTIONS_BASE ?? '').replace(/\/$/, '')
     const slackUrl = `${edgeBase}/functions/v1/lead-intake-notification`
@@ -843,6 +881,9 @@ const onSubmit = async () => {
     }).catch(err => console.warn('[lead-intake] Slack notification failed silently:', err))
 
     submittedLeadPhoneNumber.value = payload.phone_number ?? ''
+    leadSubmitted.value = true
+    submissionId.value = ''
+    clearStaleSubmissionIdFromUrl()
     transferSuccessModalOpen.value = true
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to submit lead. Please try again.'
@@ -854,6 +895,7 @@ const onSubmit = async () => {
 
 onMounted(async () => {
   auth.init().catch(() => {})
+  clearStaleSubmissionIdFromUrl()
 
   try {
     const { data: stateRows, error: stateError } = await supabase
