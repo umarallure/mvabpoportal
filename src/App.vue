@@ -1,11 +1,22 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useStorage } from '@vueuse/core'
 import type { NavigationMenuItem } from '@nuxt/ui'
 
 import { useAuth } from './composables/useAuth'
 import { useNotifications } from './composables/useNotifications'
+
+type HubSpotWindow = Window & typeof globalThis & {
+  HubSpotConversations?: {
+    widget?: {
+      load?: () => void
+      remove?: () => void
+    }
+    on?: (event: string, callback: () => void) => void
+  }
+  hsConversationsOnReady?: Array<() => void>
+}
 
 const toast = useToast()
 const route = useRoute()
@@ -23,6 +34,43 @@ watch(() => auth.state.value.user?.id, (userId) => {
 
 const open = ref(false)
 const sidebarCollapsed = ref(false)
+const chatOpen = ref(false)
+
+const publicPagePaths = ['/login', '/', '/get-started', '/launch-auth', '/managed-auth/callback']
+const isPublicPage = computed(() => publicPagePaths.includes(route.path) || route.path.endsWith('/pdf'))
+const isStandalonePage = computed(() => Boolean(route.meta.standalone))
+
+function withHubSpotReady(callback: () => void) {
+  if (typeof window === 'undefined') return
+
+  const w = window as HubSpotWindow
+
+  if (w.HubSpotConversations?.widget) {
+    callback()
+    return
+  }
+
+  w.hsConversationsOnReady = w.hsConversationsOnReady || []
+  w.hsConversationsOnReady.push(callback)
+}
+
+function loadHubSpotWidget() {
+  withHubSpotReady(() => {
+    const widget = (window as HubSpotWindow).HubSpotConversations?.widget
+    if (!widget) return
+
+    if (isPublicPage.value) {
+      chatOpen.value = false
+      widget.remove?.()
+    } else {
+      widget.load?.()
+    }
+  })
+}
+
+function toggleChat() {
+  chatOpen.value = !chatOpen.value
+}
 
 watch(() => route.path, (newPath, oldPath) => {
   if (newPath === '/product-guide') {
@@ -32,9 +80,16 @@ watch(() => route.path, (newPath, oldPath) => {
   }
 })
 
+watch(() => route.fullPath, () => {
+  nextTick(() => {
+    loadHubSpotWidget()
+  })
+})
+
 onMounted(() => {
   auth.init().catch(() => {
   })
+  loadHubSpotWidget()
 })
 
 const links = computed(() => {
@@ -148,9 +203,6 @@ const links = computed(() => {
   }]] satisfies NavigationMenuItem[][]
 })
 
-const isPublicPage = computed(() => ['/login', '/', '/get-started'].includes(route.path))
-const isStandalonePage = computed(() => Boolean(route.meta.standalone))
-
 const groups = computed(() => [{
   id: 'links',
   label: 'Go to',
@@ -222,6 +274,15 @@ if (cookie.value !== 'accepted') {
               tooltip
               class="mt-auto"
             />
+
+            <button
+              class="w-full flex items-center justify-center gap-2 rounded-md text-sm font-medium transition-colors cursor-pointer bg-primary text-white hover:bg-primary/90"
+              :class="collapsed ? 'p-2' : 'px-2.5 py-2'"
+              @click="toggleChat"
+            >
+              <UIcon name="i-lucide-message-circle" class="size-5 shrink-0" />
+              <span v-if="!collapsed" class="truncate">Chat With Us</span>
+            </button>
           </template>
 
           <template #footer="{ collapsed }">
@@ -234,6 +295,23 @@ if (cookie.value !== 'accepted') {
         <RouterView />
 
         <NotificationsSlideover />
+
+        <div
+          class="fixed z-50 rounded-lg shadow-xl"
+          :class="chatOpen ? 'bottom-16 left-[280px]' : '-left-full'"
+          style="width: 376px; height: 500px;"
+        >
+          <button
+            class="absolute top-2 right-2 z-10 flex items-center justify-center size-7 rounded-full bg-black/40 hover:bg-black/60 text-white cursor-pointer transition-colors"
+            @click="toggleChat"
+          >
+            <UIcon name="i-lucide-x" class="size-4" />
+          </button>
+          <div
+            id="hs-chat-embed"
+            class="w-full h-full overflow-hidden rounded-lg"
+          />
+        </div>
       </UDashboardGroup>
     </UApp>
   </Suspense>
