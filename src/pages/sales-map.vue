@@ -118,16 +118,50 @@ const tooltip = ref<TooltipState>({
 
 const US_STATE_CODES = new Set(US_STATES.map((state) => state.code))
 
+const YELLOW_ACTIVE_STATE_CODES = new Set([
+  'WI',
+  'AK',
+  'AR',
+  'CO',
+  'CT',
+  'DE',
+  'FL',
+  'HI',
+  'ID',
+  'IL',
+  'IN',
+  'IA',
+  'KS',
+  'LA',
+  'ME',
+  'MA',
+  'MI',
+  'MS',
+  'MN',
+  'MO',
+  'MT',
+  'NE',
+  'NV',
+  'NH',
+  'NJ',
+  'NM',
+  'ND',
+  'OH',
+  'OK',
+  'PA',
+  'OR',
+  'RI',
+  'SC',
+  'SD',
+  'UT',
+  'VT',
+  'WA'
+])
+
 const descriptionForStatus = (status: StateData['status']) => {
   if (status === 'permanently_blocked') return 'Temporarily blocked state'
   if (status === 'temporarily_blocked') return 'Blocked state'
   return 'Unblocked state'
-}
-
-const capacityForCount = (count: number): Exclude<StateData['capacity'], null> => {
-  if (count >= 3) return 'high'
-  if (count === 2) return 'medium'
-  return 'low'
 }
 
 const capacityLabel = (capacity: StateData['capacity']) => {
@@ -275,6 +309,7 @@ const refreshCounts = async () => {
     statesData.value = US_STATES.map((s) => {
       const row = mapByCode.get(s.code)
       const normalizedStatus = String(row?.availability_status || '').trim().toLowerCase()
+      const isYellowActiveState = YELLOW_ACTIVE_STATE_CODES.has(s.code)
       const status: StateData['status'] = normalizedStatus === 'unblocked'
         ? 'unblocked'
         : normalizedStatus === 'permanently_blocked'
@@ -282,17 +317,20 @@ const refreshCounts = async () => {
           : 'temporarily_blocked'
 
       const attorneyCount = attorneyCounts.get(s.code)?.size ?? 0
-      const capacity = status === 'unblocked' ? 'high' : null
+      const resolvedStatus: StateData['status'] = isYellowActiveState ? 'unblocked' : status
+      const capacity = resolvedStatus === 'unblocked'
+        ? isYellowActiveState ? 'medium' : 'high'
+        : null
 
       return {
         code: s.code,
         name: String(row?.state_name || s.name),
-        status,
+        status: resolvedStatus,
         capacity,
         attorneyCount,
-        description: status === 'unblocked'
+        description: resolvedStatus === 'unblocked'
           ? `${capacityLabel(capacity)}`
-          : descriptionForStatus(status),
+          : descriptionForStatus(resolvedStatus),
         notes: row?.notes ?? null
       }
     })
