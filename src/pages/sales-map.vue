@@ -158,6 +158,10 @@ const YELLOW_ACTIVE_STATE_CODES = new Set([
   'WA'
 ])
 
+const BLOCKED_STATE_CODES = new Set([
+  'NC'
+])
+
 const descriptionForStatus = (status: StateData['status']) => {
   if (status === 'permanently_blocked') return 'Temporarily blocked state'
   if (status === 'temporarily_blocked') return 'Blocked state'
@@ -309,6 +313,7 @@ const refreshCounts = async () => {
     statesData.value = US_STATES.map((s) => {
       const row = mapByCode.get(s.code)
       const normalizedStatus = String(row?.availability_status || '').trim().toLowerCase()
+      const isBlockedState = BLOCKED_STATE_CODES.has(s.code)
       const isYellowActiveState = YELLOW_ACTIVE_STATE_CODES.has(s.code)
       const status: StateData['status'] = normalizedStatus === 'unblocked'
         ? 'unblocked'
@@ -317,7 +322,11 @@ const refreshCounts = async () => {
           : 'temporarily_blocked'
 
       const attorneyCount = attorneyCounts.get(s.code)?.size ?? 0
-      const resolvedStatus: StateData['status'] = isYellowActiveState ? 'unblocked' : status
+      const resolvedStatus: StateData['status'] = isBlockedState
+        ? 'temporarily_blocked'
+        : isYellowActiveState
+          ? 'unblocked'
+          : status
       const capacity = resolvedStatus === 'unblocked'
         ? isYellowActiveState ? 'medium' : 'high'
         : null
