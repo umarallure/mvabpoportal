@@ -667,8 +667,7 @@ const countries = [
 
 const formDisabled = computed(() => !dncVerified.value || leadSubmitted.value)
 
-const additionalAllowedLeadStateCodes = ['MA', 'LA', 'MI']
-const allowedStateCodes = ref<Set<string>>(new Set(additionalAllowedLeadStateCodes))
+const allowedStateCodes = ref<Set<string>>(new Set())
 const statesLoaded = ref(false)
 
 const stateBlockedError = computed(() => {
@@ -907,10 +906,9 @@ onMounted(async () => {
     if (stateError) {
       console.warn('[lead-intake] Failed to fetch allowed states:', stateError.message)
     } else if (stateRows && stateRows.length > 0) {
-      allowedStateCodes.value = new Set([
-        ...additionalAllowedLeadStateCodes,
-        ...stateRows.map((r: { state_code: string }) => r.state_code.trim().toUpperCase()).filter(Boolean)
-      ])
+      allowedStateCodes.value = new Set(
+        stateRows.map((r: { state_code: string }) => r.state_code.trim().toUpperCase()).filter(Boolean)
+      )
     }
   } catch (e) {
     console.warn('[lead-intake] Unexpected error fetching allowed states:', e)
