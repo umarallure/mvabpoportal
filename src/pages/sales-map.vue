@@ -95,6 +95,7 @@ type AttorneyProfileRow = {
   primary_email?: string | null
   personal_email?: string | null
   licensed_states?: string[] | null
+  blocked_states?: string[] | null
   account_type?: string | null
 }
 
@@ -118,16 +119,23 @@ const tooltip = ref<TooltipState>({
 
 const US_STATE_CODES = new Set(US_STATES.map((state) => state.code))
 
+const GREEN_ACTIVE_STATE_CODES = new Set([
+  'WY',
+  'AZ',
+  'TX',
+  'GA',
+  'FL',
+  'NY'
+])
+
+const TEMPORARILY_UNAVAILABLE_STATE_CODES = new Set([
+  'CA'
+])
+
 const descriptionForStatus = (status: StateData['status']) => {
   if (status === 'permanently_blocked') return 'Temporarily blocked state'
   if (status === 'temporarily_blocked') return 'Blocked state'
   return 'Unblocked state'
-}
-
-const capacityForCount = (count: number): Exclude<StateData['capacity'], null> => {
-  if (count >= 3) return 'high'
-  if (count === 2) return 'medium'
-  return 'low'
 }
 
 const capacityLabel = (capacity: StateData['capacity']) => {
@@ -212,7 +220,7 @@ const refreshCounts = async () => {
         .eq('lawyer_type', 'broker_lawyer'),
       supabase
         .from('attorney_profiles')
-        .select('user_id,full_name,firm_name,primary_email,personal_email,licensed_states,account_type')
+        .select('user_id,full_name,firm_name,primary_email,personal_email,licensed_states,blocked_states,account_type')
         .eq('account_type', 'internal_lawyer')
     ])
 
@@ -238,8 +246,10 @@ const refreshCounts = async () => {
 
     const attorneyCounts = new Map<string, Set<string>>()
 
-    const addAttorneyStates = (lawyerKey: string, stateCodes: string[]) => {
+    const addAttorneyStates = (lawyerKey: string, stateCodes: string[], blockedStateCodes: string[]) => {
+      const blocked = new Set(blockedStateCodes)
       for (const code of stateCodes) {
+        if (blocked.has(code)) continue
         const existing = attorneyCounts.get(code) ?? new Set<string>()
         existing.add(lawyerKey)
         attorneyCounts.set(code, existing)
@@ -254,9 +264,9 @@ const refreshCounts = async () => {
       const attorneyId = String(row.attorney_id ?? '').trim()
       const attorneyName = String(row.attorney_name ?? '').trim()
       const lawyerKey = `broker:${attorneyId || attorneyName}`
-      if (!lawyerKey || lawyerKey === 'broker:') continue
+      if (!attorneyId && !attorneyName) continue
 
-      addAttorneyStates(lawyerKey, stateCodes)
+      addAttorneyStates(lawyerKey, stateCodes, [])
     }
 
     for (const row of (attorneyProfileRows ?? []) as AttorneyProfileRow[]) {
@@ -267,32 +277,32 @@ const refreshCounts = async () => {
       const userId = String(row.user_id ?? '').trim()
       const fullName = String(row.full_name ?? '').trim()
       const lawyerKey = `internal:${userId || fullName}`
-      if (!lawyerKey || lawyerKey === 'internal:') continue
+      if (!userId && !fullName) continue
 
-      addAttorneyStates(lawyerKey, stateCodes)
+      addAttorneyStates(lawyerKey, stateCodes, toStateCodes(row.blocked_states))
     }
 
     statesData.value = US_STATES.map((s) => {
       const row = mapByCode.get(s.code)
-      const normalizedStatus = String(row?.availability_status || '').trim().toLowerCase()
-      const status: StateData['status'] = normalizedStatus === 'unblocked'
-        ? 'unblocked'
-        : normalizedStatus === 'permanently_blocked'
-          ? 'permanently_blocked'
-          : 'temporarily_blocked'
-
       const attorneyCount = attorneyCounts.get(s.code)?.size ?? 0
-      const capacity = status === 'unblocked' ? 'high' : null
+      const resolvedStatus: StateData['status'] = TEMPORARILY_UNAVAILABLE_STATE_CODES.has(s.code)
+        ? 'permanently_blocked'
+        : attorneyCount > 0
+        ? 'unblocked'
+        : 'temporarily_blocked'
+      const capacity = resolvedStatus === 'unblocked'
+        ? GREEN_ACTIVE_STATE_CODES.has(s.code) ? 'high' : 'medium'
+        : null
 
       return {
         code: s.code,
         name: String(row?.state_name || s.name),
-        status,
+        status: resolvedStatus,
         capacity,
         attorneyCount,
-        description: status === 'unblocked'
+        description: resolvedStatus === 'unblocked'
           ? `${capacityLabel(capacity)}`
-          : descriptionForStatus(status),
+          : descriptionForStatus(resolvedStatus),
         notes: row?.notes ?? null
       }
     })

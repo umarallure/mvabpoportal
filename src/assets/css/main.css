@@ -123,6 +123,19 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+#hubspot-messages-iframe-container {
+  display: none !important;
+}
+
+#hs-chat-embed > *,
+#hs-chat-embed > * > *,
+#hs-chat-embed iframe {
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+  color-scheme: light !important;
+}
+
 @keyframes dashboard-fade-up {
   from {
     opacity: 0;
