@@ -7,6 +7,7 @@ interface TeamMember {
   id: string
   lawyer_id: string
   publisher_id: string | null
+  center_id: string | null
   full_name: string
   email: string | null
   phone: string | null
@@ -35,6 +36,7 @@ const deleteModal = ref(false)
 const deleteTarget = ref<TeamMember | null>(null)
 
 const ownerUserId = computed(() => auth.state.value.user?.id ?? '')
+const centerId = computed(() => auth.state.value.profile?.center_id ?? '')
 
 const POSITION_OPTIONS = [
   { label: 'Accounting', value: 'accounting' },
@@ -85,14 +87,19 @@ const memberCountLabel = computed(() => {
 })
 
 const loadMembers = async () => {
-  if (!ownerUserId.value) return
+  if (!ownerUserId.value && !centerId.value) return
   loading.value = true
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('team_members')
       .select('*')
-      .or(`publisher_id.eq.${ownerUserId.value},lawyer_id.eq.${ownerUserId.value}`)
       .order('full_name', { ascending: true })
+
+    query = centerId.value
+      ? query.eq('center_id', centerId.value)
+      : query.or(`publisher_id.eq.${ownerUserId.value},lawyer_id.eq.${ownerUserId.value}`)
+
+    const { data, error } = await query
 
     if (error) throw error
     members.value = data ?? []
@@ -125,7 +132,10 @@ const addMember = async () => {
   try {
     const payload = {
       lawyer_id: ownerUserId.value,
-      publisher_id: ownerUserId.value,
+      center_id: centerId.value || null,
+      // BPO center teams are scoped by center_id. Keep publisher_id only for
+      // legacy rows created before centers were available.
+      publisher_id: centerId.value ? null : ownerUserId.value,
       full_name: form.full_name.trim(),
       email: form.email.trim() || null,
       phone: form.phone.trim() || null,
@@ -198,10 +208,16 @@ const saveEdit = async () => {
       shift_availability: editForm.shift_availability
     }
 
-    const { error } = await supabase
+    let query = supabase
       .from('team_members')
       .update(payload)
       .eq('id', editForm.id)
+
+    if (centerId.value) {
+      query = query.eq('center_id', centerId.value)
+    }
+
+    const { error } = await query
 
     if (error) throw error
 
@@ -237,10 +253,16 @@ const executeDelete = async () => {
   deleting.value = member.id
   deleteModal.value = false
   try {
-    const { error } = await supabase
+    let query = supabase
       .from('team_members')
       .delete()
       .eq('id', member.id)
+
+    if (centerId.value) {
+      query = query.eq('center_id', centerId.value)
+    }
+
+    const { error } = await query
 
     if (error) throw error
 

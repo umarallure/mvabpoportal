@@ -78,9 +78,13 @@ router.beforeEach(async (to) => {
     return { path: '/get-started', query: { redirect: to.fullPath } }
   }
 
-  // publisher_closer can only access /lead-intake
+  // publisher_closer can access intake and the center-scoped team page.
   if (isLoggedIn && auth.isPublisherCloser.value) {
-    const allowed = ['/lead-intake', '/login', '/get-started']
+    if (to.path === '/settings' || to.path === '/settings/bpo-profile') {
+      return { path: '/settings/team-profile' }
+    }
+
+    const allowed = ['/lead-intake', '/settings/team-profile', '/login', '/get-started']
     if (!allowed.includes(to.path)) {
       return { path: '/lead-intake' }
     }
