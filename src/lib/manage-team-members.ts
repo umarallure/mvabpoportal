@@ -1,15 +1,16 @@
 export type TeamMemberRow = {
   id: string
-  lawyer_id: string
-  publisher_id: string
+  user_id: string | null
+  center_id: string
   full_name: string
   email: string | null
   phone: string | null
   position: string
   position_other: string | null
   shift_availability: string
+  state: string | null
   has_portal_access: boolean
-  portal_role: string | null
+  portal_role: 'publisher_admin' | 'publisher_closer' | null
   created_at: string
   updated_at: string
 }

@@ -107,49 +107,46 @@ Deno.serve(async (req) => {
     if (!ctx.ok) return ctx.res
     const { centerId, adminClient, userId } = ctx
 
-    /** Get all publisher-role user IDs in the caller's center */
-    const getCenterUserIds = async (): Promise<string[]> => {
-      const { data, error } = await adminClient
-        .from('app_users')
-        .select('user_id')
-        .eq('center_id', centerId)
-        .in('role', ['publisher_admin', 'publisher_closer'])
-
-      if (error) throw new Error(error.message)
-      return (data ?? []).map((row: { user_id: string }) => row.user_id)
-    }
-
     // ── GET: list team members for the caller's center ────────────────────
     if (req.method === 'GET') {
-      const userIds = await getCenterUserIds()
-      if (!userIds.length) return json(200, { members: [] })
-
       const { data: members, error: membersErr } = await adminClient
-        .from('team_members')
+        .from('bpo_team_members')
         .select('*')
-        .in('publisher_id', userIds)
+        .eq('center_id', centerId)
         .order('full_name', { ascending: true })
 
       if (membersErr) return json(500, { error: membersErr.message })
 
-      // Enrich with app_users data to indicate portal access
-      const { data: appUsers } = await adminClient
-        .from('app_users')
-        .select('user_id, email, role')
-        .in('user_id', userIds)
+      const memberUserIds = Array.from(
+        new Set(
+          (members ?? [])
+            .map((member: { user_id: string | null }) => member.user_id)
+            .filter((id: string | null): id is string => Boolean(id))
+        )
+      )
+
+      const { data: appUsers } = memberUserIds.length
+        ? await adminClient
+          .from('app_users')
+          .select('user_id, email, role, center_id')
+          .in('user_id', memberUserIds)
+        : { data: [] }
 
       const appUserMap = new Map(
-        (appUsers ?? []).map((u: { user_id: string; email: string; role: string }) => [u.user_id, u])
+        (appUsers ?? []).map((u: { user_id: string; email: string; role: string; center_id: string | null }) => [u.user_id, u])
       )
 
       const enrichedMembers = (members ?? []).map((member: Record<string, unknown>) => {
-        const appUser = appUserMap.get(member.publisher_id as string) as
-          | { user_id: string; email: string; role: string }
+        const appUser = appUserMap.get(member.user_id as string) as
+          | { user_id: string; email: string; role: string; center_id: string | null }
           | undefined
 
-        // A member "has portal access" when their publisher_id maps to an
-        // app_users record whose email matches the team_members email.
-        const hasPortalAccess = Boolean(appUser && appUser.email === member.email)
+        const hasPortalAccess = Boolean(
+          appUser
+            && appUser.center_id === centerId
+            && ASSIGNABLE_PUBLISHER_ROLES.has(appUser.role)
+            && appUser.email === member.email
+        )
 
         return {
           ...member,
@@ -210,11 +207,11 @@ Deno.serve(async (req) => {
           email,
           display_name: fullName,
           role: assignedRole,
-          center_id: centerId
+          center_id: centerId,
+          account_status: 'active'
         })
 
       if (appUserErr) {
-        // Rollback: delete auth user
         console.log('[manage-team-members] app_users failed, rolling back', appUserErr.message)
         await adminClient.auth.admin.deleteUser(newUserId)
         return json(500, { error: appUserErr.message })
@@ -229,12 +226,12 @@ Deno.serve(async (req) => {
         console.log('[manage-team-members] WARNING: profiles sync failed', profileErr.message)
       }
 
-      // 4. Create team_members record
+      // 4. Create bpo_team_members record
       const { data: teamMember, error: teamMemberErr } = await adminClient
-        .from('team_members')
+        .from('bpo_team_members')
         .insert({
-          lawyer_id: newUserId,
-          publisher_id: newUserId,
+          user_id: newUserId,
+          center_id: centerId,
           full_name: fullName,
           email,
           phone,
@@ -246,7 +243,10 @@ Deno.serve(async (req) => {
         .single()
 
       if (teamMemberErr) {
-        console.log('[manage-team-members] WARNING: team_members insert failed', teamMemberErr.message)
+        console.log('[manage-team-members] bpo_team_members insert failed, rolling back', teamMemberErr.message)
+        await adminClient.from('app_users').delete().eq('user_id', newUserId)
+        await adminClient.auth.admin.deleteUser(newUserId)
+        return json(500, { error: teamMemberErr.message })
       }
 
       console.log('[manage-team-members] team member created', newUserId)
@@ -265,32 +265,34 @@ Deno.serve(async (req) => {
 
       if (!memberId) return json(400, { error: 'Team member ID is required' })
 
-      // Verify member is in same center
       const { data: member, error: memberErr } = await adminClient
-        .from('team_members')
-        .select('id, publisher_id, email')
+        .from('bpo_team_members')
+        .select('id, user_id, email')
         .eq('id', memberId)
+        .eq('center_id', centerId)
         .maybeSingle()
 
       if (memberErr) return json(500, { error: memberErr.message })
       if (!member) return json(404, { error: 'Team member not found' })
 
-      const centerUserIds = await getCenterUserIds()
-      if (!centerUserIds.includes(member.publisher_id)) {
-        return json(403, { error: 'Cannot edit team members from another center' })
-      }
+      const { data: targetUser } = member.user_id
+        ? await adminClient
+          .from('app_users')
+          .select('email, role, center_id')
+          .eq('user_id', member.user_id)
+          .maybeSingle()
+        : { data: null }
+
+      const hasPortalAccount = Boolean(
+        targetUser
+          && targetUser.center_id === centerId
+          && ASSIGNABLE_PUBLISHER_ROLES.has(targetUser.role)
+          && targetUser.email === member.email
+      )
 
       // publisher_closer cannot edit publisher_admin members
-      if (ctx.role === 'publisher_closer') {
-        const { data: targetUser } = await adminClient
-          .from('app_users')
-          .select('role')
-          .eq('user_id', member.publisher_id)
-          .maybeSingle()
-
-        if (targetUser?.role === 'publisher_admin') {
-          return json(403, { error: 'You cannot edit admin team members' })
-        }
+      if (ctx.role === 'publisher_closer' && hasPortalAccount && targetUser?.role === 'publisher_admin') {
+        return json(403, { error: 'You cannot edit admin team members' })
       }
 
       // Handle role change (only publisher_admin / admin / super_admin can do this)
@@ -300,6 +302,9 @@ Deno.serve(async (req) => {
         if (!ASSIGNABLE_PUBLISHER_ROLES.has(roleVal)) return json(400, { error: 'Invalid role' })
         if (ctx.role === 'publisher_closer') {
           return json(403, { error: 'Only admins can change team member roles' })
+        }
+        if (!hasPortalAccount) {
+          return json(400, { error: 'Only portal accounts can have roles' })
         }
         newRole = roleVal
       }
@@ -322,24 +327,24 @@ Deno.serve(async (req) => {
 
       if (Object.keys(patch).length === 0 && !newRole) return json(400, { error: 'No fields to update' })
 
-      // Update team_members fields if any
       let updated: Record<string, unknown> | null = null
       if (Object.keys(patch).length > 0) {
         const { data, error: updateErr } = await adminClient
-          .from('team_members')
+          .from('bpo_team_members')
           .update(patch)
           .eq('id', memberId)
+          .eq('center_id', centerId)
           .select()
           .single()
 
         if (updateErr) return json(500, { error: updateErr.message })
         updated = data
       } else {
-        // No team_members fields to change, fetch current record for response
         const { data } = await adminClient
-          .from('team_members')
+          .from('bpo_team_members')
           .select('*')
           .eq('id', memberId)
+          .eq('center_id', centerId)
           .single()
         updated = data
       }
@@ -349,11 +354,11 @@ Deno.serve(async (req) => {
       if (patch.full_name) appPatch.display_name = patch.full_name
       if (newRole) appPatch.role = newRole
 
-      if (Object.keys(appPatch).length > 0) {
+      if (hasPortalAccount && member.user_id && Object.keys(appPatch).length > 0) {
         const { error: syncErr } = await adminClient
           .from('app_users')
           .update(appPatch)
-          .eq('user_id', member.publisher_id)
+          .eq('user_id', member.user_id)
 
         if (syncErr) {
           console.log('[manage-team-members] WARNING: app_users sync failed', syncErr.message)
@@ -371,75 +376,63 @@ Deno.serve(async (req) => {
       if (!memberId) return json(400, { error: 'Team member ID is required' })
 
       const { data: member, error: memberErr } = await adminClient
-        .from('team_members')
-        .select('id, publisher_id, email')
+        .from('bpo_team_members')
+        .select('id, user_id, email')
         .eq('id', memberId)
+        .eq('center_id', centerId)
         .maybeSingle()
 
       if (memberErr) return json(500, { error: memberErr.message })
       if (!member) return json(404, { error: 'Team member not found' })
 
-      const centerUserIds = await getCenterUserIds()
-      if (!centerUserIds.includes(member.publisher_id)) {
-        return json(403, { error: 'Cannot delete team members from another center' })
-      }
-
       // Prevent self-deletion
-      if (member.publisher_id === userId) {
+      if (member.user_id === userId) {
         return json(400, { error: 'You cannot remove yourself from the team' })
       }
 
-      // publisher_closer cannot delete publisher_admin members
-      if (ctx.role === 'publisher_closer') {
-        const { data: targetUser } = await adminClient
+      const { data: targetUser } = member.user_id
+        ? await adminClient
           .from('app_users')
-          .select('role')
-          .eq('user_id', member.publisher_id)
+          .select('email, role, center_id')
+          .eq('user_id', member.user_id)
           .maybeSingle()
+        : { data: null }
 
-        if (targetUser?.role === 'publisher_admin') {
-          return json(403, { error: 'You cannot remove admin team members' })
-        }
+      // publisher_closer cannot delete publisher_admin members
+      if (ctx.role === 'publisher_closer' && targetUser?.role === 'publisher_admin') {
+        return json(403, { error: 'You cannot remove admin team members' })
       }
 
-      // Determine if this team member has their own portal account.
-      // For records created via this flow: publisher_id = the member's own user_id,
-      // and the app_users email matches the team_members email.
-      // For legacy informational records: publisher_id = the creator's user_id,
-      // and the emails will differ.
-      const { data: publisherUser } = await adminClient
-        .from('app_users')
-        .select('email')
-        .eq('user_id', member.publisher_id)
-        .maybeSingle()
+      const hasPortalAccount = Boolean(
+        targetUser
+          && targetUser.center_id === centerId
+          && ASSIGNABLE_PUBLISHER_ROLES.has(targetUser.role)
+          && targetUser.email === member.email
+      )
 
-      const isSelfOwnedPortalAccount =
-        publisherUser && publisherUser.email === member.email
-
-      // 1. Delete team_members record
+      // 1. Delete bpo_team_members record
       const { error: tmDelErr } = await adminClient
-        .from('team_members')
+        .from('bpo_team_members')
         .delete()
         .eq('id', memberId)
+        .eq('center_id', centerId)
 
       if (tmDelErr) return json(500, { error: tmDelErr.message })
 
       // 2. If the member has their own portal account, remove it
-      if (isSelfOwnedPortalAccount) {
-        console.log('[manage-team-members] deleting portal account for', member.publisher_id)
+      if (hasPortalAccount && member.user_id) {
+        console.log('[manage-team-members] deleting portal account for', member.user_id)
 
         const { error: appDelErr } = await adminClient
           .from('app_users')
           .delete()
-          .eq('user_id', member.publisher_id)
+          .eq('user_id', member.user_id)
 
         if (appDelErr) {
           console.log('[manage-team-members] WARNING: app_users delete failed', appDelErr.message)
         }
 
-        const { error: authDelErr } = await adminClient.auth.admin.deleteUser(
-          member.publisher_id
-        )
+        const { error: authDelErr } = await adminClient.auth.admin.deleteUser(member.user_id)
         if (authDelErr) {
           console.log('[manage-team-members] WARNING: auth user delete failed', authDelErr.message)
         }

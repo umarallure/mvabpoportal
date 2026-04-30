@@ -1,20 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useAuth } from '../../composables/useAuth'
-import { supabase } from '../../lib/supabase'
-
-interface TeamMember {
-  id: string
-  lawyer_id: string
-  publisher_id: string | null
-  center_id: string | null
-  full_name: string
-  email: string | null
-  phone: string | null
-  position: string
-  position_other: string | null
-  shift_availability: string
-}
+import {
+  listTeamMembers,
+  createTeamMember,
+  updateTeamMember,
+  deleteTeamMember,
+  type TeamMemberRow
+} from '../../lib/manage-team-members'
 
 const auth = useAuth()
 const toast = useToast()
@@ -36,8 +29,6 @@ const editForm = reactive({ full_name: '', phone: '', position: '', position_oth
 const deleteModal = ref(false)
 const deleteTarget = ref<TeamMemberRow | null>(null)
 
-const ownerUserId = computed(() => auth.state.value.user?.id ?? '')
-const centerId = computed(() => auth.state.value.profile?.center_id ?? '')
 const accessToken = computed(() => auth.state.value.session?.access_token ?? '')
 const currentUserId = computed(() => auth.state.value.user?.id ?? '')
 const callerRole = computed(() => auth.state.value.profile?.role ?? '')
@@ -118,7 +109,6 @@ const memberCountLabel = computed(() => {
 
 const loadMembers = async () => {
   if (!accessToken.value) return
-  if (!ownerUserId.value && !centerId.value) return
   loading.value = true
   try {
     const { members: data } = await listTeamMembers(accessToken.value)
@@ -183,12 +173,6 @@ const addMember = async () => {
     await createTeamMember(accessToken.value, {
       email: form.email.trim(),
       password: form.password,
-    const payload = {
-      lawyer_id: ownerUserId.value,
-      center_id: centerId.value || null,
-      // BPO center teams are scoped by center_id. Keep publisher_id only for
-      // legacy rows created before centers were available.
-      publisher_id: centerId.value ? null : ownerUserId.value,
       full_name: form.full_name.trim(),
       role: form.role,
       phone: form.phone.trim() || null,
@@ -275,19 +259,6 @@ const saveEdit = async () => {
     }
     await updateTeamMember(accessToken.value, updatePayload)
 
-    let query = supabase
-      .from('team_members')
-      .update(payload)
-      .eq('id', editForm.id)
-
-    if (centerId.value) {
-      query = query.eq('center_id', centerId.value)
-    }
-
-    const { error } = await query
-
-    if (error) throw error
-
     toast.add({
       title: 'Member updated',
       description: `${editForm.full_name.trim()} has been updated.`,
@@ -323,18 +294,6 @@ const executeDelete = async () => {
   deleteModal.value = false
   try {
     await deleteTeamMember(accessToken.value, member.id)
-    let query = supabase
-      .from('team_members')
-      .delete()
-      .eq('id', member.id)
-
-    if (centerId.value) {
-      query = query.eq('center_id', centerId.value)
-    }
-
-    const { error } = await query
-
-    if (error) throw error
 
     toast.add({
       title: 'Member removed',
@@ -359,7 +318,7 @@ const executeDelete = async () => {
   }
 }
 
-const isSelf = (member: TeamMemberRow) => member.publisher_id === currentUserId.value
+const isSelf = (member: TeamMemberRow) => member.user_id === currentUserId.value
 
 const canEdit = (member: TeamMemberRow) => {
   if (isSelf(member)) return true
@@ -375,6 +334,7 @@ const canDelete = (member: TeamMemberRow) => {
 
 onMounted(async () => {
   await auth.init()
+  await auth.refreshProfile()
   await loadMembers()
 })
 </script>

@@ -95,20 +95,7 @@ onMounted(() => {
 const links = computed(() => {
   const role = auth.state.value.profile?.role ?? ''
 
-  // publisher_closer sees Lead Intake + Team Profile
-  // Publisher closers keep intake access plus their center team page.
   if (role === 'publisher_closer') {
-    return [[{
-      label: 'Lead Intake',
-      icon: 'i-lucide-clipboard-pen',
-      to: '/lead-intake',
-      onSelect: () => { open.value = false }
-    }, {
-      label: 'Team Profile',
-      icon: 'i-lucide-users',
-      to: '/settings/team-profile',
-      onSelect: () => { open.value = false }
-    }]] satisfies NavigationMenuItem[][]
     return [[
       {
         label: 'Lead Intake',
@@ -122,7 +109,7 @@ const links = computed(() => {
         to: '/settings/team-profile',
         onSelect: () => { open.value = false }
       }
-    ]] satisfies NavigationMenuItem[][]
+    ], []] satisfies NavigationMenuItem[][]
   }
 
   return [[{
