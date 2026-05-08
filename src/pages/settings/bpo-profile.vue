@@ -7,6 +7,7 @@ import { useAuth } from '../../composables/useAuth'
 import { supabase } from '../../lib/supabase'
 
 type BpoProfileRow = Partial<{
+  id: string
   center_name: string | null
   location: string | null
   website_or_linkedin: string | null
@@ -15,11 +16,13 @@ type BpoProfileRow = Partial<{
   number_of_agents: string | null
   languages: string[] | null
   operating_hours: string | null
-  case_rate_per_deal: number | null
-  upfront_payment_percentage: number | null
-  payment_window_days: number | null
-  chargeback_window_days: number | null
 }>
+
+const CENTER_PROFILE_SELECT =
+  'id,center_name,location,website_or_linkedin,contact_email,contact_phone,number_of_agents,languages,operating_hours'
+
+// Pricing has no current persistence target in the centers schema.
+const showPricingFields = false
 
 const profileSchema = z.object({
   centerName: z.string().trim().min(2, 'BPO / Center name is required'),
@@ -84,10 +87,10 @@ const hydrateFromDb = (data?: BpoProfileRow | null) => {
   profile.numberOfAgents = data?.number_of_agents ?? ''
   profile.languages = data?.languages ?? []
   profile.operatingHours = data?.operating_hours ?? ''
-  profile.caseRatePerDeal = data?.case_rate_per_deal ?? ''
-  profile.upfrontPaymentPercentage = data?.upfront_payment_percentage ?? ''
-  profile.paymentWindowDays = data?.payment_window_days ?? ''
-  profile.chargebackWindowDays = data?.chargeback_window_days ?? ''
+  profile.caseRatePerDeal = ''
+  profile.upfrontPaymentPercentage = ''
+  profile.paymentWindowDays = ''
+  profile.chargebackWindowDays = ''
 }
 
 const loadProfile = async () => {
@@ -96,9 +99,9 @@ const loadProfile = async () => {
   loading.value = true
   try {
     const { data, error } = await supabase
-      .from('bpo_profiles')
-      .select('*')
-      .eq('center_id', centerId.value)
+      .from('centers')
+      .select(CENTER_PROFILE_SELECT)
+      .eq('id', centerId.value)
       .maybeSingle()
 
     if (error) throw error
@@ -128,7 +131,6 @@ async function onSubmit(event: FormSubmitEvent<ProfileSchema>) {
   saving.value = true
   try {
     const payload = {
-      center_id: centerId.value,
       center_name: event.data.centerName.trim(),
       location: event.data.location?.trim() || null,
       website_or_linkedin: event.data.websiteOrLinkedIn?.trim() || null,
@@ -136,17 +138,14 @@ async function onSubmit(event: FormSubmitEvent<ProfileSchema>) {
       contact_phone: event.data.contactPhone?.trim() || null,
       number_of_agents: event.data.numberOfAgents?.trim() || null,
       languages: event.data.languages ?? [],
-      operating_hours: event.data.operatingHours?.trim() || null,
-      case_rate_per_deal: event.data.caseRatePerDeal === '' ? null : (event.data.caseRatePerDeal ?? null),
-      upfront_payment_percentage: event.data.upfrontPaymentPercentage === '' ? null : (event.data.upfrontPaymentPercentage ?? null),
-      payment_window_days: event.data.paymentWindowDays === '' ? null : (event.data.paymentWindowDays ?? null),
-      chargeback_window_days: event.data.chargebackWindowDays === '' ? null : (event.data.chargebackWindowDays ?? null)
+      operating_hours: event.data.operatingHours?.trim() || null
     }
 
     const { error, data } = await supabase
-      .from('bpo_profiles')
-      .upsert(payload, { onConflict: 'center_id' })
-      .select('*')
+      .from('centers')
+      .update(payload)
+      .eq('id', centerId.value)
+      .select(CENTER_PROFILE_SELECT)
       .single()
 
     if (error) throw error
@@ -192,7 +191,6 @@ const cancelEditing = async () => {
     @submit="onSubmit"
   >
     <div class="mx-auto w-full max-w-5xl space-y-5 pb-8">
-
       <!-- ═══ Page Header ════════════════════════════════════════════════ -->
       <div class="ap-fade-in ap-delay-1 flex items-center justify-between gap-4">
         <div class="flex items-center gap-3">
@@ -201,8 +199,12 @@ const cancelEditing = async () => {
             <span class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#1a1a1a] bg-emerald-400" />
           </div>
           <div>
-            <h1 class="text-xl font-bold text-highlighted">BPO Profile</h1>
-            <p class="text-[11px] text-muted">Tell us about your center so we can tailor workflows and reporting</p>
+            <h1 class="text-xl font-bold text-highlighted">
+              BPO Profile
+            </h1>
+            <p class="text-[11px] text-muted">
+              Tell us about your center so we can tailor workflows and reporting
+            </p>
           </div>
         </div>
 
@@ -242,7 +244,6 @@ const cancelEditing = async () => {
 
       <!-- ═══ 3-Column Card Grid ════════════════════════════════════════ -->
       <div class="ap-fade-in ap-delay-2 grid grid-cols-1 items-stretch gap-5">
-
         <!-- ── Card 1: Basic Identity ── -->
         <div class="relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
           <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
@@ -265,27 +266,63 @@ const cancelEditing = async () => {
           <div class="relative flex-1 space-y-4 p-4 sm:p-5">
             <div class="space-y-1.5">
               <label class="text-xs font-medium text-highlighted">BPO / Center Name <span class="text-red-400/80">*</span></label>
-              <UInput v-model="profile.centerName" size="sm" placeholder="Acme BPO" autocomplete="organization" disabled class="w-full" />
+              <UInput
+                v-model="profile.centerName"
+                size="sm"
+                placeholder="Acme BPO"
+                autocomplete="organization"
+                disabled
+                class="w-full"
+              />
             </div>
 
             <div class="space-y-1.5">
               <label class="text-xs font-medium text-highlighted">Location</label>
-              <UInput v-model="profile.location" size="sm" placeholder="Manila, Philippines" autocomplete="off" :disabled="disabled" class="w-full" />
+              <UInput
+                v-model="profile.location"
+                size="sm"
+                placeholder="Manila, Philippines"
+                autocomplete="off"
+                :disabled="disabled"
+                class="w-full"
+              />
             </div>
 
             <div class="space-y-1.5">
               <label class="text-xs font-medium text-highlighted">Website / LinkedIn</label>
-              <UInput v-model="profile.websiteOrLinkedIn" size="sm" placeholder="https://www.example.com" autocomplete="off" :disabled="disabled" class="w-full" />
+              <UInput
+                v-model="profile.websiteOrLinkedIn"
+                size="sm"
+                placeholder="https://www.example.com"
+                autocomplete="off"
+                :disabled="disabled"
+                class="w-full"
+              />
             </div>
 
             <div class="space-y-1.5">
               <label class="text-xs font-medium text-highlighted">Contact Email</label>
-              <UInput v-model="profile.contactEmail" size="sm" type="email" placeholder="ops@acmebpo.com" autocomplete="email" :disabled="disabled" class="w-full" />
+              <UInput
+                v-model="profile.contactEmail"
+                size="sm"
+                type="email"
+                placeholder="ops@acmebpo.com"
+                autocomplete="email"
+                :disabled="disabled"
+                class="w-full"
+              />
             </div>
 
             <div class="space-y-1.5">
               <label class="text-xs font-medium text-highlighted">Contact Phone</label>
-              <UInput v-model="profile.contactPhone" size="sm" placeholder="+1 (555) 123-4567" autocomplete="tel" :disabled="disabled" class="w-full" />
+              <UInput
+                v-model="profile.contactPhone"
+                size="sm"
+                placeholder="+1 (555) 123-4567"
+                autocomplete="tel"
+                :disabled="disabled"
+                class="w-full"
+              />
             </div>
           </div>
         </div>
@@ -312,7 +349,14 @@ const cancelEditing = async () => {
           <div class="relative flex-1 space-y-4 p-4 sm:p-5">
             <div class="space-y-1.5">
               <label class="text-xs font-medium text-highlighted">Number of Agents</label>
-              <UInput v-model="profile.numberOfAgents" size="sm" placeholder="e.g., 10, 50, 200+" autocomplete="off" :disabled="disabled" class="w-full" />
+              <UInput
+                v-model="profile.numberOfAgents"
+                size="sm"
+                placeholder="e.g., 10, 50, 200+"
+                autocomplete="off"
+                :disabled="disabled"
+                class="w-full"
+              />
             </div>
 
             <div class="space-y-1.5">
@@ -331,13 +375,20 @@ const cancelEditing = async () => {
 
             <div class="space-y-1.5">
               <label class="text-xs font-medium text-highlighted">Operating Hours</label>
-              <UInput v-model="profile.operatingHours" size="sm" placeholder="e.g., 24/7 or 9-5 EST" autocomplete="off" :disabled="disabled" class="w-full" />
+              <UInput
+                v-model="profile.operatingHours"
+                size="sm"
+                placeholder="e.g., 24/7 or 9-5 EST"
+                autocomplete="off"
+                :disabled="disabled"
+                class="w-full"
+              />
             </div>
           </div>
         </div>
 
-        <!-- ── Card 3: Pricing ── -->
-        <div v-if="false" class="relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
+        <!-- Card 3: Pricing -->
+        <div v-if="showPricingFields" class="relative flex flex-col overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
           <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
 
           <!-- Header -->
@@ -358,30 +409,69 @@ const cancelEditing = async () => {
           <div class="relative flex-1 space-y-4 p-4 sm:p-5">
             <div class="space-y-1.5">
               <label class="text-xs font-medium text-highlighted">Rate Per Case</label>
-              <UInput v-model.number="profile.caseRatePerDeal" size="sm" type="number" placeholder="0" autocomplete="off" :disabled="disabled" class="w-full" />
-              <p class="text-[10px] text-muted">Fixed amount charged per deal</p>
+              <UInput
+                v-model.number="profile.caseRatePerDeal"
+                size="sm"
+                type="number"
+                placeholder="0"
+                autocomplete="off"
+                :disabled="disabled"
+                class="w-full"
+              />
+              <p class="text-[10px] text-muted">
+                Fixed amount charged per deal
+              </p>
             </div>
 
             <div class="space-y-1.5">
               <label class="text-xs font-medium text-highlighted">Upfront Settlement %</label>
-              <UInput v-model.number="profile.upfrontPaymentPercentage" size="sm" type="number" placeholder="0" autocomplete="off" :disabled="disabled" class="w-full" />
-              <p class="text-[10px] text-muted">Percent of settlement to invoice upfront</p>
+              <UInput
+                v-model.number="profile.upfrontPaymentPercentage"
+                size="sm"
+                type="number"
+                placeholder="0"
+                autocomplete="off"
+                :disabled="disabled"
+                class="w-full"
+              />
+              <p class="text-[10px] text-muted">
+                Percent of settlement to invoice upfront
+              </p>
             </div>
 
             <div class="space-y-1.5">
               <label class="text-xs font-medium text-highlighted">Payment Window (days)</label>
-              <UInput v-model.number="profile.paymentWindowDays" size="sm" type="number" placeholder="0" autocomplete="off" :disabled="disabled" class="w-full" />
-              <p class="text-[10px] text-muted">Days allowed to receive payment</p>
+              <UInput
+                v-model.number="profile.paymentWindowDays"
+                size="sm"
+                type="number"
+                placeholder="0"
+                autocomplete="off"
+                :disabled="disabled"
+                class="w-full"
+              />
+              <p class="text-[10px] text-muted">
+                Days allowed to receive payment
+              </p>
             </div>
 
             <div class="space-y-1.5">
               <label class="text-xs font-medium text-highlighted">Chargeback Window (days)</label>
-              <UInput v-model.number="profile.chargebackWindowDays" size="sm" type="number" placeholder="0" autocomplete="off" :disabled="disabled" class="w-full" />
-              <p class="text-[10px] text-muted">Days allowed to request a chargeback</p>
+              <UInput
+                v-model.number="profile.chargebackWindowDays"
+                size="sm"
+                type="number"
+                placeholder="0"
+                autocomplete="off"
+                :disabled="disabled"
+                class="w-full"
+              />
+              <p class="text-[10px] text-muted">
+                Days allowed to request a chargeback
+              </p>
             </div>
           </div>
         </div>
-
       </div>
     </div>
   </UForm>
