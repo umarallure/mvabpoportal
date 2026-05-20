@@ -667,25 +667,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return json(res, 502, { ok: false, error: { code: 'rejected_dnc_service', message: dnc.message || 'DNC/TCPA verification failed' } })
   }
 
-  // SAFE or WARNING from here. WARNING requires structured consent.
-  if (dnc.callStatus === 'WARNING' && !body.tcpa_consent) {
-    await writeAudit(admin, {
-      apiKeyId: keyRow.id, centerId, leadVendor, submissionId, phoneE164,
-      decision: 'rejected_tcpa_consent_missing',
-      reason: 'WARNING from DNC service requires tcpa_consent payload',
-      dncCallStatus: dnc.callStatus, dncResponse: dnc, tcpaConsent: null,
-      requestIp, userAgent, leadId: null
-    })
-    return json(res, 422, {
-      ok: false,
-      error: {
-        code: 'rejected_tcpa_consent_missing',
-        message: 'This number is on a DNC list. Resubmit with a tcpa_consent payload documenting verbal/written consent.',
-        dnc: { call_status: dnc.callStatus, matched_lists: dnc.matchedLists }
-      }
-    })
-  }
-
+  // SAFE or WARNING from here. WARNING (number is on a DNC list but not a
+  // TCPA litigator) is accepted: the closer-side portal performs its own
+  // DNC check before any outbound contact. tcpa_consent remains optional
+  // on the request — if supplied it's still persisted on the audit row
+  // for the dispute trail. The hard TCPA block above (DANGER / isTcpa)
+  // still rejects unconditionally.
+  //
   // 8. Persist the lead. Schema matches the in-portal form's insert payload.
   const customerFullName = `${body.first_name.trim()} ${body.last_name.trim()}`.trim()
   const insertPayload = {
