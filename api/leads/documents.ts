@@ -7,8 +7,14 @@ const DOCUMENT_BUCKET = 'lead-documents'
 const ALLOWED_CONTENT_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg'])
 const ALLOWED_CATEGORIES = ['medical_report', 'insurance_document', 'police_report'] as const
 
+// See api/leads/intake.ts for the rationale on the VITE_-prefixed fallback.
+const ENV_FALLBACKS: Record<string, string> = {
+  SUPABASE_URL: 'VITE_SUPABASE_URL',
+  SUPABASE_ANON_KEY: 'VITE_SUPABASE_ANON_KEY'
+}
+
 const getEnv = (key: string): string => {
-  const val = process.env[key]
+  const val = process.env[key] ?? process.env[ENV_FALLBACKS[key] ?? '']
   if (!val) throw new Error(`Missing ${key}`)
   return val
 }
