@@ -58,8 +58,19 @@ const US_STATE_CODES = new Set([
   'VA','WA','WV','WI','WY'
 ])
 
+// Read a required env var. For public-safe values (SUPABASE_URL,
+// SUPABASE_ANON_KEY) the frontend already sets VITE_-prefixed copies on
+// Vercel; we fall back to those so the project doesn't need to maintain
+// two parallel sets of variables. The service-role key is never falled
+// back — it MUST be unprefixed because VITE_-prefixed values are bundled
+// into the browser at build time.
+const ENV_FALLBACKS: Record<string, string> = {
+  SUPABASE_URL: 'VITE_SUPABASE_URL',
+  SUPABASE_ANON_KEY: 'VITE_SUPABASE_ANON_KEY'
+}
+
 const getEnv = (key: string): string => {
-  const val = process.env[key]
+  const val = process.env[key] ?? process.env[ENV_FALLBACKS[key] ?? '']
   if (!val) throw new Error(`Missing ${key}`)
   return val
 }
