@@ -1,0 +1,135 @@
+# POST /api/leads/documents — scenario smoke tests
+#
+# These all return short-lived signed PUT URLs on success. After the first
+# request you can `curl -X PUT "<upload_url>" -H "Content-Type: …" --data-binary @file`
+# to push actual file bytes — but for smoke testing the URL response itself
+# is enough.
+#
+# Setup: see intake.http header. The same .env is used.
+
+@host = {{$dotenv HOST}}
+@apiKey = {{$dotenv API_KEY}}
+
+
+###
+# @name happyPathMedical
+# Prereq: a lead exists with this submission_id (run intake.http happyPath first
+# and paste its submission_id below).
+# Expected: 200 { ok:true, upload_url, token, path, method:"PUT" }
+POST {{host}}/api/leads/documents
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "PASTE_SUBMISSION_ID_FROM_INTAKE_HAPPY_PATH",
+  "category": "medical_report",
+  "filename": "er-discharge.pdf",
+  "content_type": "application/pdf"
+}
+
+
+###
+# @name happyPathInsurance
+# Expected: 200 with signed URL under <sid>/insurance_document/...
+POST {{host}}/api/leads/documents
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "PASTE_SUBMISSION_ID_FROM_INTAKE_HAPPY_PATH",
+  "category": "insurance_document",
+  "filename": "policy-declarations.pdf",
+  "content_type": "application/pdf"
+}
+
+
+###
+# @name submissionIdTraversal
+# Path-traversal attempt — should never reach Storage.
+# Expected: 400 rejected_validation
+POST {{host}}/api/leads/documents
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "../../escape",
+  "category": "medical_report",
+  "filename": "evil.pdf",
+  "content_type": "application/pdf"
+}
+
+
+###
+# @name unknownCategory
+# Expected: 400 rejected_validation
+POST {{host}}/api/leads/documents
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "smoke-anything",
+  "category": "passport",
+  "filename": "x.pdf",
+  "content_type": "application/pdf"
+}
+
+
+###
+# @name badContentType
+# Expected: 400 rejected_validation ("unsupported content_type")
+POST {{host}}/api/leads/documents
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "smoke-anything",
+  "category": "medical_report",
+  "filename": "x.exe",
+  "content_type": "application/x-msdownload"
+}
+
+
+###
+# @name unknownField (strict() check)
+# Expected: 400 rejected_validation
+POST {{host}}/api/leads/documents
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "smoke-anything",
+  "category": "medical_report",
+  "filename": "x.pdf",
+  "content_type": "application/pdf",
+  "evil_field": "should be rejected"
+}
+
+
+###
+# @name otherPublishersLead
+# Submission_id of a real lead that belongs to another publisher.
+# Expected: 403 rejected_auth ("Lead does not belong to this publisher")
+POST {{host}}/api/leads/documents
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "PASTE_SUBMISSION_ID_FROM_ANOTHER_PUBLISHER",
+  "category": "medical_report",
+  "filename": "x.pdf",
+  "content_type": "application/pdf"
+}
+
+
+###
+# @name missingAuth
+# Expected: 401 rejected_auth
+POST {{host}}/api/leads/documents
+Content-Type: application/json
+
+{
+  "submission_id": "smoke-anything",
+  "category": "medical_report",
+  "filename": "x.pdf",
+  "content_type": "application/pdf"
+}

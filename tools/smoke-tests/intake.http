@@ -1,0 +1,516 @@
+# POST /api/leads/intake — scenario smoke tests
+#
+# Setup
+# -----
+# 1. Install the "REST Client" extension in VS Code (humao.rest-client).
+# 2. Copy .env.example → .env in this folder and fill in the values.
+# 3. (Optional) `vercel dev` from the repo root to run the endpoint locally,
+#    or point HOST at a Vercel preview URL.
+# 4. Click "Send Request" above any ### block below.
+#
+# Cost note: every block that reaches the DNC step calls the real DNC
+# provider, which is billed per call. The scenarios labelled
+# "validation-only" / "rate-limit" intentionally fail before the DNC step.
+#
+# Cleanup: run cleanup.sql via Supabase Studio after a test run to wipe
+# the test publisher's audit + lead rows.
+
+@host = {{$dotenv HOST}}
+@apiKey = {{$dotenv API_KEY}}
+@safePhone = {{$dotenv SAFE_PHONE}}
+@warningPhone = {{$dotenv WARNING_PHONE}}
+@tcpaPhone = {{$dotenv TCPA_PHONE}}
+@blockedState = {{$dotenv BLOCKED_STATE}}
+
+
+###
+# @name happyPath
+# Expected: 201 { ok: true, lead_id, submission_id, dnc:{ call_status:"SAFE" } }
+# Audit decision: accepted
+POST {{host}}/api/leads/intake
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "smoke-{{$timestamp}}-happy",
+  "first_name": "Jane",
+  "last_name": "Doe",
+  "phone_number": "{{safePhone}}",
+  "email": "jane.doe@example.com",
+  "date_of_birth": "1990-04-12",
+  "street_address": "123 Main St",
+  "city": "Austin",
+  "state": "TX",
+  "zip_code": "78701",
+  "can_receive_texts": true,
+  "accident_last_12_months": true,
+  "accident_date": "2026-02-10",
+  "prior_attorney_involved": false,
+  "other_party_admit_fault": true,
+  "police_attended": true,
+  "received_medical_treatment": true,
+  "medical_attention": "Seton Medical Center — ER visit + 2 follow-ups",
+  "injuries": "Neck strain, lower back pain",
+  "insured": true,
+  "vehicle_registration": "TX-ABC-1234",
+  "insurance_company": "State Farm",
+  "third_party_vehicle_registration": "TX-XYZ-9876",
+  "passengers_count": 0,
+  "accident_scenario": "Rear-ended at red light on Congress Ave.",
+  "source_url": "https://example.com/landing/auto-injury",
+  "trustedform_cert_url": "https://cert.trustedform.com/abc123",
+  "ip_address": "203.0.113.42"
+}
+
+
+###
+# @name idempotentReplay
+# Re-sends the SAME submission_id as happyPath would generate. To use, copy
+# the submission_id from the previous response and paste it below, then click
+# Send. Expected: 200 { ok:true, idempotent:true, lead_id:<same as happyPath> }
+# Audit decision: accepted_idempotent
+POST {{host}}/api/leads/intake
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "PASTE_SUBMISSION_ID_FROM_PREVIOUS_RESPONSE_HERE",
+  "first_name": "Jane",
+  "last_name": "Doe",
+  "phone_number": "{{safePhone}}",
+  "email": "jane.doe@example.com",
+  "date_of_birth": "1990-04-12",
+  "street_address": "123 Main St",
+  "city": "Austin",
+  "state": "TX",
+  "zip_code": "78701",
+  "accident_last_12_months": true,
+  "accident_date": "2026-02-10",
+  "prior_attorney_involved": false,
+  "other_party_admit_fault": true,
+  "police_attended": true,
+  "received_medical_treatment": true,
+  "medical_attention": "Seton ER",
+  "injuries": "Neck strain",
+  "insured": true,
+  "vehicle_registration": "TX-ABC-1234",
+  "insurance_company": "State Farm",
+  "third_party_vehicle_registration": "TX-XYZ-9876",
+  "accident_scenario": "Rear-ended.",
+  "source_url": "https://example.com/x",
+  "trustedform_cert_url": "https://cert.trustedform.com/abc123",
+  "ip_address": "203.0.113.42"
+}
+
+
+###
+# @name missingAuth — validation-only (no DNC call)
+# Expected: 401 { ok:false, error:{ code:"rejected_auth" } }
+# Audit decision: rejected_auth (with api_key_id null)
+POST {{host}}/api/leads/intake
+Content-Type: application/json
+
+{}
+
+
+###
+# @name bogusKey — validation-only (no DNC call)
+# Expected: 401 rejected_auth ("Invalid or revoked API key")
+POST {{host}}/api/leads/intake
+Authorization: Bearer pk_live_definitely_not_a_real_key
+Content-Type: application/json
+
+{}
+
+
+###
+# @name malformedJson — validation-only (no DNC call)
+# Expected: 400 rejected_validation ("Request body must be valid JSON")
+POST {{host}}/api/leads/intake
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{ this is not json
+
+
+###
+# @name unknownField — validation-only (no DNC call)
+# Exercises the .strict() guard: unknown fields cause a 400 instead of being
+# silently dropped. Expected: 400 rejected_validation with issues[].
+POST {{host}}/api/leads/intake
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "smoke-{{$timestamp}}-strict",
+  "evil_field": "should be rejected",
+  "first_name": "Jane",
+  "last_name": "Doe",
+  "phone_number": "{{safePhone}}",
+  "email": "jane@example.com",
+  "date_of_birth": "1990-04-12",
+  "street_address": "123 Main St",
+  "city": "Austin",
+  "state": "TX",
+  "zip_code": "78701",
+  "accident_last_12_months": true,
+  "accident_date": "2026-02-10",
+  "prior_attorney_involved": false,
+  "other_party_admit_fault": true,
+  "police_attended": true,
+  "received_medical_treatment": true,
+  "medical_attention": "Seton ER",
+  "injuries": "Whiplash",
+  "insured": true,
+  "vehicle_registration": "TX-1",
+  "insurance_company": "State Farm",
+  "third_party_vehicle_registration": "TX-2",
+  "accident_scenario": "Rear-ended.",
+  "source_url": "https://example.com/x",
+  "trustedform_cert_url": "https://cert.trustedform.com/abc123",
+  "ip_address": "203.0.113.42"
+}
+
+
+###
+# @name submissionIdTraversal — validation-only (no DNC call)
+# Path-traversal attempt in submission_id. Regex restricts charset.
+# Expected: 400 rejected_validation
+POST {{host}}/api/leads/intake
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "../../../etc/passwd",
+  "first_name": "Jane",
+  "last_name": "Doe",
+  "phone_number": "{{safePhone}}",
+  "email": "jane@example.com",
+  "date_of_birth": "1990-04-12",
+  "street_address": "x",
+  "city": "x",
+  "state": "TX",
+  "zip_code": "78701",
+  "accident_last_12_months": true,
+  "accident_date": "2026-02-10",
+  "prior_attorney_involved": false,
+  "other_party_admit_fault": true,
+  "police_attended": true,
+  "received_medical_treatment": true,
+  "medical_attention": "x",
+  "injuries": "x",
+  "insured": true,
+  "vehicle_registration": "x",
+  "insurance_company": "x",
+  "third_party_vehicle_registration": "x",
+  "accident_scenario": "x",
+  "source_url": "https://example.com/x",
+  "trustedform_cert_url": "https://cert.trustedform.com/x",
+  "ip_address": "203.0.113.42"
+}
+
+
+###
+# @name invalidIp — validation-only (no DNC call)
+# Expected: 400 rejected_validation ("ip_address must be a valid IPv4 or IPv6")
+POST {{host}}/api/leads/intake
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "smoke-{{$timestamp}}-bad-ip",
+  "first_name": "Jane",
+  "last_name": "Doe",
+  "phone_number": "{{safePhone}}",
+  "email": "jane@example.com",
+  "date_of_birth": "1990-04-12",
+  "street_address": "x",
+  "city": "x",
+  "state": "TX",
+  "zip_code": "78701",
+  "accident_last_12_months": true,
+  "accident_date": "2026-02-10",
+  "prior_attorney_involved": false,
+  "other_party_admit_fault": true,
+  "police_attended": true,
+  "received_medical_treatment": true,
+  "medical_attention": "x",
+  "injuries": "x",
+  "insured": true,
+  "vehicle_registration": "x",
+  "insurance_company": "x",
+  "third_party_vehicle_registration": "x",
+  "accident_scenario": "x",
+  "source_url": "https://example.com/x",
+  "trustedform_cert_url": "https://cert.trustedform.com/x",
+  "ip_address": "not-an-ip"
+}
+
+
+###
+# @name dobInFuture — validation-only (no DNC call)
+# Expected: 400 rejected_validation ("date_of_birth must be a real date, in the past, within the last 120 years")
+POST {{host}}/api/leads/intake
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "smoke-{{$timestamp}}-future-dob",
+  "first_name": "Jane",
+  "last_name": "Doe",
+  "phone_number": "{{safePhone}}",
+  "email": "jane@example.com",
+  "date_of_birth": "2199-04-12",
+  "street_address": "x",
+  "city": "x",
+  "state": "TX",
+  "zip_code": "78701",
+  "accident_last_12_months": true,
+  "accident_date": "2026-02-10",
+  "prior_attorney_involved": false,
+  "other_party_admit_fault": true,
+  "police_attended": true,
+  "received_medical_treatment": true,
+  "medical_attention": "x",
+  "injuries": "x",
+  "insured": true,
+  "vehicle_registration": "x",
+  "insurance_company": "x",
+  "third_party_vehicle_registration": "x",
+  "accident_scenario": "x",
+  "source_url": "https://example.com/x",
+  "trustedform_cert_url": "https://cert.trustedform.com/x",
+  "ip_address": "203.0.113.42"
+}
+
+
+###
+# @name stateNotCovered (no DNC call — state check runs before DNC)
+# Uses BLOCKED_STATE from .env (state that is not 'unblocked' in sales_map_states).
+# Expected: 422 rejected_state
+POST {{host}}/api/leads/intake
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "smoke-{{$timestamp}}-blocked-state",
+  "first_name": "Jane",
+  "last_name": "Doe",
+  "phone_number": "{{safePhone}}",
+  "email": "jane@example.com",
+  "date_of_birth": "1990-04-12",
+  "street_address": "x",
+  "city": "x",
+  "state": "{{blockedState}}",
+  "zip_code": "00000",
+  "accident_last_12_months": true,
+  "accident_date": "2026-02-10",
+  "prior_attorney_involved": false,
+  "other_party_admit_fault": true,
+  "police_attended": true,
+  "received_medical_treatment": true,
+  "medical_attention": "x",
+  "injuries": "x",
+  "insured": true,
+  "vehicle_registration": "x",
+  "insurance_company": "x",
+  "third_party_vehicle_registration": "x",
+  "accident_scenario": "x",
+  "source_url": "https://example.com/x",
+  "trustedform_cert_url": "https://cert.trustedform.com/x",
+  "ip_address": "203.0.113.42"
+}
+
+
+###
+# @name ruleFail_priorAttorney (no DNC call — rules check runs before DNC)
+# Expected: 422 rejected_rule ("customer must not already have an attorney involved")
+POST {{host}}/api/leads/intake
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "smoke-{{$timestamp}}-prior-att",
+  "first_name": "Jane",
+  "last_name": "Doe",
+  "phone_number": "{{safePhone}}",
+  "email": "jane@example.com",
+  "date_of_birth": "1990-04-12",
+  "street_address": "x",
+  "city": "x",
+  "state": "TX",
+  "zip_code": "78701",
+  "accident_last_12_months": true,
+  "accident_date": "2026-02-10",
+  "prior_attorney_involved": true,
+  "other_party_admit_fault": true,
+  "police_attended": true,
+  "received_medical_treatment": true,
+  "medical_attention": "x",
+  "injuries": "x",
+  "insured": true,
+  "vehicle_registration": "x",
+  "insurance_company": "x",
+  "third_party_vehicle_registration": "x",
+  "accident_scenario": "x",
+  "source_url": "https://example.com/x",
+  "trustedform_cert_url": "https://cert.trustedform.com/x",
+  "ip_address": "203.0.113.42"
+}
+
+
+###
+# @name ruleFail_noPolice (no DNC call)
+# Expected: 422 rejected_rule ("a police report is required")
+POST {{host}}/api/leads/intake
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "smoke-{{$timestamp}}-no-police",
+  "first_name": "Jane",
+  "last_name": "Doe",
+  "phone_number": "{{safePhone}}",
+  "email": "jane@example.com",
+  "date_of_birth": "1990-04-12",
+  "street_address": "x",
+  "city": "x",
+  "state": "TX",
+  "zip_code": "78701",
+  "accident_last_12_months": true,
+  "accident_date": "2026-02-10",
+  "prior_attorney_involved": false,
+  "other_party_admit_fault": true,
+  "police_attended": false,
+  "received_medical_treatment": true,
+  "medical_attention": "x",
+  "injuries": "x",
+  "insured": true,
+  "vehicle_registration": "x",
+  "insurance_company": "x",
+  "third_party_vehicle_registration": "x",
+  "accident_scenario": "x",
+  "source_url": "https://example.com/x",
+  "trustedform_cert_url": "https://cert.trustedform.com/x",
+  "ip_address": "203.0.113.42"
+}
+
+
+###
+# @name warningNoConsent — hits DNC (real call!)
+# WARNING_PHONE must be a number your DNC provider classifies as on a DNC list.
+# Expected: 422 rejected_tcpa_consent_missing
+POST {{host}}/api/leads/intake
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "smoke-{{$timestamp}}-warn-no-consent",
+  "first_name": "Bob",
+  "last_name": "Smith",
+  "phone_number": "{{warningPhone}}",
+  "email": "bob@example.com",
+  "date_of_birth": "1985-01-01",
+  "street_address": "1 Test Ave",
+  "city": "Dallas",
+  "state": "TX",
+  "zip_code": "75201",
+  "accident_last_12_months": true,
+  "accident_date": "2026-03-01",
+  "prior_attorney_involved": false,
+  "other_party_admit_fault": true,
+  "police_attended": true,
+  "received_medical_treatment": true,
+  "medical_attention": "Baylor",
+  "injuries": "Whiplash",
+  "insured": true,
+  "vehicle_registration": "TX-1",
+  "insurance_company": "GEICO",
+  "third_party_vehicle_registration": "TX-2",
+  "accident_scenario": "T-bone collision.",
+  "source_url": "https://example.com/x",
+  "trustedform_cert_url": "https://cert.trustedform.com/xyz",
+  "ip_address": "203.0.113.99"
+}
+
+
+###
+# @name warningWithConsent — hits DNC (real call!)
+# Same WARNING_PHONE, this time with the structured consent payload.
+# Expected: 201 accepted; audit row carries tcpa_consent jsonb.
+POST {{host}}/api/leads/intake
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "smoke-{{$timestamp}}-warn-consent",
+  "first_name": "Bob",
+  "last_name": "Smith",
+  "phone_number": "{{warningPhone}}",
+  "email": "bob@example.com",
+  "date_of_birth": "1985-01-01",
+  "street_address": "1 Test Ave",
+  "city": "Dallas",
+  "state": "TX",
+  "zip_code": "75201",
+  "accident_last_12_months": true,
+  "accident_date": "2026-03-01",
+  "prior_attorney_involved": false,
+  "other_party_admit_fault": true,
+  "police_attended": true,
+  "received_medical_treatment": true,
+  "medical_attention": "Baylor",
+  "injuries": "Whiplash",
+  "insured": true,
+  "vehicle_registration": "TX-1",
+  "insurance_company": "GEICO",
+  "third_party_vehicle_registration": "TX-2",
+  "accident_scenario": "T-bone collision.",
+  "source_url": "https://example.com/landing/auto-injury",
+  "trustedform_cert_url": "https://cert.trustedform.com/xyz",
+  "ip_address": "203.0.113.99",
+  "tcpa_consent": {
+    "obtained": true,
+    "consent_language": "Customer verbally agreed to be contacted by the publisher and its attorney partners about their accident claim, including via automated calls and text messages, at the number provided.",
+    "captured_at_iso": "2026-05-18T14:32:11Z",
+    "consent_source_url": "https://example.com/landing/auto-injury"
+  }
+}
+
+
+###
+# @name tcpaLitigator — hits DNC (real call!)
+# TCPA_PHONE must be a number your DNC provider classifies as a TCPA litigator.
+# Expected: 422 rejected_tcpa; lead NOT inserted.
+POST {{host}}/api/leads/intake
+Authorization: Bearer {{apiKey}}
+Content-Type: application/json
+
+{
+  "submission_id": "smoke-{{$timestamp}}-tcpa",
+  "first_name": "Litigator",
+  "last_name": "Test",
+  "phone_number": "{{tcpaPhone}}",
+  "email": "litigator@example.com",
+  "date_of_birth": "1980-01-01",
+  "street_address": "1 Test Ave",
+  "city": "Houston",
+  "state": "TX",
+  "zip_code": "77001",
+  "accident_last_12_months": true,
+  "accident_date": "2026-03-01",
+  "prior_attorney_involved": false,
+  "other_party_admit_fault": true,
+  "police_attended": true,
+  "received_medical_treatment": true,
+  "medical_attention": "x",
+  "injuries": "x",
+  "insured": true,
+  "vehicle_registration": "x",
+  "insurance_company": "x",
+  "third_party_vehicle_registration": "x",
+  "accident_scenario": "x",
+  "source_url": "https://example.com/x",
+  "trustedform_cert_url": "https://cert.trustedform.com/x",
+  "ip_address": "203.0.113.42"
+}
