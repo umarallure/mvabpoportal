@@ -644,7 +644,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       dncCallStatus: dnc.callStatus, dncResponse: dnc, tcpaConsent: body.tcpa_consent ?? null,
       requestIp, userAgent, leadId: null
     })
-    return json(res, 422, { ok: false, error: { code: 'rejected_tcpa', message: 'This number is flagged as a TCPA litigator and cannot be contacted.', dnc: { call_status: dnc.callStatus, matched_lists: dnc.matchedLists } } })
+    return json(res, 422, { ok: false, error: { code: 'rejected_tcpa', message: 'This number is flagged as a TCPA litigator and cannot be contacted.' } })
   }
 
   if (dnc.callStatus === 'INVALID') {
@@ -726,13 +726,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .single()
 
   if (insertErr) {
-    // submission_id collision → return the existing lead (idempotent).
+    // submission_id collision → idempotent replay, but only when the
+    // existing row belongs to the SAME publisher. A cross-publisher
+    // collision is rejected with 409 so we never reveal another
+    // publisher's lead_id by enumeration. Publishers are recommended
+    // to prefix submission_id with their own identifier to avoid
+    // collisions in the first place.
     if (insertErr.code === '23505' && /submission_id/.test(insertErr.message)) {
       const { data: existing } = await admin
         .from('leads')
-        .select('id, submission_id')
+        .select('id, lead_vendor')
         .eq('submission_id', submissionId)
         .maybeSingle()
+
+      const normVendor = (v: string | null | undefined) => (v ?? '').toLowerCase().trim()
+      if (existing && normVendor(existing.lead_vendor) !== normVendor(leadVendor)) {
+        await writeAudit(admin, {
+          apiKeyId: keyRow.id, centerId, leadVendor, submissionId, phoneE164,
+          decision: 'rejected_validation',
+          reason: 'submission_id collision with a different publisher',
+          dncCallStatus: dnc.callStatus, dncResponse: dnc, tcpaConsent: body.tcpa_consent ?? null,
+          requestIp, userAgent, leadId: null
+        })
+        return json(res, 409, {
+          ok: false,
+          error: {
+            code: 'rejected_validation',
+            message: 'submission_id is already in use; choose a unique value (we recommend prefixing with your publisher identifier).'
+          }
+        })
+      }
 
       await writeAudit(admin, {
         apiKeyId: keyRow.id, centerId, leadVendor, submissionId, phoneE164,
@@ -746,7 +769,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         idempotent: true,
         lead_id: existing?.id ?? null,
         submission_id: submissionId,
-        dnc: { call_status: dnc.callStatus, flags: dnc.flags, matched_lists: dnc.matchedLists }
+        dnc: { call_status: dnc.callStatus }
       })
     }
 
@@ -786,6 +809,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     idempotent: false,
     lead_id: inserted.id,
     submission_id: submissionId,
-    dnc: { call_status: dnc.callStatus, flags: dnc.flags, matched_lists: dnc.matchedLists }
+    dnc: { call_status: dnc.callStatus }
   })
 }
