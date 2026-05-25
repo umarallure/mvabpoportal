@@ -518,7 +518,6 @@ const QUALIFIED_REVIEW_STAGE_KEYS = [
   'qualified_tier_3',
   'qualified_tier_4',
   'attorney_review',
-  'attorney_rejected',
   'attorney_approved'
 ]
 
@@ -584,7 +583,7 @@ const submissionStatCards = computed(() => [
     accent: '#22c55e', light: '#4ade80', rgb: '34,197,94', delay: 120,
     secondaryValue: formatSubmissionCommission(qualifiedReviewPendingTotal.value),
     secondaryLabel: 'pending',
-    stages: ['Qualified: Tier 1', 'Qualified: Tier 2', 'Qualified: Tier 3', 'Qualified: Tier 4', 'Attorney Review', 'Attorney Approved', 'Attorney Rejected']
+    stages: ['Qualified: Tier 1', 'Qualified: Tier 2', 'Qualified: Tier 3', 'Qualified: Tier 4', 'Attorney Review', 'Attorney Approved']
   },
   {
     label: 'Payment Queue', value: paymentQueueCount.value, icon: 'i-lucide-banknote',
