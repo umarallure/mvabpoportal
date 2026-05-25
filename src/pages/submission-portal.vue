@@ -14,6 +14,14 @@ import {
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../composables/useAuth'
 import { getSubmissionStageDescription, getSubmissionTierDetails } from '../lib/pipeline-stage-descriptions'
+import {
+  formatSubmissionCommission,
+  formatSubmissionTierLabel,
+  formatSubmissionTierShortLabel,
+  getSubmissionTierBpoPrice,
+  normalizeSubmissionTier,
+  type SubmissionTierSnapshot
+} from '../lib/submission-tier'
 import { usePipelineStages } from '../composables/usePipelineStages'
 
 const { stages: dbStages } = usePipelineStages('submission_portal', { publisherPortalView: true })
@@ -63,6 +71,10 @@ type SubmissionPortalRow = Record<string, unknown> & {
   assigned_attorney_id?: string | null
   status?: string | null
   notes?: string | null
+  product_tier?: string | null
+  product_tier_price?: string | number | null
+  created_at?: string | null
+  updated_at?: string | null
   has_submission_data?: boolean
   source_type?: string | null
 }
@@ -96,6 +108,61 @@ const refreshing = ref(false)
 const rows = ref<SubmissionPortalRow[]>([])
 const attorneys = ref<AttorneyProfile[]>([])
 const noteCounts = ref<Record<string, number>>({})
+const tierSnapshots = ref<Record<string, SubmissionTierSnapshot>>({})
+
+const fetchTierSnapshots = async (currentRows: SubmissionPortalRow[] | null | undefined) => {
+  const safeRows = Array.isArray(currentRows) ? currentRows : []
+  const leadIds = Array.from(new Set(safeRows.map((r) => String(r.id || '').trim()).filter(Boolean)))
+
+  if (leadIds.length === 0) {
+    tierSnapshots.value = {}
+    return
+  }
+
+  const token = auth.state.value.session?.access_token
+  if (!token) {
+    tierSnapshots.value = {}
+    return
+  }
+
+  try {
+    const response = await fetch('/api/submission-tier-snapshots', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ lead_ids: leadIds })
+    })
+
+    const payload = await response.json().catch(() => ({})) as { snapshots?: SubmissionTierSnapshot[]; error?: string }
+    if (!response.ok) {
+      throw new Error(payload.error || `Unable to load tier snapshots (${response.status})`)
+    }
+
+    const snapshots = payload.snapshots ?? []
+    tierSnapshots.value = Object.fromEntries(snapshots.map((snapshot) => [snapshot.lead_id, snapshot]))
+
+    const unresolved = safeRows.filter((row) => {
+      const storedTier = normalizeSubmissionTier(row.product_tier)
+      const snapshot = tierSnapshots.value[String(row.id)]
+      return !storedTier && !snapshot?.tier
+    })
+
+    if (unresolved.length > 0) {
+      const signedRetainers = snapshots.filter((snapshot) => snapshot.evidenceFlags.signedRetainer).length
+      console.info('[submission-portal] unresolved tier snapshots', {
+        requested: leadIds.length,
+        received: snapshots.length,
+        unresolved: unresolved.length,
+        signedRetainers
+      })
+    }
+  } catch (error) {
+    console.warn('[submission-portal] tier snapshot load failed', error)
+    tierSnapshots.value = {}
+  }
+}
 
 const fetchNoteCounts = async (currentRows: SubmissionPortalRow[] | null | undefined) => {
   const safeRows = Array.isArray(currentRows) ? currentRows : []
@@ -203,6 +270,59 @@ const attorneyById = computed(() => {
   })
   return map
 })
+
+const normalizeRowPrice = (value: unknown) => {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const getStoredRowTierSnapshot = (row: SubmissionPortalRow): SubmissionTierSnapshot | null => {
+  const tier = normalizeSubmissionTier(row.product_tier)
+  if (!tier) return null
+
+  return {
+    lead_id: String(row.id),
+    submission_id: String(row.submission_id || ''),
+    tier,
+    price: getSubmissionTierBpoPrice(tier) ?? normalizeRowPrice(row.product_tier_price),
+    evidenceFlags: {
+      signedRetainer: false,
+      policeReport: false,
+      medicalProof: false,
+      insuranceDocument: false
+    },
+    source: 'stored',
+    synced: true
+  }
+}
+
+const getRowTierSnapshot = (row: SubmissionPortalRow) =>
+  getStoredRowTierSnapshot(row) ?? tierSnapshots.value[String(row.id)] ?? null
+
+const getRowTierLabel = (row: SubmissionPortalRow) =>
+  formatSubmissionTierLabel(getRowTierSnapshot(row)?.tier)
+
+const getRowTierShortLabel = (row: SubmissionPortalRow) =>
+  formatSubmissionTierShortLabel(getRowTierSnapshot(row)?.tier)
+
+const getRowCommissionLabel = (row: SubmissionPortalRow) =>
+  formatSubmissionCommission(getRowTierSnapshot(row)?.price ?? null)
+
+const getRowUpdatedTag = (row: SubmissionPortalRow) => {
+  const raw = String(row.updated_at || row.created_at || row.date || '').trim()
+  if (!raw) return 'Updated unknown'
+
+  const date = new Date(raw)
+  if (Number.isNaN(date.getTime())) return 'Updated unknown'
+
+  return `Updated ${date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  })}`
+}
 
 const stageFilterOptions = computed(() => [
   { label: 'All Stages', value: ALL_FILTER_VALUE },
@@ -353,6 +473,8 @@ const filteredRows = computed(() => {
         r.licensed_agent_account ?? '',
         r.status ?? '',
         r.state ?? '',
+        getRowTierLabel(r),
+        getRowCommissionLabel(r),
         formatSourceTypeLabel(String(r.source_type || '')),
         attorneyName
       ].join(' ').toLowerCase()
@@ -390,41 +512,86 @@ const intakeQueueCount = computed(() =>
   }).length
 )
 
-const qualifiedReviewCount = computed(() =>
+const QUALIFIED_REVIEW_STAGE_KEYS = [
+  'qualified_tier_1',
+  'qualified_tier_2',
+  'qualified_tier_3',
+  'qualified_tier_4',
+  'attorney_review',
+  'attorney_rejected',
+  'attorney_approved'
+]
+
+const QUALIFIED_REVIEW_PENDING_STAGE_KEYS = [
+  'qualified_tier_1',
+  'qualified_tier_2',
+  'qualified_tier_3',
+  'qualified_tier_4',
+  'attorney_review',
+  'attorney_approved'
+]
+
+const qualifiedReviewRows = computed(() =>
   boardVisibleRows.value.filter((r) => {
     const key = deriveStageKey(r)
-    return ['qualified_tier_1', 'qualified_tier_2', 'qualified_tier_3', 'qualified_tier_4',
-      'attorney_review', 'attorney_rejected', 'attorney_approved'].includes(key)
-  }).length
+    return QUALIFIED_REVIEW_STAGE_KEYS.includes(key)
+  })
 )
 
-const paymentQueueCount = computed(() =>
+const qualifiedReviewPendingRows = computed(() =>
   boardVisibleRows.value.filter((r) => {
     const key = deriveStageKey(r)
-    return key === 'qualified_payable' || key === 'paid_to_bpo'
-  }).length
+    return QUALIFIED_REVIEW_PENDING_STAGE_KEYS.includes(key)
+  })
+)
+
+const qualifiedReviewCount = computed(() => qualifiedReviewRows.value.length)
+
+const qualifiedReviewPendingTotal = computed(() =>
+  qualifiedReviewPendingRows.value.reduce((total, row) => total + (getRowTierSnapshot(row)?.price ?? 0), 0)
+)
+
+const paymentQueueRows = computed(() =>
+  boardVisibleRows.value.filter((r) => {
+    const key = deriveStageKey(r)
+    return key === 'qualified_payable'
+  })
+)
+
+const paymentQueueCount = computed(() => paymentQueueRows.value.length)
+
+const paymentQueueTotal = computed(() =>
+  paymentQueueRows.value.reduce((total, row) => total + (getRowTierSnapshot(row)?.price ?? 0), 0)
 )
 
 const submissionStatCards = computed(() => [
   {
     label: 'Total Cases', value: boardVisibleRows.value.length, icon: 'i-lucide-layout-dashboard',
     accent: '#ae4010', light: '#e8763c', rgb: '174,64,16', delay: 0,
+    secondaryValue: null,
+    secondaryLabel: null,
     stages: ['All valid submission stages after filters are applied']
   },
   {
     label: 'Intake Queue', value: intakeQueueCount.value, icon: 'i-lucide-inbox',
     accent: '#3b82f6', light: '#60a5fa', rgb: '59,130,246', delay: 60,
+    secondaryValue: null,
+    secondaryLabel: null,
     stages: ['Retainer Signed', 'Signed: Missing Information']
   },
   {
     label: 'Qualified & Review', value: qualifiedReviewCount.value, icon: 'i-lucide-scale',
     accent: '#22c55e', light: '#4ade80', rgb: '34,197,94', delay: 120,
+    secondaryValue: formatSubmissionCommission(qualifiedReviewPendingTotal.value),
+    secondaryLabel: 'pending',
     stages: ['Qualified: Tier 1', 'Qualified: Tier 2', 'Qualified: Tier 3', 'Qualified: Tier 4', 'Attorney Review', 'Attorney Approved', 'Attorney Rejected']
   },
   {
     label: 'Payment Queue', value: paymentQueueCount.value, icon: 'i-lucide-banknote',
     accent: '#8b5cf6', light: '#c4b5fd', rgb: '139,92,246', delay: 180,
-    stages: ['Qualified / Payable', 'Paid to BPO']
+    secondaryValue: formatSubmissionCommission(paymentQueueTotal.value),
+    secondaryLabel: 'payable',
+    stages: ['Qualified / Payable']
   },
 ])
 
@@ -499,7 +666,10 @@ const fetchData = async (showRefreshToast = false) => {
     })
 
     rows.value = normalized
-    await fetchNoteCounts(normalized)
+    await Promise.all([
+      fetchNoteCounts(normalized),
+      fetchTierSnapshots(normalized)
+    ])
 
     if (showRefreshToast) {
       try {
@@ -563,7 +733,11 @@ const saveEdit = async () => {
       }
     }
 
-    rows.value = rows.value.map((r) => (r.id === rowId ? { ...r, status: nextStage, notes: editNotes.value } : r))
+    rows.value = rows.value.map((r) => (
+      r.id === rowId
+        ? { ...r, status: nextStage, notes: editNotes.value, updated_at: new Date().toISOString() }
+        : r
+    ))
     await fetchNoteCounts(rows.value)
 
     try {
@@ -634,7 +808,12 @@ void sourceTypeOptions.value
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-1.5">
                   <div class="ap-card-label">{{ card.label }}</div>
-                  <UPopover mode="hover" :open-delay="100" :close-delay="120" :content="{ side: 'top', align: 'start', sideOffset: 8 }">
+                  <UPopover
+                    mode="hover"
+                    :open-delay="100"
+                    :close-delay="120"
+                    :content="{ side: 'top', align: 'start', sideOffset: 8 }"
+                  >
                     <button type="button" class="shrink-0 opacity-35 transition-opacity hover:opacity-70" tabindex="-1">
                       <UIcon name="i-lucide-circle-help" class="size-3" />
                     </button>
@@ -651,7 +830,13 @@ void sourceTypeOptions.value
                     </template>
                   </UPopover>
                 </div>
-                <div class="ap-card-value">{{ card.value }}</div>
+                <div class="ap-card-value-row">
+                  <div class="ap-card-value">{{ card.value }}</div>
+                  <div v-if="card.secondaryValue" class="ap-card-secondary">
+                    <span>{{ card.secondaryValue }}</span>
+                    <span>{{ card.secondaryLabel }}</span>
+                  </div>
+                </div>
               </div>
               <div
                 class="flex size-10 shrink-0 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105"
@@ -1031,16 +1216,17 @@ void sourceTypeOptions.value
                   <div class="flex items-start justify-between gap-2">
                     <div class="min-w-0 flex-1">
                       <div class="ap-card-title truncate text-[13px] font-semibold" style="color: var(--dashboard-text-primary);">
-                        {{ row.insured_name || '—' }}
+                        {{ row.insured_name || 'Unknown lead' }}
                       </div>
-                      <div class="mt-0.5 text-[11px]" style="color: var(--dashboard-text-muted);">
-                        <div class="flex items-center gap-2">
-                          <span>{{ row.client_phone_number || '—' }}</span>
-                          <div class="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px]">
-                            <UIcon name="i-lucide-sticky-note" class="h-3.5 w-3.5" />
-                            <span>{{ noteCounts[String(row.id)] ?? 0 }}</span>
-                          </div>
-                        </div>
+                      <div class="mt-2 flex flex-wrap items-center gap-1.5">
+                        <span class="ap-card-chip">
+                          <UIcon name="i-lucide-map-pin" class="size-3" />
+                          {{ String(row.state || 'No state') }}
+                        </span>
+                        <span class="ap-card-chip ap-card-tier-chip">
+                          <span class="ap-card-tier-code">{{ getRowTierShortLabel(row) }}</span>
+                          {{ getRowTierLabel(row) }}
+                        </span>
                       </div>
                     </div>
 
@@ -1055,21 +1241,24 @@ void sourceTypeOptions.value
                     </div>
                   </div>
 
-                  <div class="mt-2 flex items-center justify-between gap-2">
-                    <UBadge variant="subtle" :label="String(row.lead_vendor || '—')" size="xs" />
-                    <div class="text-xs text-[var(--dashboard-text-soft)]">
-                      {{ String(row.date || '') }}
+                  <div class="mt-3 flex flex-wrap items-end justify-between gap-2">
+                    <div class="min-w-0">
+                      <div class="ap-card-meta-label">Commission</div>
+                      <div class="ap-card-commission">{{ getRowCommissionLabel(row) }}</div>
+                    </div>
+                    <div class="ap-card-updated">
+                      <UIcon name="i-lucide-clock-3" class="size-3" />
+                      <span>{{ getRowUpdatedTag(row) }}</span>
                     </div>
                   </div>
 
-                  <div class="mt-2 grid grid-cols-1 gap-1 text-xs text-[var(--dashboard-text-muted)]">
-                    <div>
-                      <span class="font-medium">Closer:</span>
-                      {{ String(row.licensed_agent_account || row.agent || row.buffer_agent || '—') }}
+                  <div class="mt-3 flex items-center justify-between gap-2 border-t border-[var(--dashboard-divider)] pt-2">
+                    <div class="truncate text-[11px]" style="color: var(--dashboard-text-muted);">
+                      {{ String(row.lead_vendor || 'Unknown vendor') }}
                     </div>
-                    <div>
-                      <span class="font-medium">Attorney:</span>
-                      {{ row.assigned_attorney_id ? (attorneyById.get(String(row.assigned_attorney_id)) || '—') : '—' }}
+                    <div class="flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px]" style="color: var(--dashboard-text-muted);">
+                      <UIcon name="i-lucide-sticky-note" class="h-3.5 w-3.5" />
+                      <span>{{ noteCounts[String(row.id)] ?? 0 }}</span>
                     </div>
                   </div>
                 </div>
@@ -1180,12 +1369,37 @@ void sourceTypeOptions.value
       color: var(--card-light, var(--ap-accent));
     }
 
-    .ap-card-value {
+    .ap-card-value-row {
       margin-top: 6px;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .ap-card-value {
       font-size: 24px;
       font-weight: 700;
       font-variant-numeric: tabular-nums;
       color: var(--dashboard-text-primary);
+    }
+
+    .ap-card-secondary {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 4px;
+      min-width: 0;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--card-light, var(--ap-accent));
+      white-space: nowrap;
+    }
+
+    .ap-card-secondary span:last-child {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--dashboard-text-soft);
     }
 
     /* ═══════════════════════════════════════════════
@@ -1305,7 +1519,7 @@ void sourceTypeOptions.value
        KANBAN CARDS
        ═══════════════════════════════════════════════ */
     .ap-kanban-card {
-      min-height: 108px;
+      min-height: 132px;
       padding: 12px 14px;
       border-radius: 0.5rem;
       border: 1px solid var(--dashboard-surface-border);
@@ -1340,6 +1554,71 @@ void sourceTypeOptions.value
 
     .ap-kanban-card:active {
       cursor: pointer;
+    }
+
+    .ap-card-chip {
+      display: inline-flex;
+      min-width: 0;
+      align-items: center;
+      gap: 4px;
+      border-radius: 6px;
+      border: 1px solid var(--dashboard-surface-border);
+      background: rgba(var(--ap-col-accent-rgb), 0.06);
+      padding: 3px 7px;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1;
+      color: var(--dashboard-text-secondary);
+      white-space: nowrap;
+    }
+
+    .ap-card-tier-chip {
+      color: var(--ap-col-accent);
+    }
+
+    .ap-card-tier-code {
+      border-radius: 4px;
+      background: rgba(var(--ap-col-accent-rgb), 0.14);
+      padding: 2px 4px;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+
+    .ap-card-meta-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--dashboard-text-soft);
+    }
+
+    .ap-card-commission {
+      margin-top: 2px;
+      font-size: 18px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      color: var(--dashboard-text-primary);
+    }
+
+    .ap-card-updated {
+      display: inline-flex;
+      max-width: 100%;
+      flex-shrink: 0;
+      align-items: center;
+      gap: 4px;
+      border-radius: 6px;
+      background: rgba(var(--ap-col-accent-rgb), 0.06);
+      padding: 4px 7px;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--dashboard-text-muted);
+      white-space: nowrap;
+    }
+
+    .ap-card-updated span {
+      overflow: visible;
+      text-overflow: clip;
     }
 
     /* Dragging state applied via JS */
