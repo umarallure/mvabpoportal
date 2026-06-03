@@ -162,9 +162,9 @@ const links = computed(() => {
     icon: 'i-lucide-users',
     to: '/users',
     onSelect: () => { open.value = false }
-  }] : []), ...(['admin', 'super_admin'].includes(role) ? [{
+  }] : []), ...(['admin', 'super_admin', 'publisher_admin'].includes(role) ? [{
     label: 'Product Guide',
-    icon: 'i-lucide-play-circle',
+    icon: 'i-lucide-book-open',
     to: '/product-guide',
     onSelect: () => { open.value = false }
   }] : []), {

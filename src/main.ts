@@ -30,7 +30,9 @@ const router = createRouter({
     { path: '/lead-intake', component: () => import('./pages/lead-intake.vue') },
     { path: '/notifications', redirect: '/inbox' },
     { path: '/users', component: () => import('./pages/users.vue'), meta: { requiresSuperAdmin: true } },
-    { path: '/product-guide', component: () => import('./pages/product-guide.vue'), meta: { requiresAdminOrSuperAdmin: true } },
+    // Viewable by publisher_admin + admin tier; publisher_closer is blocked by the
+    // closer whitelist below. Edit controls are gated in-page to the admin tier.
+    { path: '/product-guide', component: () => import('./pages/product-guide.vue') },
     {
       path: '/settings',
       component: () => import('./pages/settings.vue'),
