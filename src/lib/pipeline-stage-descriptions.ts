@@ -78,6 +78,7 @@ const SUBMISSION_STAGE_DESCRIPTIONS: Record<string, string> = {
   attorney_review: 'Your case has been submitted and is waiting for attorney review.',
   attorney_rejected: 'The attorney declined the case after review. No further submission action is pending unless the case is reworked.',
   attorney_approved: 'The attorney accepted the case and it is approved to move forward.',
+  attorney_dropped: 'The attorney previously accepted the case, but later dropped it before the case became payable.',
   qualified_payable: 'The case is approved as payable and is queued for payout processing.',
   paid_to_bpo: 'Payout has been completed to your BPO or publisher side for this case.'
 }
