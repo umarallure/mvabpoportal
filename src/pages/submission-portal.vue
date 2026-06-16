@@ -309,21 +309,6 @@ const getRowTierShortLabel = (row: SubmissionPortalRow) =>
 const getRowCommissionLabel = (row: SubmissionPortalRow) =>
   formatSubmissionCommission(getRowTierSnapshot(row)?.price ?? null)
 
-const getRowUpdatedTag = (row: SubmissionPortalRow) => {
-  const raw = String(row.updated_at || row.created_at || row.date || '').trim()
-  if (!raw) return 'Updated unknown'
-
-  const date = new Date(raw)
-  if (Number.isNaN(date.getTime())) return 'Updated unknown'
-
-  return `Updated ${date.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit'
-  })}`
-}
-
 const stageFilterOptions = computed(() => [
   { label: 'All Stages', value: ALL_FILTER_VALUE },
   ...STAGES.value.map(stage => ({ label: stage.label, value: stage.key }))
@@ -1245,10 +1230,6 @@ void sourceTypeOptions.value
                       <div class="ap-card-meta-label">Commission</div>
                       <div class="ap-card-commission">{{ getRowCommissionLabel(row) }}</div>
                     </div>
-                    <div class="ap-card-updated">
-                      <UIcon name="i-lucide-clock-3" class="size-3" />
-                      <span>{{ getRowUpdatedTag(row) }}</span>
-                    </div>
                   </div>
 
                   <div class="mt-3 flex items-center justify-between gap-2 border-t border-[var(--dashboard-divider)] pt-2">
@@ -1598,26 +1579,6 @@ void sourceTypeOptions.value
       font-weight: 800;
       font-variant-numeric: tabular-nums;
       color: var(--dashboard-text-primary);
-    }
-
-    .ap-card-updated {
-      display: inline-flex;
-      max-width: 100%;
-      flex-shrink: 0;
-      align-items: center;
-      gap: 4px;
-      border-radius: 6px;
-      background: rgba(var(--ap-col-accent-rgb), 0.06);
-      padding: 4px 7px;
-      font-size: 10px;
-      font-weight: 600;
-      color: var(--dashboard-text-muted);
-      white-space: nowrap;
-    }
-
-    .ap-card-updated span {
-      overflow: visible;
-      text-overflow: clip;
     }
 
     /* Dragging state applied via JS */
