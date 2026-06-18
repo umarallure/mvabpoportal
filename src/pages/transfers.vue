@@ -961,27 +961,6 @@ void sourceTypeOptions.value
           </div>
         </div>
 
-        <!-- ═══ EMPTY STATE ═══ -->
-        <div
-          v-else-if="!loading && filteredLeads.length === 0 && !loadError"
-          class="flex flex-1 items-center justify-center"
-        >
-          <div class="flex flex-col items-center gap-3 text-center">
-            <div
-              class="flex size-14 items-center justify-center rounded-2xl"
-              style="background: var(--ap-accent-soft);"
-            >
-              <UIcon name="i-lucide-arrow-right-left" class="size-7" style="color: var(--ap-accent);" />
-            </div>
-            <div class="text-sm font-semibold" style="color: var(--dashboard-text-primary);">
-              No transfers yet
-            </div>
-            <div class="max-w-xs text-xs" style="color: var(--dashboard-text-muted);">
-              Transfers will appear here once leads enter the transfer pipeline.
-            </div>
-          </div>
-        </div>
-
         <!-- ═══ KANBAN BOARD ═══ -->
         <div
           v-else-if="viewMode === 'kanban' && !loading"

@@ -14,12 +14,17 @@ type BpoProfileRow = Partial<{
   contact_email: string | null
   contact_phone: string | null
   number_of_agents: string | null
+  buyer_count: number | null
+  campaigns: string[] | null
+  sales_model: string | null
+  sales_model_other: string | null
+  selling_markets: string[] | null
   languages: string[] | null
   operating_hours: string | null
 }>
 
 const CENTER_PROFILE_SELECT =
-  'id,center_name,location,website_or_linkedin,contact_email,contact_phone,number_of_agents,languages,operating_hours'
+  'id,center_name,location,website_or_linkedin,contact_email,contact_phone,number_of_agents,buyer_count,campaigns,sales_model,sales_model_other,selling_markets,languages,operating_hours'
 
 // Pricing has no current persistence target in the centers schema.
 const showPricingFields = false
@@ -31,6 +36,11 @@ const profileSchema = z.object({
   contactEmail: z.string().trim().email('Invalid email').optional().or(z.literal('')),
   contactPhone: z.string().trim().optional(),
   numberOfAgents: z.string().trim().optional(),
+  buyerCount: z.number().int().min(0).optional().or(z.literal('')),
+  campaigns: z.array(z.string()).optional(),
+  salesModel: z.enum(['cpi', 'cpl', 'cpq', 'signed_retainer', 'seat', 'hourly', 'other']).optional().or(z.literal('')),
+  salesModelOther: z.string().trim().optional(),
+  sellingMarkets: z.array(z.string()).optional(),
   languages: z.array(z.string()).optional(),
   operatingHours: z.string().trim().optional(),
   caseRatePerDeal: z.number().min(0).optional().or(z.literal('')),
@@ -63,6 +73,30 @@ const languageOptions = [
   'Urdu'
 ]
 
+const campaignOptions = [
+  'Auto',
+  'MVA',
+  'PI',
+  'Workers Comp',
+  'Mass Tort'
+]
+
+const marketOptions = [
+  'US',
+  'Canada',
+  'UK'
+]
+
+const salesModelOptions = [
+  { label: 'CPI', value: 'cpi' },
+  { label: 'CPL', value: 'cpl' },
+  { label: 'CPQ', value: 'cpq' },
+  { label: 'Signed Retainer', value: 'signed_retainer' },
+  { label: 'Seat', value: 'seat' },
+  { label: 'Hourly', value: 'hourly' },
+  { label: 'Other', value: 'other' }
+]
+
 const profile = reactive<Partial<ProfileSchema>>({
   centerName: '',
   location: '',
@@ -70,6 +104,11 @@ const profile = reactive<Partial<ProfileSchema>>({
   contactEmail: '',
   contactPhone: '',
   numberOfAgents: '',
+  buyerCount: '',
+  campaigns: [],
+  salesModel: '',
+  salesModelOther: '',
+  sellingMarkets: [],
   languages: [],
   operatingHours: '',
   caseRatePerDeal: '',
@@ -85,6 +124,11 @@ const hydrateFromDb = (data?: BpoProfileRow | null) => {
   profile.contactEmail = data?.contact_email ?? ''
   profile.contactPhone = data?.contact_phone ?? ''
   profile.numberOfAgents = data?.number_of_agents ?? ''
+  profile.buyerCount = data?.buyer_count ?? ''
+  profile.campaigns = data?.campaigns ?? []
+  profile.salesModel = (data?.sales_model ?? '') as ProfileSchema['salesModel']
+  profile.salesModelOther = data?.sales_model_other ?? ''
+  profile.sellingMarkets = data?.selling_markets ?? []
   profile.languages = data?.languages ?? []
   profile.operatingHours = data?.operating_hours ?? ''
   profile.caseRatePerDeal = ''
@@ -137,7 +181,14 @@ async function onSubmit(event: FormSubmitEvent<ProfileSchema>) {
       contact_email: event.data.contactEmail?.trim() || null,
       contact_phone: event.data.contactPhone?.trim() || null,
       number_of_agents: event.data.numberOfAgents?.trim() || null,
-      languages: event.data.languages ?? [],
+      buyer_count: typeof event.data.buyerCount === 'number' ? event.data.buyerCount : null,
+      campaigns: normalizeList(event.data.campaigns),
+      sales_model: event.data.salesModel || null,
+      sales_model_other: event.data.salesModel === 'other'
+        ? event.data.salesModelOther?.trim() || null
+        : null,
+      selling_markets: normalizeList(event.data.sellingMarkets),
+      languages: normalizeList(event.data.languages),
       operating_hours: event.data.operatingHours?.trim() || null
     }
 
@@ -181,6 +232,9 @@ const cancelEditing = async () => {
   isEditing.value = false
   await loadProfile()
 }
+
+const normalizeList = (items?: string[]) =>
+  Array.from(new Set((items ?? []).map(item => item.trim()).filter(Boolean)))
 </script>
 
 <template>
@@ -346,13 +400,13 @@ const cancelEditing = async () => {
           </div>
 
           <!-- Body -->
-          <div class="relative flex-1 space-y-4 p-4 sm:p-5">
+          <div class="relative grid flex-1 grid-cols-1 gap-4 p-4 sm:grid-cols-2 sm:p-5">
             <div class="space-y-1.5">
               <label class="text-xs font-medium text-highlighted">Number of Agents</label>
               <UInput
                 v-model="profile.numberOfAgents"
                 size="sm"
-                placeholder="e.g., 10, 50, 200+"
+                placeholder="e.g., 25"
                 autocomplete="off"
                 :disabled="disabled"
                 class="w-full"
@@ -360,29 +414,101 @@ const cancelEditing = async () => {
             </div>
 
             <div class="space-y-1.5">
-              <label class="text-xs font-medium text-highlighted">Languages</label>
+              <label class="text-xs font-medium text-highlighted">Buyers</label>
+              <UInput
+                v-model.number="profile.buyerCount"
+                size="sm"
+                type="number"
+                min="0"
+                placeholder="e.g., 12"
+                autocomplete="off"
+                :disabled="disabled"
+                class="w-full"
+              />
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="text-xs font-medium text-highlighted">Campaigns</label>
               <UInputMenu
-                v-model="profile.languages"
-                :items="languageOptions"
+                v-model="profile.campaigns"
+                :items="campaignOptions"
                 multiple
                 searchable
                 creatable
-                placeholder="Select or type languages"
+                placeholder="e.g., Auto, MVA, PI"
                 :disabled="disabled"
                 class="w-full"
               />
             </div>
 
             <div class="space-y-1.5">
-              <label class="text-xs font-medium text-highlighted">Operating Hours</label>
+              <label class="text-xs font-medium text-highlighted">Model</label>
+              <USelect
+                v-model="profile.salesModel"
+                :items="salesModelOptions"
+                value-key="value"
+                label-key="label"
+                placeholder="Select a model"
+                :disabled="disabled"
+                class="w-full"
+              />
+            </div>
+
+            <div
+              v-if="profile.salesModel === 'other'"
+              class="space-y-1.5 sm:col-span-2"
+            >
+              <label class="text-xs font-medium text-highlighted">Other Model</label>
               <UInput
-                v-model="profile.operatingHours"
+                v-model="profile.salesModelOther"
                 size="sm"
-                placeholder="e.g., 24/7 or 9-5 EST"
+                placeholder="Describe the model"
                 autocomplete="off"
                 :disabled="disabled"
                 class="w-full"
               />
+            </div>
+
+            <div class="grid grid-cols-1 gap-4 sm:col-span-2 md:grid-cols-3">
+              <div class="space-y-1.5">
+                <label class="text-xs font-medium text-highlighted">Market Target</label>
+                <UInputMenu
+                  v-model="profile.sellingMarkets"
+                  :items="marketOptions"
+                  multiple
+                  searchable
+                  creatable
+                  placeholder="e.g., US, Canada, UK"
+                  :disabled="disabled"
+                  class="w-full"
+                />
+              </div>
+
+              <div class="space-y-1.5">
+                <label class="text-xs font-medium text-highlighted">Languages</label>
+                <UInputMenu
+                  v-model="profile.languages"
+                  :items="languageOptions"
+                  multiple
+                  searchable
+                  creatable
+                  placeholder="Select or type languages"
+                  :disabled="disabled"
+                  class="w-full"
+                />
+              </div>
+
+              <div class="space-y-1.5">
+                <label class="text-xs font-medium text-highlighted">Operating Hours</label>
+                <UInput
+                  v-model="profile.operatingHours"
+                  size="sm"
+                  placeholder="e.g., 24/7 or 9-5 EST"
+                  autocomplete="off"
+                  :disabled="disabled"
+                  class="w-full"
+                />
+              </div>
             </div>
           </div>
         </div>
