@@ -36,7 +36,7 @@ const open = ref(false)
 const sidebarCollapsed = ref(false)
 const chatOpen = ref(false)
 
-const publicPagePaths = ['/login', '/', '/get-started', '/launch-auth', '/managed-auth/callback']
+const publicPagePaths = ['/login', '/', '/privacy-policy', '/terms', '/get-started', '/launch-auth', '/managed-auth/callback']
 const isPublicPage = computed(() => publicPagePaths.includes(route.path) || route.path.endsWith('/pdf'))
 const isStandalonePage = computed(() => Boolean(route.meta.standalone))
 
