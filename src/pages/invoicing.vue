@@ -271,11 +271,51 @@ const summaryCards = computed(() => {
   const sum = (arr: InvoiceRow[]) => arr.reduce((s, i) => s + (i.total_amount ?? 0), 0)
 
   return [
-    { label: 'Total Invoiced', value: fmtMoney(sum(all)), icon: 'i-lucide-receipt', accent: '#ae4010', light: '#e8763c', rgb: '174,64,16' },
-    { label: 'Billable – Awaiting to be Paid', value: fmtMoney(sum(billable)), icon: 'i-lucide-file-check-2', accent: '#3b82f6', light: '#60a5fa', rgb: '59,130,246' },
-    { label: 'In Review', value: fmtMoney(sum(inReview)), icon: 'i-lucide-clock', accent: '#f59e0b', light: '#fcd34d', rgb: '245,158,11' },
-    { label: 'Paid', value: fmtMoney(sum(paid)), icon: 'i-lucide-circle-check-big', accent: '#22c55e', light: '#4ade80', rgb: '34,197,94' },
-    { label: 'Chargeback', value: fmtMoney(sum(chargeback)), icon: 'i-lucide-triangle-alert', accent: '#ef4444', light: '#f87171', rgb: '239,68,68' },
+    {
+      label: 'Total Invoiced',
+      value: fmtMoney(sum(all)),
+      icon: 'i-lucide-receipt',
+      accent: '#ae4010',
+      light: '#e8763c',
+      rgb: '174,64,16',
+      description: 'Total dollar value of all invoices available to your account, across every invoice status.'
+    },
+    {
+      label: 'Billable - Awaiting to be Paid',
+      value: fmtMoney(sum(billable)),
+      icon: 'i-lucide-file-check-2',
+      accent: '#3b82f6',
+      light: '#60a5fa',
+      rgb: '59,130,246',
+      description: 'Invoice value currently ready for payment and not yet moved into review or paid status.'
+    },
+    {
+      label: 'In Review',
+      value: fmtMoney(sum(inReview)),
+      icon: 'i-lucide-clock',
+      accent: '#f59e0b',
+      light: '#fcd34d',
+      rgb: '245,158,11',
+      description: 'Invoice value currently being reviewed, previewed, or awaiting final confirmation.'
+    },
+    {
+      label: 'Paid',
+      value: fmtMoney(sum(paid)),
+      icon: 'i-lucide-circle-check-big',
+      accent: '#22c55e',
+      light: '#4ade80',
+      rgb: '34,197,94',
+      description: 'Invoice value that has been marked as paid and completed.'
+    },
+    {
+      label: 'Chargeback',
+      value: fmtMoney(sum(chargeback)),
+      icon: 'i-lucide-triangle-alert',
+      accent: '#ef4444',
+      light: '#f87171',
+      rgb: '239,68,68',
+      description: 'Invoice value currently flagged for chargeback review or follow-up.'
+    },
   ]
 })
 
@@ -495,7 +535,14 @@ const invoiceLabel = (inv: InvoiceRow) =>
         <div v-else-if="loadError" class="flex flex-col items-center justify-center gap-3 py-16 text-center">
           <UIcon name="i-lucide-alert-triangle" class="size-10 text-red-400" />
           <p class="text-sm font-medium text-red-500">{{ loadError }}</p>
-          <UButton size="sm" variant="outline" color="neutral" @click="loadInvoices">Retry</UButton>
+          <UButton
+            size="sm"
+            variant="outline"
+            color="neutral"
+            @click="loadInvoices"
+          >
+            Retry
+          </UButton>
         </div>
 
         <template v-else>
@@ -515,7 +562,34 @@ const invoiceLabel = (inv: InvoiceRow) =>
             >
               <div class="flex items-start justify-between px-5 py-4">
                 <div>
-                  <div class="inv-card-label">{{ card.label }}</div>
+                  <div class="flex items-center gap-1.5">
+                    <div class="inv-card-label">{{ card.label }}</div>
+                    <UPopover
+                      mode="hover"
+                      arrow
+                      :open-delay="100"
+                      :close-delay="120"
+                      :content="{ side: 'top', align: 'start', sideOffset: 8 }"
+                    >
+                      <button
+                        type="button"
+                        class="inv-card-info-btn"
+                        :aria-label="`About ${card.label}`"
+                      >
+                        <UIcon name="i-lucide-circle-help" class="size-3.5" />
+                      </button>
+                      <template #content>
+                        <div class="max-w-72 p-3">
+                          <div class="text-sm font-semibold" style="color: var(--dashboard-text-primary);">
+                            {{ card.label }}
+                          </div>
+                          <p class="mt-1 text-xs leading-5" style="color: var(--dashboard-text-muted);">
+                            {{ card.description }}
+                          </p>
+                        </div>
+                      </template>
+                    </UPopover>
+                  </div>
                   <div class="inv-card-value">{{ card.value }}</div>
                 </div>
                 <div
@@ -812,6 +886,23 @@ const invoiceLabel = (inv: InvoiceRow) =>
   letter-spacing: 0.1em;
   color: var(--card-light, var(--ap-accent));
   margin-bottom: 4px;
+}
+
+.inv-card-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+  color: var(--dashboard-text-muted);
+  opacity: 0.58;
+  transition: color 150ms ease, opacity 150ms ease;
+}
+
+.inv-card-info-btn:hover,
+.inv-card-info-btn:focus-visible {
+  color: var(--card-light, var(--ap-accent));
+  opacity: 1;
+  outline: none;
 }
 
 .inv-card-value {
