@@ -128,10 +128,6 @@ const GREEN_ACTIVE_STATE_CODES = new Set([
   'NY'
 ])
 
-const TEMPORARILY_UNAVAILABLE_STATE_CODES = new Set([
-  'CA'
-])
-
 const descriptionForStatus = (status: StateData['status']) => {
   if (status === 'permanently_blocked') return 'Temporarily blocked state'
   if (status === 'temporarily_blocked') return 'Blocked state'
@@ -148,6 +144,14 @@ const capacityLabel = (capacity: StateData['capacity']) => {
 const normalize = (value: unknown) => String(value ?? '').trim().toLowerCase()
 
 const normalizeStateCode = (value: unknown) => String(value ?? '').trim().toUpperCase()
+
+const toAvailabilityStatus = (value: unknown): StateData['status'] | null => {
+  const status = normalize(value)
+  if (status === 'unblocked' || status === 'temporarily_blocked' || status === 'permanently_blocked') {
+    return status
+  }
+  return null
+}
 
 const isTestLawyer = (...values: unknown[]) => values.some((value) => normalize(value).includes('test'))
 
@@ -285,7 +289,8 @@ const refreshCounts = async () => {
     statesData.value = US_STATES.map((s) => {
       const row = mapByCode.get(s.code)
       const attorneyCount = attorneyCounts.get(s.code)?.size ?? 0
-      const resolvedStatus: StateData['status'] = TEMPORARILY_UNAVAILABLE_STATE_CODES.has(s.code)
+      const configuredStatus = toAvailabilityStatus(row?.availability_status)
+      const resolvedStatus: StateData['status'] = configuredStatus === 'permanently_blocked'
         ? 'permanently_blocked'
         : attorneyCount > 0
         ? 'unblocked'
