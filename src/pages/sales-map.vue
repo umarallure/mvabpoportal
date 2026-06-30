@@ -69,7 +69,6 @@ type StateData = {
   name: string
   status: 'unblocked' | 'temporarily_blocked' | 'permanently_blocked'
   capacity: 'low' | 'medium' | 'high' | null
-  attorneyCount: number
   description: string
   notes: string | null
 }
@@ -79,24 +78,6 @@ type SalesMapStateRow = {
   state_name?: string | null
   availability_status?: string | null
   notes?: string | null
-}
-
-type LawyerRequirementRow = {
-  attorney_id?: string | null
-  attorney_name?: string | null
-  states?: unknown
-  lawyer_type?: string | null
-}
-
-type AttorneyProfileRow = {
-  user_id?: string | null
-  full_name?: string | null
-  firm_name?: string | null
-  primary_email?: string | null
-  personal_email?: string | null
-  licensed_states?: string[] | null
-  blocked_states?: string[] | null
-  account_type?: string | null
 }
 
 const loading = ref(false)
@@ -117,8 +98,6 @@ const tooltip = ref<TooltipState>({
   state: null
 })
 
-const US_STATE_CODES = new Set(US_STATES.map((state) => state.code))
-
 const GREEN_ACTIVE_STATE_CODES = new Set([
   'WY',
   'AZ',
@@ -129,8 +108,8 @@ const GREEN_ACTIVE_STATE_CODES = new Set([
 ])
 
 const descriptionForStatus = (status: StateData['status']) => {
-  if (status === 'permanently_blocked') return 'Temporarily blocked state'
-  if (status === 'temporarily_blocked') return 'Blocked state'
+  if (status === 'permanently_blocked') return 'Permanently blocked state'
+  if (status === 'temporarily_blocked') return 'Inactive state'
   return 'Unblocked state'
 }
 
@@ -143,36 +122,12 @@ const capacityLabel = (capacity: StateData['capacity']) => {
 
 const normalize = (value: unknown) => String(value ?? '').trim().toLowerCase()
 
-const normalizeStateCode = (value: unknown) => String(value ?? '').trim().toUpperCase()
-
-const toAvailabilityStatus = (value: unknown): StateData['status'] | null => {
+const toAvailabilityStatus = (value: unknown): StateData['status'] => {
   const status = normalize(value)
   if (status === 'unblocked' || status === 'temporarily_blocked' || status === 'permanently_blocked') {
     return status
   }
-  return null
-}
-
-const isTestLawyer = (...values: unknown[]) => values.some((value) => normalize(value).includes('test'))
-
-const toStateCodes = (value: unknown): string[] => {
-  const asArray = Array.isArray(value)
-    ? value
-    : typeof value === 'string'
-      ? (() => {
-          try {
-            const parsed = JSON.parse(value)
-            return Array.isArray(parsed) ? parsed : value.split(',')
-          } catch {
-            return value.split(',')
-          }
-        })()
-      : []
-
-  return [...new Set(asArray
-    .map((item) => normalizeStateCode(item))
-    .filter((code) => US_STATE_CODES.has(code))
-  )]
+  return 'temporarily_blocked'
 }
 
 const statesData = ref<StateData[]>(
@@ -181,7 +136,6 @@ const statesData = ref<StateData[]>(
     name: s.name,
     status: 'temporarily_blocked',
     capacity: null,
-    attorneyCount: 0,
     description: descriptionForStatus('temporarily_blocked'),
     notes: null
   }))
@@ -192,8 +146,8 @@ const selectedStatus = ref('all')
 const statusOptions = [
   { value: 'all', label: 'All States' },
   { value: 'unblocked', label: 'Unblocked' },
-  { value: 'temporarily_blocked', label: 'Blocked' },
-  { value: 'permanently_blocked', label: 'Temporarily Blocked' }
+  { value: 'temporarily_blocked', label: 'Inactive' },
+  { value: 'permanently_blocked', label: 'Permanently Blocked' }
 ]
 
 const filteredStates = ref(statesData.value)
@@ -210,34 +164,12 @@ const filterStates = () => {
 const refreshCounts = async () => {
   loading.value = true
   try {
-    const [
-      { data: salesMapRows, error: salesMapError },
-      { data: lawyerRequirementRows, error: lawyerRequirementError },
-      { data: attorneyProfileRows, error: attorneyProfileError }
-    ] = await Promise.all([
-      supabase
-        .from('sales_map_states')
-        .select('state_code,state_name,availability_status,notes'),
-      supabase
-        .from('lawyer_requirements')
-        .select('attorney_id,attorney_name,states,lawyer_type')
-        .eq('lawyer_type', 'broker_lawyer'),
-      supabase
-        .from('attorney_profiles')
-        .select('user_id,full_name,firm_name,primary_email,personal_email,licensed_states,blocked_states,account_type')
-        .eq('account_type', 'internal_lawyer')
-    ])
+    const { data: salesMapRows, error: salesMapError } = await supabase
+      .from('sales_map_states')
+      .select('state_code,state_name,availability_status,notes')
 
     if (salesMapError) {
       throw salesMapError instanceof Error ? salesMapError : new Error(String(salesMapError))
-    }
-
-    if (lawyerRequirementError) {
-      throw lawyerRequirementError instanceof Error ? lawyerRequirementError : new Error(String(lawyerRequirementError))
-    }
-
-    if (attorneyProfileError) {
-      throw attorneyProfileError instanceof Error ? attorneyProfileError : new Error(String(attorneyProfileError))
     }
 
     const rows = (salesMapRows ?? []) as SalesMapStateRow[]
@@ -248,53 +180,9 @@ const refreshCounts = async () => {
       ] as const)
     )
 
-    const attorneyCounts = new Map<string, Set<string>>()
-
-    const addAttorneyStates = (lawyerKey: string, stateCodes: string[], blockedStateCodes: string[]) => {
-      const blocked = new Set(blockedStateCodes)
-      for (const code of stateCodes) {
-        if (blocked.has(code)) continue
-        const existing = attorneyCounts.get(code) ?? new Set<string>()
-        existing.add(lawyerKey)
-        attorneyCounts.set(code, existing)
-      }
-    }
-
-    for (const row of (lawyerRequirementRows ?? []) as LawyerRequirementRow[]) {
-      const stateCodes = toStateCodes(row.states)
-      if (!stateCodes.length) continue
-      if (isTestLawyer(row.attorney_name)) continue
-
-      const attorneyId = String(row.attorney_id ?? '').trim()
-      const attorneyName = String(row.attorney_name ?? '').trim()
-      const lawyerKey = `broker:${attorneyId || attorneyName}`
-      if (!attorneyId && !attorneyName) continue
-
-      addAttorneyStates(lawyerKey, stateCodes, [])
-    }
-
-    for (const row of (attorneyProfileRows ?? []) as AttorneyProfileRow[]) {
-      const stateCodes = toStateCodes(row.licensed_states)
-      if (!stateCodes.length) continue
-      if (isTestLawyer(row.full_name, row.firm_name, row.primary_email, row.personal_email)) continue
-
-      const userId = String(row.user_id ?? '').trim()
-      const fullName = String(row.full_name ?? '').trim()
-      const lawyerKey = `internal:${userId || fullName}`
-      if (!userId && !fullName) continue
-
-      addAttorneyStates(lawyerKey, stateCodes, toStateCodes(row.blocked_states))
-    }
-
     statesData.value = US_STATES.map((s) => {
       const row = mapByCode.get(s.code)
-      const attorneyCount = attorneyCounts.get(s.code)?.size ?? 0
-      const configuredStatus = toAvailabilityStatus(row?.availability_status)
-      const resolvedStatus: StateData['status'] = configuredStatus === 'permanently_blocked'
-        ? 'permanently_blocked'
-        : attorneyCount > 0
-        ? 'unblocked'
-        : 'temporarily_blocked'
+      const resolvedStatus = toAvailabilityStatus(row?.availability_status)
       const capacity = resolvedStatus === 'unblocked'
         ? GREEN_ACTIVE_STATE_CODES.has(s.code) ? 'high' : 'medium'
         : null
@@ -304,7 +192,6 @@ const refreshCounts = async () => {
         name: String(row?.state_name || s.name),
         status: resolvedStatus,
         capacity,
-        attorneyCount,
         description: resolvedStatus === 'unblocked'
           ? `${capacityLabel(capacity)}`
           : descriptionForStatus(resolvedStatus),
@@ -319,8 +206,8 @@ const refreshCounts = async () => {
 }
 
 const getStatusLabel = (status: string) => {
-  if (status === 'permanently_blocked') return 'Temporarily blocked'
-  if (status === 'temporarily_blocked') return 'Blocked'
+  if (status === 'permanently_blocked') return 'Permanently blocked'
+  if (status === 'temporarily_blocked') return 'Inactive'
   return 'Unblocked'
 }
 
@@ -581,7 +468,8 @@ const statsCards = computed(() => {
   return [
     { label: 'Total', value: all.length, accent: '#ae4010', delay: 400 },
     { label: 'Active', value: all.filter(s => s.status === 'unblocked').length, accent: '#3f6eb3', delay: 500 },
-    { label: 'Blocked', value: all.filter(s => s.status === 'temporarily_blocked').length, accent: '#9ca3af', delay: 600 }
+    { label: 'Inactive', value: all.filter(s => s.status === 'temporarily_blocked').length, accent: '#9ca3af', delay: 600 },
+    { label: 'Permanent', value: all.filter(s => s.status === 'permanently_blocked').length, accent: '#f97316', delay: 700 }
   ]
 })
 
@@ -723,14 +611,14 @@ watch([selectedStatus, filteredStates], () => {
                     class="size-2.5 rounded-full"
                     style="background: repeating-linear-gradient(45deg, #9ca3af 0 2px, #f3f4f6 2px 6px)"
                   />
-                  <span class="text-[10px] text-gray-500 dark:text-gray-400">Blocked</span>
+                  <span class="text-[10px] text-gray-500 dark:text-gray-400">Inactive</span>
                 </div>
                 <div class="flex items-center gap-1.5">
                   <div
                     class="size-2.5 rounded-full"
                     style="background: repeating-linear-gradient(45deg, #f97316 0 3px, #fff7ed 3px 7px)"
                   />
-                  <span class="text-[10px] text-gray-500 dark:text-gray-400">Temporarily unavailable</span>
+                  <span class="text-[10px] text-gray-500 dark:text-gray-400">Permanently blocked</span>
                 </div>
               </div>
 
