@@ -6,6 +6,7 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 
 import { useAuth } from './composables/useAuth'
 import { useNotifications } from './composables/useNotifications'
+import { usePublisherIncentives } from './composables/usePublisherIncentives'
 
 type HubSpotWindow = Window & typeof globalThis & {
   HubSpotConversations?: {
@@ -22,13 +23,23 @@ const toast = useToast()
 const route = useRoute()
 const auth = useAuth()
 const { fetchInitialNotifications, initializeRealtimeListener, cleanup } = useNotifications()
+const {
+  start: startIncentives,
+  cleanup: cleanupIncentives
+} = usePublisherIncentives()
 
-watch(() => auth.state.value.user?.id, (userId) => {
+watch(() => [auth.state.value.user?.id, auth.state.value.profile?.role] as const, ([userId]) => {
   if (userId) {
     fetchInitialNotifications(userId)
     initializeRealtimeListener(userId)
+    if (auth.isPublisherRole.value) {
+      void startIncentives()
+    } else {
+      cleanupIncentives()
+    }
   } else {
     cleanup()
+    cleanupIncentives()
   }
 }, { immediate: true })
 
@@ -39,6 +50,7 @@ const chatOpen = ref(false)
 const publicPagePaths = ['/login', '/', '/privacy-policy', '/terms', '/get-started', '/launch-auth', '/managed-auth/callback']
 const isPublicPage = computed(() => publicPagePaths.includes(route.path) || route.path.endsWith('/pdf'))
 const isStandalonePage = computed(() => Boolean(route.meta.standalone))
+const showIncentiveBar = computed(() => auth.isPublisherRole.value && !isPublicPage.value && !isStandalonePage.value)
 
 function withHubSpotReady(callback: () => void) {
   if (typeof window === 'undefined') return
@@ -104,6 +116,12 @@ const links = computed(() => {
         onSelect: () => { open.value = false }
       },
       {
+        label: 'Incentives',
+        icon: 'i-lucide-zap',
+        to: '/incentives',
+        onSelect: () => { open.value = false }
+      },
+      {
         label: 'Team Profile',
         icon: 'i-lucide-users',
         to: '/settings/team-profile',
@@ -127,7 +145,12 @@ const links = computed(() => {
     icon: 'i-lucide-clipboard-pen',
     to: '/lead-intake',
     onSelect: () => { open.value = false }
-  }, {
+  }, ...(['admin', 'super_admin', 'publisher_admin'].includes(role) ? [{
+    label: 'Incentives',
+    icon: 'i-lucide-zap',
+    to: '/incentives',
+    onSelect: () => { open.value = false }
+  }] : []), {
     label: 'Transfer Pipeline',
     icon: 'i-lucide-arrow-right-left',
     to: '/transfers',
@@ -294,7 +317,10 @@ if (cookie.value !== 'accepted') {
 
         <UDashboardSearch :groups="groups" />
 
-        <RouterView />
+        <div class="flex min-w-0 flex-1 flex-col">
+          <PublisherIncentiveStickyBar v-if="showIncentiveBar" />
+          <RouterView />
+        </div>
 
         <NotificationsSlideover />
 

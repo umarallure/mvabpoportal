@@ -12,8 +12,7 @@ const _useNotifications = () => {
   const unreadCount = computed(() => notifications.value.filter(n => !n.is_read).length)
 
   let channel: RealtimeChannel | null = null
-  let initialized = false
-  let pollTimer: ReturnType<typeof setInterval> | null = null
+  let pollTimer: number | null = null
   let latestCreatedAt: string | null = null
   let currentUserId: string | null = null
   let visibilityHandler: (() => void) | null = null
@@ -138,7 +137,6 @@ const _useNotifications = () => {
       .subscribe()
 
     startPolling(userId)
-    initialized = true
   }
 
   const markAsRead = async (notificationId: string) => {
@@ -195,7 +193,6 @@ const _useNotifications = () => {
     notifications.value = []
     latestCreatedAt = null
     currentUserId = null
-    initialized = false
   }
 
   return { notifications, unreadCount, fetchInitialNotifications, initializeRealtimeListener, markAsRead, markAllAsRead, deleteNotification, cleanup }

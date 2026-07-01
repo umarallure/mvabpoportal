@@ -20,6 +20,7 @@ const router = createRouter({
     { path: '/inbox', component: () => import('./pages/inbox.vue') },
     { path: '/product-offering', component: () => import('./pages/product-offering.vue') },
     { path: '/transfers', component: () => import('./pages/transfers.vue') },
+    { path: '/incentives', component: () => import('./pages/incentives.vue'), meta: { requiresPublisherRole: true } },
     { path: '/retainers', component: () => import('./pages/retainers.vue') },
     { path: '/retainers/:id', component: () => import('./pages/retainers-details.vue') },
     { path: '/leads/:id', component: () => import('./pages/retainers-details.vue') },
@@ -60,6 +61,7 @@ router.beforeEach(async (to) => {
   const requiresAdmin = Boolean(to.meta.requiresAdmin)
   const requiresSuperAdmin = Boolean(to.meta.requiresSuperAdmin)
   const requiresAdminOrSuperAdmin = Boolean(to.meta.requiresAdminOrSuperAdmin)
+  const requiresPublisherRole = Boolean(to.meta.requiresPublisherRole)
   const isAdmin = auth.state.value.profile?.role === 'admin'
   const isSuperAdmin = auth.state.value.profile?.role === 'super_admin'
   const isLawyer = auth.state.value.profile?.role === 'lawyer'
@@ -89,7 +91,7 @@ router.beforeEach(async (to) => {
       return { path: '/settings/team-profile' }
     }
 
-    const allowed = ['/lead-intake', '/settings/team-profile', '/login', '/get-started']
+    const allowed = ['/lead-intake', '/incentives', '/settings/team-profile', '/login', '/get-started']
     if (!allowed.includes(to.path)) {
       return { path: '/lead-intake' }
     }
@@ -126,6 +128,18 @@ router.beforeEach(async (to) => {
     }
 
     if (!isAdmin && !isSuperAdmin) {
+      return { path: '/dashboard' }
+    }
+
+    return true
+  }
+
+  if (requiresPublisherRole) {
+    if (!isLoggedIn) {
+      return { path: '/login', query: { redirect: to.fullPath } }
+    }
+
+    if (!auth.isPublisherRole.value && !auth.canSeeAll.value) {
       return { path: '/dashboard' }
     }
 

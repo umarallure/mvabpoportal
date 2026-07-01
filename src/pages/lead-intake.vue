@@ -990,7 +990,7 @@ onMounted(async () => {
                 <UIcon name="i-lucide-alert-circle" class="mt-0.5 size-5 shrink-0 text-red-600 dark:text-red-400" />
                 <p class="text-sm font-medium text-red-700 dark:text-red-300">DNC/TCPA screening could not be completed. Do not continue until the number is successfully checked.</p>
               </div>
-              <div v-if="false && dncStatus === 'blocked'" class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950">
+              <div v-if="false" class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-950">
                 <UIcon name="i-lucide-ban" class="size-5 shrink-0 text-red-600 dark:text-red-400" />
                 <p class="text-sm font-medium text-red-700 dark:text-red-300">This number is on the Do Not Call registry. This lead cannot be submitted.</p>
               </div>
