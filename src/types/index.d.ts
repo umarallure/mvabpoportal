@@ -58,6 +58,7 @@ export type NotificationCategory =
   | 'stage_updated'
   | 'pipeline_changed'
   | 'note_added'
+  | 'retainer_signed'
 
 export interface AppNotification {
   id: string

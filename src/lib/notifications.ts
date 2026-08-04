@@ -15,7 +15,8 @@ const FALLBACK_PREVIEW: Record<NotificationCategory, string> = {
   lead_assigned: 'This lead has been assigned to a teammate.',
   stage_updated: 'This lead moved to a new status.',
   pipeline_changed: 'This lead moved to a different pipeline.',
-  note_added: 'A new note was added to this lead.'
+  note_added: 'A new note was added to this lead.',
+  retainer_signed: 'The client completed the retainer agreement.'
 }
 
 const META: Record<NotificationCategory, NotificationMeta> = {
@@ -48,6 +49,12 @@ const META: Record<NotificationCategory, NotificationMeta> = {
     icon: 'i-lucide-message-square',
     accent: 'var(--dashboard-accent-orange)',
     iconBg: 'color-mix(in srgb, var(--dashboard-accent-orange) 12%, transparent)'
+  },
+  retainer_signed: {
+    label: 'Retainer Signed',
+    icon: 'i-lucide-file-check-2',
+    accent: 'var(--dashboard-accent-green)',
+    iconBg: 'color-mix(in srgb, var(--dashboard-accent-green) 12%, transparent)'
   }
 }
 
@@ -88,6 +95,7 @@ export const notificationCategoryOrder: NotificationCategory[] = [
   'new_lead',
   'lead_assigned',
   'stage_updated',
+  'retainer_signed',
   'note_added',
   'pipeline_changed'
 ]
@@ -145,6 +153,10 @@ export const getNotificationMessage = (
 
   if (notification.category === 'pipeline_changed' && leadName) {
     return `${leadName} moved to a different pipeline.`
+  }
+
+  if (notification.category === 'retainer_signed') {
+    return getNotificationPreview(notification)
   }
 
   return getNotificationPreview(notification)

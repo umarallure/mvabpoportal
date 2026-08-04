@@ -91,8 +91,9 @@ router.beforeEach(async (to) => {
       return { path: '/settings/team-profile' }
     }
 
-    const allowed = ['/lead-intake', '/incentives', '/settings/team-profile', '/login', '/get-started']
-    if (!allowed.includes(to.path)) {
+    const allowed = ['/lead-intake', '/incentives', '/inbox', '/settings/team-profile', '/login', '/get-started']
+    const isCenterLeadDetail = /^\/leads\/[^/]+$/.test(to.path)
+    if (!allowed.includes(to.path) && !isCenterLeadDetail) {
       return { path: '/lead-intake' }
     }
     return true

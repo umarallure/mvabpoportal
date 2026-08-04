@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import LeadIntakeDncDisclaimerRequiredCard from '../components/lead-intake/DncDisclaimerRequiredCard.vue'
+import LeadIntakeRetainerAgreementCard from '../components/lead-intake/RetainerAgreementCard.vue'
 import LeadIntakeTransferSuccessModal from '../components/lead-intake/TransferSuccessModal.vue'
 import LeadIntakeTcpaLitigatorModal from '../components/lead-intake/TcpaLitigatorModal.vue'
 import { useAuth } from '../composables/useAuth'
@@ -20,6 +21,9 @@ const tcpaModalOpen = ref(false)
 const transferSuccessModalOpen = ref(false)
 const submittedLeadPhoneNumber = ref('')
 const leadSubmitted = ref(false)
+const retainerSending = ref(false)
+const publisherDocusignEnabled = auth.hasPublisherFeature('docusign_retainer')
+const linkedRetainerAgreementId = computed(() => typeof route.query.retainer === 'string' ? route.query.retainer : '')
 
 type DncVerificationStatus = 'idle' | 'clean' | 'warning' | 'danger' | 'invalid' | 'error'
 
@@ -743,8 +747,30 @@ const validate = (): string | null => {
 
 const submitting = ref(false)
 
+const retainerRecipientName = computed(() => [form.first_name, form.last_name].map(value => value.trim()).filter(Boolean).join(' '))
+const retainerClientAddress = computed(() => [
+  form.street_address,
+  form.street_address_2,
+  form.city,
+  form.state,
+  form.zip_code
+].map(value => value.trim()).filter(Boolean).join(', '))
+const retainerAccidentAddress = computed(() => [
+  form.acc_street,
+  form.acc_street2,
+  form.acc_city,
+  form.acc_state,
+  form.acc_zip
+].map(value => value.trim()).filter(Boolean).join(', '))
+const retainerDocuments = computed(() => ({
+  policeReport: form.has_police_report === true,
+  insuranceDocuments: form.has_insurance_docs === true,
+  medicalTreatmentProof: form.has_medical_proof === true,
+  driverLicense: false
+}))
+
 const onSubmit = async () => {
-  if (submitting.value) return
+  if (submitting.value || retainerSending.value) return
 
   if (leadSubmitted.value) {
     toast.add({
@@ -1404,8 +1430,26 @@ onMounted(async () => {
             </div>
           </div>
 
+          <!-- ═══ DocuSign Retainer Agreement ═══════════════════════════ -->
+          <LeadIntakeRetainerAgreementCard
+            v-if="publisherDocusignEnabled"
+            :initial-agreement-id="linkedRetainerAgreementId"
+            :dnc-verified="dncVerified"
+            :submission-id="submissionId"
+            :customer-state="form.state"
+            :accident-date="form.accident_date"
+            :date-of-birth="form.date_of_birth"
+            :recipient-name="retainerRecipientName"
+            :recipient-email="form.email"
+            :recipient-phone="dncScreenedPhone || normalizedDncPhone"
+            :client-address="retainerClientAddress"
+            :accident-address="retainerAccidentAddress"
+            :documents="retainerDocuments"
+            @busy="retainerSending = $event"
+          />
+
           <!-- ═══ Additional Comments ═══════════════════════════════════ -->
-          <div class="ap-fade-in ap-delay-5 relative overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
+          <div class="ap-fade-in ap-delay-6 relative overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
             <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-[var(--ap-accent)]/[0.04] via-transparent to-transparent" />
             <div class="relative border-b border-black/[0.06] dark:border-white/[0.06]">
               <div class="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[var(--ap-accent)]/[0.08] to-transparent" />
@@ -1428,8 +1472,21 @@ onMounted(async () => {
               </div>
           <!-- ═══ Submit ═════════════════════════════════════════════════ -->
           <div class="flex justify-end gap-3 pt-1">
-            <UButton label="Cancel" color="neutral" variant="ghost" :disabled="submitting" @click="router.push('/transfers')" />
-            <UButton label="Submit Lead" icon="i-lucide-send" color="primary" :loading="submitting" :disabled="formDisabled || !!formBlocked || submitting" @click="onSubmit" />
+            <UButton
+              label="Cancel"
+              color="neutral"
+              variant="ghost"
+              :disabled="submitting"
+              @click="router.push('/transfers')"
+            />
+            <UButton
+              label="Submit Lead"
+              icon="i-lucide-send"
+              color="primary"
+              :loading="submitting"
+              :disabled="formDisabled || !!formBlocked || submitting || retainerSending"
+              @click="onSubmit"
+            />
           </div>
 
         </div>

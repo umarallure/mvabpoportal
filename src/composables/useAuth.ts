@@ -32,6 +32,8 @@ type AuthState = {
   session: Session | null
   profile: AppUserProfile
   centerContext: AppCenterContext
+  publisherFeaturesReady: boolean
+  publisherFeatures: Record<string, boolean>
 }
 
 type CachedAuthContext = {
@@ -70,7 +72,9 @@ const _useAuth = () => {
     user: null,
     session: null,
     profile: null,
-    centerContext: null
+    centerContext: null,
+    publisherFeaturesReady: false,
+    publisherFeatures: {}
   })
 
   const persistContext = () => {
@@ -102,7 +106,32 @@ const _useAuth = () => {
   const resetContext = () => {
     state.value.profile = null
     state.value.centerContext = null
+    state.value.publisherFeaturesReady = false
+    state.value.publisherFeatures = {}
     clearCachedContext()
+  }
+
+  const loadPublisherFeatures = async () => {
+    state.value.publisherFeaturesReady = false
+    state.value.publisherFeatures = {}
+
+    const role = state.value.profile?.role
+    if (!state.value.user || (role !== 'publisher_admin' && role !== 'publisher_closer')) {
+      state.value.publisherFeaturesReady = true
+      return
+    }
+
+    const { data, error } = await supabase.rpc('get_my_publisher_features')
+    if (error) {
+      console.warn('[auth] publisher feature lookup failed closed', error.message)
+      return
+    }
+
+    state.value.publisherFeatures = Object.fromEntries(
+      ((data ?? []) as Array<{ feature_key: string, enabled: boolean }>)
+        .map(row => [row.feature_key, row.enabled === true])
+    )
+    state.value.publisherFeaturesReady = true
   }
 
   const loadContext = async (options: { preferCache?: boolean } = {}) => {
@@ -114,6 +143,7 @@ const _useAuth = () => {
 
     if (options.preferCache && hydrateFromCache(state.value.user.id)) {
       console.info('[auth] hydrated profile from local cache')
+      await loadPublisherFeatures()
       return
     }
 
@@ -174,6 +204,7 @@ const _useAuth = () => {
     }
 
     persistContext()
+    await loadPublisherFeatures()
     console.info('[auth] profile loaded', state.value.profile)
   }
 
@@ -247,6 +278,10 @@ const _useAuth = () => {
     return normalizeString(state.value.centerContext?.lead_vendor)
   })
 
+  const hasPublisherFeature = (featureKey: string) => computed(() => {
+    return state.value.publisherFeaturesReady && state.value.publisherFeatures[featureKey] === true
+  })
+
   return {
     state: readonly(state),
     init,
@@ -254,6 +289,7 @@ const _useAuth = () => {
     isPublisherRole,
     isPublisherCloser,
     resolvedLeadVendor,
+    hasPublisherFeature,
     refreshProfile: loadContext,
     signInWithPassword,
     signOut

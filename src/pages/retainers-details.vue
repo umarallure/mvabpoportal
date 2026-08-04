@@ -56,9 +56,23 @@ type NoteRow = {
   note: string
 }
 
+type RetainerAgreementRow = {
+  id: string
+  envelope_id: string
+  status: 'unknown' | 'sent' | 'viewed' | 'signed' | 'declined' | 'voided'
+  delivery_method: 'email' | 'sms_only' | null
+  sent_at: string | null
+  viewed_at: string | null
+  signed_at: string | null
+  document_bucket: string | null
+  document_storage_path: string | null
+  document_file_name: string | null
+}
+
 const route = useRoute()
 const router = useRouter()
 const auth = useAuth()
+const publisherDocusignEnabled = auth.hasPublisherFeature('docusign_retainer')
 
 const canSeeLeadVendorUi = computed(() => auth.state.value.profile?.role === 'super_admin')
 
@@ -82,6 +96,8 @@ const error = ref<string | null>(null)
 const row = ref<LeadRow | null>(null)
 const assignedAttorneyName = ref<string>('—')
 const callResults = ref<CallResult[]>([])
+const retainerAgreement = ref<RetainerAgreementRow | null>(null)
+const retainerDownloading = ref(false)
 const activeTab = ref('basic')
 
 const tabs = [
@@ -181,6 +197,20 @@ const load = async () => {
     }
 
     row.value = data as LeadRow
+
+    if (publisherDocusignEnabled.value && row.value.submission_id) {
+      const { data: agreement, error: agreementError } = await supabase
+        .from('retainer_agreements')
+        .select('id,envelope_id,status,delivery_method,sent_at,viewed_at,signed_at,document_bucket,document_storage_path,document_file_name')
+        .eq('submission_id', row.value.submission_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (agreementError) console.warn('[retainer_agreements] lookup failed', agreementError.message)
+      retainerAgreement.value = (agreement as RetainerAgreementRow | null) ?? null
+    } else {
+      retainerAgreement.value = null
+    }
 
     // Resolve assigned attorney display name from the ID.
     try {
@@ -488,6 +518,26 @@ const viewDocument = async (doc: StorageDoc) => {
   window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
 }
 
+const downloadSignedRetainer = async () => {
+  const agreement = retainerAgreement.value
+  if (!agreement?.document_bucket || !agreement.document_storage_path) return
+  retainerDownloading.value = true
+  const { data, error: downloadError } = await supabase.storage
+    .from(agreement.document_bucket)
+    .download(agreement.document_storage_path)
+  retainerDownloading.value = false
+  if (downloadError) {
+    toast.add({ title: 'Cannot download signed retainer', description: downloadError.message, color: 'error', icon: 'i-lucide-x' })
+    return
+  }
+  const url = URL.createObjectURL(data)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = agreement.document_file_name || 'signed-retainer.pdf'
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+
 // ── Delete ─────────────────────────────────────────────────────────────────────
 
 const requestDelete = (doc: StorageDoc) => { deleteTarget.value = doc }
@@ -680,6 +730,30 @@ const confirmDelete = async () => {
 
             <!-- ═══ Documents ═══════════════════════════════════════════ -->
             <div v-else-if="item.value === 'documents'" class="space-y-4">
+
+              <div v-if="publisherDocusignEnabled && retainerAgreement" class="rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 p-4 shadow-sm dark:bg-[#111111]/90">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div class="flex items-center gap-3">
+                    <span class="flex size-9 items-center justify-center rounded-lg bg-[var(--ap-accent)]/10 text-[var(--ap-accent)]"><UIcon name="i-lucide-file-signature" /></span>
+                    <div>
+                      <p class="text-sm font-semibold text-highlighted">DocuSign Retainer Agreement</p>
+                      <p class="mt-0.5 break-all font-mono text-[10px] text-muted">{{ retainerAgreement.envelope_id }}</p>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <UBadge :color="retainerAgreement.status === 'signed' ? 'success' : retainerAgreement.status === 'declined' ? 'error' : 'info'" variant="subtle">{{ retainerAgreement.status }}</UBadge>
+                    <UButton
+                      v-if="retainerAgreement.status === 'signed' && retainerAgreement.document_storage_path"
+                      size="xs"
+                      color="success"
+                      icon="i-lucide-download"
+                      :loading="retainerDownloading"
+                      @click="downloadSignedRetainer"
+                    >Signed PDF</UButton>
+                  </div>
+                </div>
+                <p class="mt-3 text-xs text-muted">Sent {{ formatDateTime(retainerAgreement.sent_at) }}<span v-if="retainerAgreement.signed_at"> · Signed {{ formatDateTime(retainerAgreement.signed_at) }}</span></p>
+              </div>
 
               <!-- Category selector -->
               <div class="flex flex-wrap gap-2">
