@@ -3,6 +3,7 @@ import { createSharedComposable } from '@vueuse/core'
 import type { Session, User } from '@supabase/supabase-js'
 
 import { supabase } from '../lib/supabase'
+import { useTermsGate } from './useTermsGate'
 
 const AUTH_CONTEXT_STORAGE_KEY = 'ap-auth-context-v1'
 
@@ -66,6 +67,7 @@ const clearCachedContext = () => {
 }
 
 const _useAuth = () => {
+  const termsGate = useTermsGate()
   const state = ref<AuthState>({
     ready: false,
     loading: true,
@@ -108,7 +110,16 @@ const _useAuth = () => {
     state.value.centerContext = null
     state.value.publisherFeaturesReady = false
     state.value.publisherFeatures = {}
+    termsGate.clear()
     clearCachedContext()
+  }
+
+  const refreshTermsGate = async () => {
+    await termsGate.refresh({
+      userId: state.value.user?.id ?? null,
+      role: state.value.profile?.role ?? null,
+      isSuperAdmin: state.value.profile?.is_super_admin === true
+    })
   }
 
   const loadPublisherFeatures = async () => {
@@ -144,6 +155,7 @@ const _useAuth = () => {
     if (options.preferCache && hydrateFromCache(state.value.user.id)) {
       console.info('[auth] hydrated profile from local cache')
       await loadPublisherFeatures()
+      await refreshTermsGate()
       return
     }
 
@@ -205,6 +217,7 @@ const _useAuth = () => {
 
     persistContext()
     await loadPublisherFeatures()
+    await refreshTermsGate()
     console.info('[auth] profile loaded', state.value.profile)
   }
 

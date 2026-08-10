@@ -7,6 +7,8 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 import { useAuth } from './composables/useAuth'
 import { useNotifications } from './composables/useNotifications'
 import { usePublisherIncentives } from './composables/usePublisherIncentives'
+import { useTermsGate } from './composables/useTermsGate'
+import TermsAcceptanceGate from './components/legal/TermsAcceptanceGate.vue'
 
 type HubSpotWindow = Window & typeof globalThis & {
   HubSpotConversations?: {
@@ -22,6 +24,8 @@ type HubSpotWindow = Window & typeof globalThis & {
 const toast = useToast()
 const route = useRoute()
 const auth = useAuth()
+const termsGate = useTermsGate()
+const pendingTerms = computed(() => termsGate.state.value.pending)
 const { fetchInitialNotifications, initializeRealtimeListener, cleanup } = useNotifications()
 const {
   start: startIncentives,
@@ -262,6 +266,11 @@ if (cookie.value !== 'accepted') {
       <template v-if="isPublicPage || isStandalonePage">
         <RouterView />
       </template>
+
+      <TermsAcceptanceGate
+        v-else-if="pendingTerms"
+        :terms="pendingTerms"
+      />
 
       <UDashboardGroup
         v-else
