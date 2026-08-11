@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../composables/useAuth'
+import type { DeliveryMethod, RetainerStatus } from '../components/lead-intake/retainer-types'
 
 type LeadRow = Record<string, unknown> & {
   id: string
@@ -59,8 +60,8 @@ type NoteRow = {
 type RetainerAgreementRow = {
   id: string
   envelope_id: string
-  status: 'unknown' | 'sent' | 'viewed' | 'signed' | 'declined' | 'voided'
-  delivery_method: 'email' | 'sms_only' | null
+  status: RetainerStatus
+  delivery_method: DeliveryMethod | null
   sent_at: string | null
   viewed_at: string | null
   signed_at: string | null

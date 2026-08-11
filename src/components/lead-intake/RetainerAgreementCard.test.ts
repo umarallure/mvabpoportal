@@ -1,6 +1,6 @@
 /* eslint-disable vue/one-component-per-file, vue/require-default-prop -- Local component stubs keep this focused test self-contained. */
 import { defineComponent, nextTick } from 'vue'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import RetainerAgreementCard from './RetainerAgreementCard.vue'
 import type { AttorneyOption } from './retainer-types'
@@ -82,7 +82,8 @@ const baseProps = {
   clientAddress: '1 Main St, Miami, FL 33101',
   accidentAddress: '2 Ocean Dr, Miami, FL 33139',
   documents: { policeReport: false, insuranceDocuments: false, medicalTreatmentProof: false, driverLicense: false },
-  selectedAttorney
+  selectedAttorney,
+  canReceiveTexts: null as boolean | null
 }
 
 const mountCard = () => mount(RetainerAgreementCard, { props: baseProps, global: { components: stubs } })
@@ -155,5 +156,96 @@ describe('publisher retainer agreement card', () => {
     expect(mocks.download).toHaveBeenCalledWith('submission-1/envelope-1/signed.pdf')
     wrapper.unmount()
     expect(mocks.removeChannel).toHaveBeenCalled()
+  })
+
+  const sendFirstEnvelope = async (wrapper: ReturnType<typeof mountCard>) => {
+    await wrapper.findAll('button').find(button => button.text().includes('Send Retainer'))?.trigger('click')
+    await Promise.resolve()
+    await nextTick()
+    await nextTick()
+  }
+
+  it('offers Resend and Replace for an active envelope, and resend calls the resend action', async () => {
+    const wrapper = mountCard()
+    await sendFirstEnvelope(wrapper)
+
+    expect(wrapper.find('[data-testid="envelope-actions"]').exists()).toBe(true)
+    expect(wrapper.findAll('button').some(button => button.text().includes('Send Retainer'))).toBe(false)
+
+    await wrapper.get('[data-testid="resend-button"]').trigger('click')
+    await Promise.resolve()
+    await nextTick()
+    expect(mocks.invoke).toHaveBeenLastCalledWith('docusign-send-contract', expect.objectContaining({
+      body: { action: 'resend', agreementId: 'agreement-1' }
+    }))
+    expect(wrapper.get('[data-testid="resend-button"]').text()).toContain('Resend available in')
+    expect(wrapper.get('[data-testid="resend-button"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('replace mode reopens the form and sends with replaceAgreementId and a fresh requestId', async () => {
+    const wrapper = mountCard()
+    await sendFirstEnvelope(wrapper)
+    const firstRequestId = mocks.invoke.mock.calls[0][1].body.requestId
+
+    await wrapper.get('[data-testid="replace-button"]').trigger('click')
+    await nextTick()
+    const lockedEvents = wrapper.emitted('update:locked') ?? []
+    expect(lockedEvents[lockedEvents.length - 1]).toEqual([false])
+    expect(wrapper.find('[data-testid="cancel-replace-button"]').exists()).toBe(true)
+
+    await wrapper.findAll('button').find(button => button.text().includes('Send Retainer'))?.trigger('click')
+    await Promise.resolve()
+    await nextTick()
+    const replaceBody = mocks.invoke.mock.calls[1][1].body
+    expect(replaceBody.replaceAgreementId).toBe('agreement-1')
+    expect(replaceBody.requestId).not.toBe(firstRequestId)
+  })
+
+  it('delivery_failed unlocks a new send that voids the failed envelope, and shows the failure panel', async () => {
+    const wrapper = mountCard()
+    await sendFirstEnvelope(wrapper)
+
+    mocks.callbacks.realtime?.({ new: { ...agreementRow, status: 'delivery_failed' } })
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="delivery-failed-panel"]').exists()).toBe(true)
+    const statusEvents = wrapper.emitted('update:status') ?? []
+    expect(statusEvents[statusEvents.length - 1]).toEqual(['delivery_failed'])
+    expect(wrapper.get('[data-testid="retainer-current-step"]').text()).toBe('Delivery Failed')
+
+    await wrapper.findAll('button').find(button => button.text().includes('Send Retainer'))?.trigger('click')
+    await Promise.resolve()
+    await nextTick()
+    expect(mocks.invoke.mock.calls[1][1].body.replaceAgreementId).toBe('agreement-1')
+  })
+
+  it('maps rate-limit errors to a friendly message and keeps an inline banner', async () => {
+    mocks.invoke.mockResolvedValueOnce({
+      data: null,
+      error: Object.assign(new Error('Edge Function returned a non-2xx status code'), {
+        context: new Response(JSON.stringify({
+          error: 'Send limit reached for this lead (5 in 15 minutes).',
+          code: 'rate_limited',
+          retryAfterSeconds: 300
+        }), { status: 429 })
+      })
+    })
+    const wrapper = mountCard()
+    await wrapper.findAll('button').find(button => button.text().includes('Send Retainer'))?.trigger('click')
+    await flushPromises()
+
+    const banner = wrapper.get('[data-testid="send-error-banner"]')
+    expect(banner.text()).toContain('Send limit reached')
+    expect(banner.text()).toContain('5 minutes')
+  })
+
+  it('disables Text delivery when the customer declined texts', async () => {
+    const wrapper = mount(RetainerAgreementCard, {
+      props: { ...baseProps, canReceiveTexts: false },
+      global: { components: stubs }
+    })
+    const textButton = wrapper.get('[data-testid="text-delivery-button"]')
+    expect(textButton.attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="text-consent-note"]').text()).toContain('answered No to receiving texts')
   })
 })

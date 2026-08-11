@@ -16,7 +16,8 @@ const FALLBACK_PREVIEW: Record<NotificationCategory, string> = {
   stage_updated: 'This lead moved to a new status.',
   pipeline_changed: 'This lead moved to a different pipeline.',
   note_added: 'A new note was added to this lead.',
-  retainer_signed: 'The client completed the retainer agreement.'
+  retainer_signed: 'The client completed the retainer agreement.',
+  retainer_delivery_failed: 'The retainer could not be delivered — switch the delivery method and send again.'
 }
 
 const META: Record<NotificationCategory, NotificationMeta> = {
@@ -55,6 +56,12 @@ const META: Record<NotificationCategory, NotificationMeta> = {
     icon: 'i-lucide-file-check-2',
     accent: 'var(--dashboard-accent-green)',
     iconBg: 'color-mix(in srgb, var(--dashboard-accent-green) 12%, transparent)'
+  },
+  retainer_delivery_failed: {
+    label: 'Retainer Delivery Failed',
+    icon: 'i-lucide-message-square-warning',
+    accent: 'var(--dashboard-accent-orange)',
+    iconBg: 'color-mix(in srgb, var(--dashboard-accent-orange) 12%, transparent)'
   }
 }
 
@@ -96,6 +103,7 @@ export const notificationCategoryOrder: NotificationCategory[] = [
   'lead_assigned',
   'stage_updated',
   'retainer_signed',
+  'retainer_delivery_failed',
   'note_added',
   'pipeline_changed'
 ]

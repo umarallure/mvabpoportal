@@ -689,6 +689,11 @@ const formDisabled = computed(() => !dncVerified.value || leadSubmitted.value)
 const allowedStateCodes = ref<Set<string>>(new Set())
 const statesLoaded = ref(false)
 
+const customerStateItems = computed(() => {
+  if (!statesLoaded.value || allowedStateCodes.value.size === 0) return usStates
+  return usStates.filter(s => allowedStateCodes.value.has(s.value))
+})
+
 const stateBlockedError = computed(() => {
   if (!statesLoaded.value || !form.state) return null
   if (allowedStateCodes.value.has(form.state)) return null
@@ -1118,7 +1123,7 @@ onMounted(async () => {
                       </div>
                       <div class="space-y-2">
                         <label class="text-xs font-medium text-highlighted">Customer State <span class="text-red-400/80">*</span></label>
-                        <USelect v-model="form.state" :items="usStates" placeholder="State" value-key="value" class="w-full" @blur="touchField('state')" />
+                        <USelect v-model="form.state" :items="customerStateItems" placeholder="State" value-key="value" class="w-full" @blur="touchField('state')" />
                         <p v-if="fieldErrors.state" class="text-xs text-red-500">{{ fieldErrors.state }}</p>
                         <p v-else-if="stateBlockedError" class="text-xs text-red-500">{{ stateBlockedError }}</p>
                       </div>
@@ -1481,6 +1486,7 @@ onMounted(async () => {
             :accident-address="retainerAccidentAddress"
             :documents="retainerDocuments"
             :selected-attorney="selectedRetainerAttorney"
+            :can-receive-texts="form.can_receive_texts"
             @busy="retainerSending = $event"
             @update:locked="retainerLocked = $event"
             @update:status="retainerStatus = $event"
