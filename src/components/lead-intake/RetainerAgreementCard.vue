@@ -23,6 +23,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   busy: [value: boolean]
   'update:locked': [value: boolean]
+  'update:status': [value: RetainerStatus | null]
   restored: []
 }>()
 const toast = useToast()
@@ -243,6 +244,7 @@ watch(() => props.recipientPhone, (phone) => {
 watch(() => props.selectedAttorney, applyBestTemplate, { immediate: true })
 watch(() => props.initialAgreementId, () => { void loadInitialAgreement() }, { immediate: true })
 watch(sendLocked, (locked) => { emit('update:locked', locked) }, { immediate: true })
+watch(() => agreement.value?.status ?? null, (status) => { emit('update:status', status) }, { immediate: true })
 // A changed attorney or template is a new logical request: never reuse the
 // idempotency key, or a retry could replay the previous selection's envelope.
 watch([() => props.selectedAttorney?.id, selectedTemplateId], () => {
@@ -286,7 +288,7 @@ onBeforeUnmount(() => {
       <div class="flex items-start gap-2.5 rounded-xl border border-[var(--ap-accent)]/15 bg-[var(--ap-accent)]/[0.04] px-4 py-3">
         <UIcon name="i-lucide-info" class="mt-0.5 size-4 shrink-0 text-[var(--ap-accent)]" />
         <p class="text-xs leading-relaxed text-muted">
-          This step is optional. You can submit the lead without sending a retainer, and the selected attorney does not change lead assignment.
+          A signed retainer agreement is required before this lead can be submitted. The selected attorney does not change lead assignment.
         </p>
       </div>
 

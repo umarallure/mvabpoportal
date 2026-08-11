@@ -10,7 +10,7 @@ import LeadIntakeFlowConnector from '../components/lead-intake/FlowConnector.vue
 import LeadIntakeTransferSuccessModal from '../components/lead-intake/TransferSuccessModal.vue'
 import LeadIntakeTcpaLitigatorModal from '../components/lead-intake/TcpaLitigatorModal.vue'
 import { useAuth } from '../composables/useAuth'
-import type { AttorneyOption } from '../components/lead-intake/retainer-types'
+import type { AttorneyOption, RetainerStatus } from '../components/lead-intake/retainer-types'
 import { DncLookupError, formatUsPhone, lookupDncScreening, normalizeUsPhone, type DncCallStatus, type DncLookupResponse } from '../lib/dnc-lookup'
 import { supabase } from '../lib/supabase'
 
@@ -30,6 +30,8 @@ const retainerSending = ref(false)
 const selectedRetainerAttorneyId = ref('')
 const selectedRetainerAttorney = ref<AttorneyOption | null>(null)
 const retainerLocked = ref(false)
+const retainerStatus = ref<RetainerStatus | null>(null)
+const retainerSigned = computed(() => retainerStatus.value === 'signed')
 // A deep-linked envelope carries no attorney identity, so any auto-selected
 // recommendation would misrepresent the firm on the active envelope.
 const onRetainerRestored = () => {
@@ -755,6 +757,7 @@ const validate = (): string | null => {
   if (!form.third_party_vehicle_registration.trim()) { fieldErrors.third_party_vehicle_registration = 'Third party vehicle registration is required.'; return 'Please fix the errors before submitting.' }
   if (!form.injuries.trim()) { fieldErrors.injuries = 'Customer injuries / areas affected is required.'; return 'Please fix the errors before submitting.' }
   if (!form.accident_scenario.trim()) { fieldErrors.accident_scenario = 'Accident scenario is required.'; return 'Please fix the errors before submitting.' }
+  if (!retainerSigned.value) return 'A signed DocuSign retainer agreement is required before submitting this lead.'
   return null
 }
 
@@ -1480,6 +1483,7 @@ onMounted(async () => {
             :selected-attorney="selectedRetainerAttorney"
             @busy="retainerSending = $event"
             @update:locked="retainerLocked = $event"
+            @update:status="retainerStatus = $event"
             @restored="onRetainerRestored"
           />
 
@@ -1510,6 +1514,12 @@ onMounted(async () => {
                 <UIcon name="i-lucide-ban" class="size-5 shrink-0 text-red-600 dark:text-red-400" />
                 <p class="text-sm font-medium text-red-700 dark:text-red-300">{{ formBlocked }}</p>
               </div>
+          <div v-if="dncVerified && !formBlocked && !retainerSigned" class="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950">
+            <UIcon name="i-lucide-file-signature" class="size-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <p class="text-sm font-medium text-amber-700 dark:text-amber-300">
+              {{ retainerStatus ? 'Waiting for the client to sign the DocuSign retainer — submission unlocks once it is signed.' : 'A signed DocuSign retainer agreement is required before this lead can be submitted.' }}
+            </p>
+          </div>
           <!-- ═══ Submit ═════════════════════════════════════════════════ -->
           <div class="flex justify-end gap-3 pt-1">
             <UButton
@@ -1524,7 +1534,7 @@ onMounted(async () => {
               icon="i-lucide-send"
               color="primary"
               :loading="submitting"
-              :disabled="formDisabled || !!formBlocked || submitting || retainerSending"
+              :disabled="formDisabled || !!formBlocked || submitting || retainerSending || !retainerSigned"
               @click="onSubmit"
             />
           </div>

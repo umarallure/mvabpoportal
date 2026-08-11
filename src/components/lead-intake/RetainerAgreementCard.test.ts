@@ -148,6 +148,8 @@ describe('publisher retainer agreement card', () => {
     } })
     await nextTick()
     expect(wrapper.get('[data-testid="retainer-current-step"]').text()).toBe('Signed')
+    const statusEvents = wrapper.emitted('update:status') ?? []
+    expect(statusEvents[statusEvents.length - 1]).toEqual(['signed'])
     expect(wrapper.text()).toContain('Download Signed Retainer')
     await wrapper.findAll('button').find(button => button.text().includes('Download Signed Retainer'))?.trigger('click')
     expect(mocks.download).toHaveBeenCalledWith('submission-1/envelope-1/signed.pdf')
