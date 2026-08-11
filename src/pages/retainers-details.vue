@@ -72,7 +72,6 @@ type RetainerAgreementRow = {
 const route = useRoute()
 const router = useRouter()
 const auth = useAuth()
-const publisherDocusignEnabled = auth.hasPublisherFeature('docusign_retainer')
 
 const canSeeLeadVendorUi = computed(() => auth.state.value.profile?.role === 'super_admin')
 
@@ -198,7 +197,7 @@ const load = async () => {
 
     row.value = data as LeadRow
 
-    if (publisherDocusignEnabled.value && row.value.submission_id) {
+    if (row.value.submission_id) {
       const { data: agreement, error: agreementError } = await supabase
         .from('retainer_agreements')
         .select('id,envelope_id,status,delivery_method,sent_at,viewed_at,signed_at,document_bucket,document_storage_path,document_file_name')
@@ -731,7 +730,7 @@ const confirmDelete = async () => {
             <!-- ═══ Documents ═══════════════════════════════════════════ -->
             <div v-else-if="item.value === 'documents'" class="space-y-4">
 
-              <div v-if="publisherDocusignEnabled && retainerAgreement" class="rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 p-4 shadow-sm dark:bg-[#111111]/90">
+              <div v-if="retainerAgreement" class="rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 p-4 shadow-sm dark:bg-[#111111]/90">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <div class="flex items-center gap-3">
                     <span class="flex size-9 items-center justify-center rounded-lg bg-[var(--ap-accent)]/10 text-[var(--ap-accent)]"><UIcon name="i-lucide-file-signature" /></span>

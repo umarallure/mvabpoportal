@@ -2,10 +2,15 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import LeadIntakeDncDisclaimerRequiredCard from '../components/lead-intake/DncDisclaimerRequiredCard.vue'
+import LeadIntakeAttorneyRecommendationsCard from '../components/lead-intake/AttorneyRecommendationsCard.vue'
+import LeadIntakePartnerDisclosureCard from '../components/lead-intake/PartnerDisclosureCard.vue'
 import LeadIntakeRetainerAgreementCard from '../components/lead-intake/RetainerAgreementCard.vue'
+import LeadIntakeDocusignSigningScriptCard from '../components/lead-intake/DocusignSigningScriptCard.vue'
+import LeadIntakeFlowConnector from '../components/lead-intake/FlowConnector.vue'
 import LeadIntakeTransferSuccessModal from '../components/lead-intake/TransferSuccessModal.vue'
 import LeadIntakeTcpaLitigatorModal from '../components/lead-intake/TcpaLitigatorModal.vue'
 import { useAuth } from '../composables/useAuth'
+import type { AttorneyOption } from '../components/lead-intake/retainer-types'
 import { DncLookupError, formatUsPhone, lookupDncScreening, normalizeUsPhone, type DncCallStatus, type DncLookupResponse } from '../lib/dnc-lookup'
 import { supabase } from '../lib/supabase'
 
@@ -22,7 +27,15 @@ const transferSuccessModalOpen = ref(false)
 const submittedLeadPhoneNumber = ref('')
 const leadSubmitted = ref(false)
 const retainerSending = ref(false)
-const publisherDocusignEnabled = auth.hasPublisherFeature('docusign_retainer')
+const selectedRetainerAttorneyId = ref('')
+const selectedRetainerAttorney = ref<AttorneyOption | null>(null)
+const retainerLocked = ref(false)
+// A deep-linked envelope carries no attorney identity, so any auto-selected
+// recommendation would misrepresent the firm on the active envelope.
+const onRetainerRestored = () => {
+  selectedRetainerAttorneyId.value = ''
+  selectedRetainerAttorney.value = null
+}
 const linkedRetainerAgreementId = computed(() => typeof route.query.retainer === 'string' ? route.query.retainer : '')
 
 type DncVerificationStatus = 'idle' | 'clean' | 'warning' | 'danger' | 'invalid' | 'error'
@@ -1430,9 +1443,28 @@ onMounted(async () => {
             </div>
           </div>
 
+          <!-- ═══ Attorney Recommendations ══════════════════════════════ -->
+          <LeadIntakeAttorneyRecommendationsCard
+            v-model="selectedRetainerAttorneyId"
+            :customer-state="form.state"
+            :accident-date="form.accident_date"
+            :date-of-birth="form.date_of_birth"
+            :documents="retainerDocuments"
+            :locked="retainerLocked || retainerSending"
+            @update:selected-attorney="selectedRetainerAttorney = $event"
+          />
+
+          <LeadIntakeFlowConnector label="Confirm the partner firm" />
+
+          <!-- ═══ Partner Law Firm Disclosure ═══════════════════════════ -->
+          <LeadIntakePartnerDisclosureCard
+            :attorney-name="selectedRetainerAttorney?.displayName ?? null"
+          />
+
+          <LeadIntakeFlowConnector label="Send the retainer" />
+
           <!-- ═══ DocuSign Retainer Agreement ═══════════════════════════ -->
           <LeadIntakeRetainerAgreementCard
-            v-if="publisherDocusignEnabled"
             :initial-agreement-id="linkedRetainerAgreementId"
             :dnc-verified="dncVerified"
             :submission-id="submissionId"
@@ -1445,8 +1477,16 @@ onMounted(async () => {
             :client-address="retainerClientAddress"
             :accident-address="retainerAccidentAddress"
             :documents="retainerDocuments"
+            :selected-attorney="selectedRetainerAttorney"
             @busy="retainerSending = $event"
+            @update:locked="retainerLocked = $event"
+            @restored="onRetainerRestored"
           />
+
+          <LeadIntakeFlowConnector label="Guide the signature" />
+
+          <!-- ═══ DocuSign Signing Script ═══════════════════════════════ -->
+          <LeadIntakeDocusignSigningScriptCard />
 
           <!-- ═══ Additional Comments ═══════════════════════════════════ -->
           <div class="ap-fade-in ap-delay-6 relative overflow-hidden rounded-xl border border-[var(--ap-accent)]/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
