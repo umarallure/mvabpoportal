@@ -73,7 +73,7 @@ const selectedAttorney: AttorneyOption = {
 const baseProps = {
   dncVerified: true,
   submissionId: 'submission-1',
-  customerState: 'FL',
+  accidentState: 'FL',
   accidentDate: '2026-07-01',
   dateOfBirth: '1990-01-01',
   recipientName: 'Test Client',

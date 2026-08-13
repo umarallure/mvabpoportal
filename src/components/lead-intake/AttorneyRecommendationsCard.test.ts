@@ -21,7 +21,7 @@ const stubs = {
 }
 
 const baseProps = {
-  customerState: 'FL',
+  accidentState: 'FL',
   accidentDate: '2026-07-01',
   dateOfBirth: '1990-01-01',
   documents: { policeReport: false, insuranceDocuments: false, medicalTreatmentProof: false, driverLicense: false },
@@ -95,7 +95,7 @@ describe('attorney recommendations card', () => {
     expect(selectedId.value).toBe('attorney-1')
     expect(selectedAttorney.value?.displayName).toBe('Preferred Law Group')
 
-    props.value = { ...props.value, customerState: 'GA' }
+    props.value = { ...props.value, accidentState: 'GA' }
     await nextTick()
     await runOptionsTimer()
     expect(mocks.invoke).toHaveBeenCalledTimes(2)
@@ -109,7 +109,7 @@ describe('attorney recommendations card', () => {
 
     props.value = { ...props.value, locked: true }
     await nextTick()
-    props.value = { ...props.value, customerState: 'GA' }
+    props.value = { ...props.value, accidentState: 'GA' }
     await nextTick()
     await runOptionsTimer()
     expect(mocks.invoke).toHaveBeenCalledTimes(1)
@@ -145,7 +145,7 @@ describe('attorney recommendations card', () => {
     selectedId.value = 'requirement-ready'
     await nextTick()
 
-    props.value = { ...props.value, customerState: 'GA' }
+    props.value = { ...props.value, accidentState: 'GA' }
     await nextTick()
     await runOptionsTimer()
     expect(selectedId.value).toBe('requirement-ready')

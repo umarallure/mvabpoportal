@@ -8,7 +8,7 @@ const props = defineProps<{
   initialAgreementId?: string
   dncVerified: boolean
   submissionId: string
-  customerState: string
+  accidentState: string
   accidentDate: string
   dateOfBirth: string
   recipientName: string
@@ -81,7 +81,7 @@ const missingRequirements = computed(() => {
   const missing: string[] = []
   if (!props.dncVerified) missing.push('DNC verification')
   if (!props.submissionId) missing.push('submission ID')
-  if (!props.customerState) missing.push('customer state')
+  if (!props.accidentState) missing.push('accident state')
   if (!props.dateOfBirth) missing.push('date of birth')
   if (!props.accidentDate) missing.push('accident date')
   if (!props.clientAddress) missing.push('client address')
@@ -276,7 +276,7 @@ const sendRetainer = async () => {
         recipientPhone: deliveryMethod.value === 'sms_only' ? normalizePhone(signerPhone.value) : undefined,
         recipientPhoneCountryCode: '1',
         deliveryMethod: deliveryMethod.value,
-        state: props.customerState,
+        state: props.accidentState,
         accidentDate: props.accidentDate,
         dateOfBirth: props.dateOfBirth,
         accidentAddress: props.accidentAddress,
@@ -533,14 +533,14 @@ onBeforeUnmount(() => {
                 <div class="flex items-center gap-2">
                   <UIcon name="i-lucide-map-pin" class="size-4 text-[var(--ap-accent)]" />
                   <p class="text-xs font-semibold text-highlighted">
-                    State
+                    Accident State
                   </p>
                 </div>
                 <p class="mt-1 text-[11px] text-muted">
-                  Synced from the customer's state in the intake form.
+                  Synced from the accident state in the intake form.
                 </p>
                 <p class="mt-3 text-sm font-semibold text-highlighted">
-                  {{ customerState || '—' }}
+                  {{ accidentState || '—' }}
                 </p>
               </div>
               <div class="rounded-xl border border-[var(--ap-accent)]/15 bg-white/55 p-4 dark:bg-white/[0.03]">

@@ -48,20 +48,9 @@ function onTiltLeave(i: number) {
 
 const consumerTiers = [
   {
-    name: 'Tier 1 - Transfer',
+    name: 'Tier 1 - Bronze',
     tierClass: 'tier-1',
-    price: '$1,000',
-    rows: [
-      { icon: 'i-lucide-calendar-clock', label: 'Accident Occurred', value: '12+ Months Ago' },
-      { icon: 'i-lucide-heart-pulse', label: 'Type of Injury', value: 'Minor to Moderate' },
-      { icon: 'i-lucide-file-x', label: 'Documentation', value: 'Minor Documentation Covered', subtext: 'Signed Retainer' },
-      { icon: 'i-lucide-scale', label: 'Liability', value: '100% Accepted', subtext: 'Or Very Strong Proof' }
-    ]
-  },
-  {
-    name: 'Tier 2 - Bronze',
-    tierClass: 'tier-2',
-    price: '$1,500',
+    price: '$2,000',
     rows: [
       { icon: 'i-lucide-calendar-clock', label: 'Accident Occurred', value: '6-12 Months Ago' },
       { icon: 'i-lucide-heart-pulse', label: 'Type of Injury', value: 'Moderate to Severe' },
@@ -70,9 +59,9 @@ const consumerTiers = [
     ]
   },
   {
-    name: 'Tier 3 - Silver',
-    tierClass: 'tier-3',
-    price: '$2,000',
+    name: 'Tier 2 - Silver',
+    tierClass: 'tier-2',
+    price: '$2,500',
     rows: [
       { icon: 'i-lucide-calendar-clock', label: 'Accident Occurred', value: '3-6 Months Ago' },
       { icon: 'i-lucide-heart-pulse', label: 'Type of Injury', value: 'Moderate to Severe' },
@@ -81,7 +70,7 @@ const consumerTiers = [
     ]
   },
   {
-    name: 'Tier 4 - Gold',
+    name: 'Tier 3 - Gold',
     tierClass: 'tier-4',
     price: '$3,000',
     rows: [
@@ -96,8 +85,8 @@ const consumerTiers = [
 const commercialTiers = [
   {
     name: 'Commercial',
-    tierClass: 'tier-commercial',
-    price: '$3,500',
+    tierClass: 'tier-4',
+    price: '$4,000',
     rows: [
       { icon: 'i-lucide-calendar-clock', label: 'Accident Occurred', value: '0-3 Months Ago' },
       { icon: 'i-lucide-heart-pulse', label: 'Type of Injury', value: 'Moderate to Catastrophic' },

@@ -254,7 +254,6 @@ const form = reactive({
   acc_state: '',
   acc_zip: '',
   acc_country: '',
-  customer_state: '',
   accident_scenario: '',
 
   received_medical_treatment: null as boolean | null,
@@ -321,6 +320,9 @@ const validateField = (field: string, value: unknown): string | null => {
       break
     case 'accident_date':
       if (!String(value)) return 'Date of accident is required.'
+      break
+    case 'acc_state':
+      if (!String(value)) return 'Accident state is required.'
       break
     case 'prior_attorney_details':
       if (form.prior_attorney_involved === true && !String(value).trim()) return 'Prior attorney details are required.'
@@ -689,15 +691,15 @@ const formDisabled = computed(() => !dncVerified.value || leadSubmitted.value)
 const allowedStateCodes = ref<Set<string>>(new Set())
 const statesLoaded = ref(false)
 
-const customerStateItems = computed(() => {
+const availableStateItems = computed(() => {
   if (!statesLoaded.value || allowedStateCodes.value.size === 0) return usStates
   return usStates.filter(s => allowedStateCodes.value.has(s.value))
 })
 
-const stateBlockedError = computed(() => {
-  if (!statesLoaded.value || !form.state) return null
-  if (allowedStateCodes.value.has(form.state)) return null
-  return `We're sorry, but we cannot take this transfer — we don't have coverage in the selected state ${form.state} right now.`
+const accidentStateBlockedError = computed(() => {
+  if (!statesLoaded.value || !form.acc_state) return null
+  if (allowedStateCodes.value.has(form.acc_state)) return null
+  return `We're sorry, but we cannot take this transfer — we don't have coverage in the accident state ${form.acc_state} right now.`
 })
 
 const formBlocked = computed(() => {
@@ -707,7 +709,7 @@ const formBlocked = computed(() => {
   if (form.received_medical_treatment === false) return "We're sorry, but we cannot take this transfer — the customer does not have Medical Attention within the 2 Weeks."
   if (form.police_attended === false) return "We're sorry, but we cannot take this transfer — the customer must have police report."
   if (form.insured === false) return "We're sorry, but we cannot take this transfer — the customer must be insured."
-  if (stateBlockedError.value) return stateBlockedError.value
+  if (accidentStateBlockedError.value) return accidentStateBlockedError.value
   return null
 })
 
@@ -750,6 +752,7 @@ const validate = (): string | null => {
   if (!form.zip_code.trim()) { fieldErrors.zip_code = 'Zip code is required.'; return 'Please fix the errors before submitting.' }
   if (form.accident_last_12_months === null) return 'Please answer: Accident within last 12 months?'
   if (!form.accident_date) { fieldErrors.accident_date = 'Date of accident is required.'; return 'Please fix the errors before submitting.' }
+  if (!form.acc_state) { fieldErrors.acc_state = 'Accident state is required.'; return 'Please fix the errors before submitting.' }
   if (form.prior_attorney_involved === null) return 'Please answer: Any prior attorney involved?'
   if (form.prior_attorney_involved === true && !form.prior_attorney_details.trim()) { fieldErrors.prior_attorney_details = 'Prior attorney details are required.'; return 'Please fix the errors before submitting.' }
   if (form.other_party_admit_fault === null) return 'Please answer: Did the other party admit fault?'
@@ -1123,9 +1126,8 @@ onMounted(async () => {
                       </div>
                       <div class="space-y-2">
                         <label class="text-xs font-medium text-highlighted">Customer State <span class="text-red-400/80">*</span></label>
-                        <USelect v-model="form.state" :items="customerStateItems" placeholder="State" value-key="value" class="w-full" @blur="touchField('state')" />
+                        <USelect v-model="form.state" :items="usStates" placeholder="State" value-key="value" class="w-full" @blur="touchField('state')" />
                         <p v-if="fieldErrors.state" class="text-xs text-red-500">{{ fieldErrors.state }}</p>
-                        <p v-else-if="stateBlockedError" class="text-xs text-red-500">{{ stateBlockedError }}</p>
                       </div>
                       <div class="space-y-2">
                         <label class="text-xs font-medium text-highlighted">Zip <span class="text-red-400/80">*</span></label>
@@ -1229,9 +1231,8 @@ onMounted(async () => {
                     <UInput v-model="form.acc_street" placeholder="Street Address" class="w-full" />
                     <UInput v-model="form.acc_street2" placeholder="Street Address Line 2" class="w-full" />
                   </div>
-                  <div class="mt-1.5 grid grid-cols-3 gap-3">
+                  <div class="mt-1.5 grid grid-cols-2 gap-3">
                     <UInput v-model="form.acc_city" placeholder="City" />
-                    <USelect v-model="form.acc_state" :items="usStates" placeholder="State" value-key="value" />
                     <UInput v-model="form.acc_zip" placeholder="Zip Code" />
                   </div>
                   <div class="mt-1.5 grid grid-cols-2 gap-3">
@@ -1240,8 +1241,10 @@ onMounted(async () => {
                       <USelect v-model="form.acc_country" :items="countries" placeholder="Select Country" value-key="value" class="w-full" />
                     </div>
                     <div class="space-y-1.5">
-                      <label class="text-xs font-medium text-highlighted">Accident State</label>
-                      <USelect v-model="form.customer_state" :items="usStates" placeholder="Select State" value-key="value" class="w-full" />
+                      <label class="text-xs font-medium text-highlighted">Accident State <span class="text-red-400/80">*</span></label>
+                      <USelect v-model="form.acc_state" :items="availableStateItems" placeholder="Select State" value-key="value" class="w-full" @blur="touchField('acc_state')" />
+                      <p v-if="fieldErrors.acc_state" class="text-xs text-red-500">{{ fieldErrors.acc_state }}</p>
+                      <p v-else-if="accidentStateBlockedError" class="text-xs text-red-500">{{ accidentStateBlockedError }}</p>
                     </div>
                   </div>
                 </div>
@@ -1454,7 +1457,7 @@ onMounted(async () => {
           <!-- ═══ Attorney Recommendations ══════════════════════════════ -->
           <LeadIntakeAttorneyRecommendationsCard
             v-model="selectedRetainerAttorneyId"
-            :customer-state="form.state"
+            :accident-state="form.acc_state"
             :accident-date="form.accident_date"
             :date-of-birth="form.date_of_birth"
             :documents="retainerDocuments"
@@ -1476,7 +1479,7 @@ onMounted(async () => {
             :initial-agreement-id="linkedRetainerAgreementId"
             :dnc-verified="dncVerified"
             :submission-id="submissionId"
-            :customer-state="form.state"
+            :accident-state="form.acc_state"
             :accident-date="form.accident_date"
             :date-of-birth="form.date_of_birth"
             :recipient-name="retainerRecipientName"

@@ -5,7 +5,7 @@ import type { AttorneyOption, RetainerDocuments } from './retainer-types'
 
 const props = defineProps<{
   modelValue: string
-  customerState: string
+  accidentState: string
   accidentDate: string
   dateOfBirth: string
   documents: RetainerDocuments
@@ -29,7 +29,7 @@ let requestSeq = 0
 const qualifiedOptions = computed(() => options.value.filter(option => option.selectable))
 const nearMatches = computed(() => options.value.filter(option => !option.selectable))
 const selectedAttorney = computed(() => options.value.find(option => option.id === props.modelValue) ?? null)
-const eligibilityReady = computed(() => Boolean(props.customerState && props.accidentDate && props.dateOfBirth))
+const eligibilityReady = computed(() => Boolean(props.accidentState && props.accidentDate && props.dateOfBirth))
 
 const selectAttorney = (id: string) => {
   if (props.locked) return
@@ -53,7 +53,7 @@ const loadOptions = async () => {
   try {
     const { data, error } = await supabase.functions.invoke('docusign-retainer-options', {
       body: {
-        state: props.customerState,
+        state: props.accidentState,
         accidentDate: props.accidentDate,
         dateOfBirth: props.dateOfBirth,
         documents: props.documents
@@ -77,7 +77,7 @@ const scheduleLoadOptions = () => {
   optionsTimer = setTimeout(loadOptions, 350)
 }
 
-watch(() => JSON.stringify([props.customerState, props.accidentDate, props.dateOfBirth, props.documents]), scheduleLoadOptions, { immediate: true })
+watch(() => JSON.stringify([props.accidentState, props.accidentDate, props.dateOfBirth, props.documents]), scheduleLoadOptions, { immediate: true })
 
 watch(() => props.locked, (locked, wasLocked) => {
   if (locked) {
@@ -117,7 +117,7 @@ onBeforeUnmount(() => {
               Attorney Recommendations
             </h2>
             <p class="mt-0.5 text-[11px] text-muted">
-              Ranked automatically for the customer's state, accident date, documents, and compatible retainers.
+              Ranked automatically for the accident state, accident date, documents, and compatible retainers.
             </p>
           </div>
         </div>
@@ -142,7 +142,7 @@ onBeforeUnmount(() => {
 
       <div v-if="!locked && !eligibilityReady" class="flex items-start gap-2 rounded-xl border border-warning/25 bg-warning/5 px-4 py-3 text-xs text-warning">
         <UIcon name="i-lucide-circle-alert" class="mt-0.5 size-4 shrink-0" />
-        Enter customer state, DOB, and accident date to load attorney recommendations.
+        Enter accident state, DOB, and accident date to load attorney recommendations.
       </div>
       <div v-else-if="!locked && loadingOptions" class="flex items-center gap-2 rounded-xl border border-[var(--ap-accent)]/15 px-4 py-5 text-xs text-muted">
         <UIcon name="i-lucide-loader-circle" class="size-4 animate-spin text-[var(--ap-accent)]" />
