@@ -54,7 +54,7 @@ const consumerTiers = [
     rows: [
       { icon: 'i-lucide-calendar-clock', label: 'Accident Occurred', value: '6-12 Months Ago' },
       { icon: 'i-lucide-heart-pulse', label: 'Type of Injury', value: 'Moderate to Severe' },
-      { icon: 'i-lucide-file-check', label: 'Documentation', value: 'Majority Documentation Covered', subtext: 'Signed Retainer, Police Report' },
+      { icon: 'i-lucide-file-check', label: 'Documentation', value: 'Majority Documentation Covered', subtext: 'Signed Retainer' },
       { icon: 'i-lucide-scale', label: 'Liability', value: '100% Accepted', subtext: 'Or Very Strong Proof' }
     ]
   },
@@ -65,7 +65,7 @@ const consumerTiers = [
     rows: [
       { icon: 'i-lucide-calendar-clock', label: 'Accident Occurred', value: '3-6 Months Ago' },
       { icon: 'i-lucide-heart-pulse', label: 'Type of Injury', value: 'Moderate to Severe' },
-      { icon: 'i-lucide-file-check-2', label: 'Documentation', value: 'All Documentation Covered', subtext: 'Signed Retainer, Proof of Medical Treatment, Police Report' },
+      { icon: 'i-lucide-file-check-2', label: 'Documentation', value: 'All Documentation Covered', subtext: 'Signed Retainer, Police Report' },
       { icon: 'i-lucide-scale', label: 'Liability', value: '100% Accepted', subtext: 'Or Very Strong Proof' }
     ]
   },
@@ -76,7 +76,7 @@ const consumerTiers = [
     rows: [
       { icon: 'i-lucide-calendar-clock', label: 'Accident Occurred', value: '0-3 Months Ago' },
       { icon: 'i-lucide-heart-pulse', label: 'Type of Injury', value: 'Moderate to Catastrophic' },
-      { icon: 'i-lucide-file-badge', label: 'Documentation', value: 'All Documentation Covered', subtext: 'Insurance, Proof of Medical Treatment, Police Report' },
+      { icon: 'i-lucide-file-badge', label: 'Documentation', value: 'All Documentation Covered', subtext: 'Signed Retainer, Proof of Medical Treatment, Police Report' },
       { icon: 'i-lucide-scale', label: 'Liability', value: '100% Accepted', subtext: 'Or Very Strong Proof' }
     ]
   }
@@ -90,7 +90,7 @@ const commercialTiers = [
     rows: [
       { icon: 'i-lucide-calendar-clock', label: 'Accident Occurred', value: '0-3 Months Ago' },
       { icon: 'i-lucide-heart-pulse', label: 'Type of Injury', value: 'Moderate to Catastrophic' },
-      { icon: 'i-lucide-file-badge', label: 'Documentation', value: 'All Documentation Covered', subtext: 'Insurance, Proof of Medical Treatment, Police Report' },
+      { icon: 'i-lucide-file-badge', label: 'Documentation', value: 'All Documentation Covered', subtext: 'Proof of Medical Treatment, Police Report' },
       { icon: 'i-lucide-scale', label: 'Liability', value: '100% Accepted', subtext: 'Or Very Strong Proof' }
     ]
   }
