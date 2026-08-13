@@ -1489,7 +1489,6 @@ onMounted(async () => {
             :accident-address="retainerAccidentAddress"
             :documents="retainerDocuments"
             :selected-attorney="selectedRetainerAttorney"
-            :can-receive-texts="form.can_receive_texts"
             @busy="retainerSending = $event"
             @update:locked="retainerLocked = $event"
             @update:status="retainerStatus = $event"

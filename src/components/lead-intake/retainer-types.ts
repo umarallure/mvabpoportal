@@ -1,5 +1,5 @@
 export type DeliveryMethod = 'email' | 'sms_only'
-export type RetainerStatus = 'unknown' | 'sent' | 'delivery_failed' | 'viewed' | 'signed' | 'declined' | 'voided'
+export type RetainerStatus = 'unknown' | 'sent' | 'viewed' | 'signed' | 'declined' | 'voided'
 
 export type TemplateOption = {
   id: string
