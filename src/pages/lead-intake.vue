@@ -9,10 +9,15 @@ import LeadIntakeDocusignSigningScriptCard from '../components/lead-intake/Docus
 import LeadIntakeFlowConnector from '../components/lead-intake/FlowConnector.vue'
 import LeadIntakeTransferSuccessModal from '../components/lead-intake/TransferSuccessModal.vue'
 import LeadIntakeTcpaLitigatorModal from '../components/lead-intake/TcpaLitigatorModal.vue'
+import LeadIntakeUnavailableModal from '../components/lead-intake/IntakeUnavailableModal.vue'
 import { useAuth } from '../composables/useAuth'
 import type { AttorneyOption, RetainerStatus } from '../components/lead-intake/retainer-types'
 import { DncLookupError, formatUsPhone, lookupDncScreening, normalizeUsPhone, type DncCallStatus, type DncLookupResponse } from '../lib/dnc-lookup'
 import { supabase } from '../lib/supabase'
+
+// Intake is paused platform-wide while we are not taking cases. Flip this to
+// false to re-open the section — the intake flow itself is left untouched.
+const INTAKE_UNAVAILABLE: boolean = true
 
 const auth = useAuth()
 const router = useRouter()
@@ -151,7 +156,24 @@ const ensureSubmissionId = () => {
   return submissionId.value
 }
 
+// Belt and braces: the blocking modal already covers the UI, this stops any
+// screening/submission that could still be triggered programmatically.
+const blockedWhileUnavailable = () => {
+  if (!INTAKE_UNAVAILABLE) return false
+
+  toast.add({
+    title: 'Lead Intake Unavailable',
+    description: 'We are not taking cases right now. This section is temporarily disabled.',
+    icon: 'i-lucide-pause',
+    color: 'warning'
+  })
+
+  return true
+}
+
 const verifyDNC = async () => {
+  if (blockedWhileUnavailable()) return
+
   const digits = normalizedDncPhone.value
 
   if (!digits) {
@@ -794,6 +816,7 @@ const retainerDocuments = computed(() => ({
 }))
 
 const onSubmit = async () => {
+  if (blockedWhileUnavailable()) return
   if (submitting.value || retainerSending.value) return
 
   if (leadSubmitted.value) {
@@ -982,7 +1005,13 @@ onMounted(async () => {
     </template>
 
     <template #body>
-      <div class="mx-auto max-w-4xl space-y-5 pb-8">
+      <div class="relative">
+        <!-- While intake is paused the section is capped and blurred so the notice stays in view. -->
+        <div
+          class="mx-auto max-w-4xl space-y-5 pb-8"
+          :class="INTAKE_UNAVAILABLE ? 'pointer-events-none max-h-[70vh] select-none overflow-hidden blur-[5px]' : ''"
+          :inert="INTAKE_UNAVAILABLE || undefined"
+        >
 
         <!-- ═══ Row 1 · DNC Verification ═══════════════════════════════════ -->
         <div class="ap-fade-in ap-delay-1 relative overflow-hidden rounded-xl border border-amber-500/25 bg-white/90 shadow-lg backdrop-blur-sm transition-shadow duration-300 hover:shadow-xl dark:bg-[#1a1a1a]/60">
@@ -1562,6 +1591,9 @@ onMounted(async () => {
           @update:open="transferSuccessModalOpen = $event"
           @refresh="refreshLeadIntake"
         />
+        </div>
+
+        <LeadIntakeUnavailableModal :open="INTAKE_UNAVAILABLE" />
       </div>
     </template>
   </UDashboardPanel>
